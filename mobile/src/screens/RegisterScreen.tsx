@@ -4,22 +4,36 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import { Button, Text, TextInput, TouchableRipple } from 'react-native-paper';
+import type { MaterialCommunityIcons } from '@expo/vector-icons';
+import IconBadge from '../components/IconBadge';
 import { colors } from '../theme/colors';
 import type { RootStackScreenProps } from '../navigation/types';
 
+type UserType = 'STUDENT' | 'PARENT' | 'INSTITUTION';
+
+const USER_TYPES: {
+  key: UserType;
+  label: string;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+}[] = [
+  { key: 'STUDENT', label: 'Student', icon: 'school-outline' },
+  { key: 'PARENT', label: 'Parent', icon: 'account-heart-outline' },
+  { key: 'INSTITUTION', label: 'Institution', icon: 'bank-outline' },
+];
+
 export default function RegisterScreen({ navigation }: RootStackScreenProps<'Register'>) {
+  const [userType, setUserType] = useState<UserType>('STUDENT');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [secure, setSecure] = useState(true);
 
   const handleCreateAccount = () => {
-    navigation.replace('Dashboard');
+    navigation.replace('Main');
   };
 
   return (
@@ -31,68 +45,118 @@ export default function RegisterScreen({ navigation }: RootStackScreenProps<'Reg
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.appName}>Create Account</Text>
+        <Text variant="headlineMedium" style={styles.appName}>
+          Create Account
+        </Text>
         <Text style={styles.tagline}>Financial Access for Lebanese Students</Text>
 
         <View style={styles.form}>
-          <Text style={styles.label}>Full Name</Text>
+          <Text style={styles.sectionLabel}>I am a...</Text>
+          <View style={styles.typeRow}>
+            {USER_TYPES.map((type) => {
+              const selected = userType === type.key;
+              return (
+                <TouchableRipple
+                  key={type.key}
+                  onPress={() => setUserType(type.key)}
+                  style={[styles.typeCard, selected && styles.typeCardSelected]}
+                  borderless
+                >
+                  <View style={styles.typeCardContent}>
+                    <IconBadge
+                      icon={type.icon}
+                      color={selected ? colors.primary : colors.muted}
+                      size={40}
+                      iconSize={22}
+                      style={styles.typeIconBadge}
+                    />
+                    <Text style={[styles.typeLabel, selected && styles.typeLabelSelected]}>
+                      {type.label}
+                    </Text>
+                  </View>
+                </TouchableRipple>
+              );
+            })}
+          </View>
+
           <TextInput
-            style={styles.input}
+            mode="outlined"
+            label="Full Name"
             placeholder="Your full name"
-            placeholderTextColor={colors.placeholder}
             value={fullName}
             onChangeText={setFullName}
             autoCapitalize="words"
+            left={<TextInput.Icon icon="account-outline" />}
+            outlineColor={colors.border}
+            activeOutlineColor={colors.primary}
+            style={styles.input}
           />
 
-          <Text style={styles.label}>University Email</Text>
           <TextInput
-            style={styles.input}
+            mode="outlined"
+            label="University Email"
             placeholder="you@university.edu.lb"
-            placeholderTextColor={colors.placeholder}
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="email-address"
+            left={<TextInput.Icon icon="email-outline" />}
+            outlineColor={colors.border}
+            activeOutlineColor={colors.primary}
+            style={styles.input}
           />
 
-          <Text style={styles.label}>Password</Text>
           <TextInput
-            style={styles.input}
+            mode="outlined"
+            label="Password"
             placeholder="Create a password"
-            placeholderTextColor={colors.placeholder}
             value={password}
             onChangeText={setPassword}
-            secureTextEntry
+            secureTextEntry={secure}
+            left={<TextInput.Icon icon="lock-outline" />}
+            right={
+              <TextInput.Icon
+                icon={secure ? 'eye-outline' : 'eye-off-outline'}
+                onPress={() => setSecure((v) => !v)}
+              />
+            }
+            outlineColor={colors.border}
+            activeOutlineColor={colors.primary}
+            style={styles.input}
           />
 
-          <Text style={styles.label}>Confirm Password</Text>
           <TextInput
-            style={styles.input}
+            mode="outlined"
+            label="Confirm Password"
             placeholder="Re-enter your password"
-            placeholderTextColor={colors.placeholder}
             value={confirmPassword}
             onChangeText={setConfirmPassword}
-            secureTextEntry
+            secureTextEntry={secure}
+            left={<TextInput.Icon icon="lock-check-outline" />}
+            outlineColor={colors.border}
+            activeOutlineColor={colors.primary}
+            style={styles.input}
           />
 
-          <TouchableOpacity
+          <Button
+            mode="contained"
+            buttonColor={colors.primary}
             style={styles.registerButton}
-            activeOpacity={0.85}
+            contentStyle={styles.registerButtonContent}
             onPress={handleCreateAccount}
           >
-            <Text style={styles.registerButtonText}>Create Account</Text>
-          </TouchableOpacity>
+            Create Account
+          </Button>
 
-          <TouchableOpacity
+          <Button
+            mode="text"
+            textColor={colors.primary}
             style={styles.loginLink}
             onPress={() => navigation.navigate('Login')}
           >
-            <Text style={styles.loginText}>
-              Already have an account? <Text style={styles.loginBold}>Log In</Text>
-            </Text>
-          </TouchableOpacity>
+            Already have an account? Log In
+          </Button>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -112,7 +176,6 @@ const styles = StyleSheet.create({
     paddingVertical: 48,
   },
   appName: {
-    fontSize: 26,
     fontWeight: '700',
     color: colors.heading,
   },
@@ -120,51 +183,64 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.muted,
     marginTop: 4,
-    marginBottom: 32,
+    marginBottom: 28,
     textAlign: 'center',
   },
   form: {
     width: '100%',
   },
-  label: {
+  sectionLabel: {
     fontSize: 13,
     fontWeight: '600',
     color: colors.label,
-    marginBottom: 6,
+    marginBottom: 10,
+  },
+  typeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  typeCard: {
+    flex: 1,
+    marginHorizontal: 4,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.inputBackground,
+  },
+  typeCardSelected: {
+    borderColor: colors.primary,
+    backgroundColor: '#EAF0FA',
+  },
+  typeCardContent: {
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 6,
+  },
+  typeIconBadge: {
+    marginBottom: 8,
+  },
+  typeLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.muted,
+    textAlign: 'center',
+  },
+  typeLabelSelected: {
+    color: colors.primary,
   },
   input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: colors.text,
-    marginBottom: 18,
+    marginBottom: 16,
     backgroundColor: colors.inputBackground,
   },
   registerButton: {
-    backgroundColor: colors.primary,
     borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: 'center',
     marginTop: 8,
   },
-  registerButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
+  registerButtonContent: {
+    paddingVertical: 6,
   },
   loginLink: {
-    marginTop: 20,
-    alignItems: 'center',
-  },
-  loginText: {
-    fontSize: 14,
-    color: colors.muted,
-  },
-  loginBold: {
-    color: colors.primary,
-    fontWeight: '700',
+    marginTop: 12,
   },
 });

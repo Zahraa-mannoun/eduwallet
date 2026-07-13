@@ -1,5 +1,9 @@
 export const colors = {
   primary: '#2E5FAC',
+  primaryDark: '#16305C',
+  gradientStart: '#16305C',
+  gradientEnd: '#2E5FAC',
+  accent: '#3DDC97',
   text: '#111827',
   heading: '#1A2B4C',
   label: '#374151',
@@ -8,4 +12,16 @@ export const colors = {
   border: '#D1D5DB',
   inputBackground: '#F9FAFB',
   background: '#fff',
+  surface: '#F4F6FA',
+  onPrimary: '#FFFFFF',
+  danger: '#DC2626',
+};
+
+export const categoryColors = {
+  tuition: '#2E5FAC',
+  books: '#8B5CF6',
+  food: '#F59E0B',
+  transport: '#10B981',
+  software: '#6366F1',
+  rent: '#EC4899',
 };

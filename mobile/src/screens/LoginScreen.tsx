@@ -5,20 +5,19 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import { Button, Text, TextInput } from 'react-native-paper';
 import { colors } from '../theme/colors';
 import type { RootStackScreenProps } from '../navigation/types';
 
 export default function LoginScreen({ navigation }: RootStackScreenProps<'Login'>) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [secure, setSecure] = useState(true);
 
   const handleLogin = () => {
-    navigation.replace('Dashboard');
+    navigation.replace('Main');
   };
 
   return (
@@ -36,44 +35,64 @@ export default function LoginScreen({ navigation }: RootStackScreenProps<'Login'
           resizeMode="contain"
         />
 
-        <Text style={styles.appName}>EduWallet</Text>
+        <Text variant="headlineMedium" style={styles.appName}>
+          EduWallet
+        </Text>
         <Text style={styles.tagline}>Financial Access for Lebanese Students</Text>
 
         <View style={styles.form}>
-          <Text style={styles.label}>Email</Text>
           <TextInput
-            style={styles.input}
+            mode="outlined"
+            label="Email"
             placeholder="you@university.edu.lb"
-            placeholderTextColor={colors.placeholder}
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="email-address"
+            left={<TextInput.Icon icon="email-outline" />}
+            outlineColor={colors.border}
+            activeOutlineColor={colors.primary}
+            style={styles.input}
           />
 
-          <Text style={styles.label}>Password</Text>
           <TextInput
-            style={styles.input}
+            mode="outlined"
+            label="Password"
             placeholder="Enter your password"
-            placeholderTextColor={colors.placeholder}
             value={password}
             onChangeText={setPassword}
-            secureTextEntry
+            secureTextEntry={secure}
+            left={<TextInput.Icon icon="lock-outline" />}
+            right={
+              <TextInput.Icon
+                icon={secure ? 'eye-outline' : 'eye-off-outline'}
+                onPress={() => setSecure((v) => !v)}
+              />
+            }
+            outlineColor={colors.border}
+            activeOutlineColor={colors.primary}
+            style={styles.input}
           />
 
-          <TouchableOpacity style={styles.loginButton} activeOpacity={0.85} onPress={handleLogin}>
-            <Text style={styles.loginButtonText}>Log In</Text>
-          </TouchableOpacity>
+          <Button
+            mode="contained"
+            buttonColor={colors.primary}
+            style={styles.loginButton}
+            contentStyle={styles.loginButtonContent}
+            onPress={handleLogin}
+          >
+            Log In
+          </Button>
 
-          <TouchableOpacity
+          <Button
+            mode="text"
+            textColor={colors.primary}
             style={styles.createAccountLink}
             onPress={() => navigation.navigate('Register')}
           >
-            <Text style={styles.createAccountText}>
-              Don&apos;t have an account? <Text style={styles.createAccountBold}>Create Account</Text>
-            </Text>
-          </TouchableOpacity>
+            Don&apos;t have an account? Create Account
+          </Button>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -99,7 +118,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   appName: {
-    fontSize: 26,
     fontWeight: '700',
     color: colors.heading,
   },
@@ -113,45 +131,18 @@ const styles = StyleSheet.create({
   form: {
     width: '100%',
   },
-  label: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.label,
-    marginBottom: 6,
-  },
   input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: colors.text,
-    marginBottom: 18,
+    marginBottom: 16,
     backgroundColor: colors.inputBackground,
   },
   loginButton: {
-    backgroundColor: colors.primary,
     borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: 'center',
     marginTop: 8,
   },
-  loginButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
+  loginButtonContent: {
+    paddingVertical: 6,
   },
   createAccountLink: {
-    marginTop: 20,
-    alignItems: 'center',
-  },
-  createAccountText: {
-    fontSize: 14,
-    color: colors.muted,
-  },
-  createAccountBold: {
-    color: colors.primary,
-    fontWeight: '700',
+    marginTop: 12,
   },
 });
