@@ -1,0 +1,17 @@
+{
+  "name": "eduwallet",
+  "version": "1.0.0",
+  "description": "Student digital wallet platform for Lebanon's banking crisis",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "mobile",
+    "web",
+    "packages/shared"
+  ],
+  "scripts": {
+    "backend": "cd backend && npm run dev",
+    "mobile": "cd mobile && npm start",
+    "web": "cd web && npm start"
+  }
+}
