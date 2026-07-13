@@ -13,6 +13,9 @@ export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
   Main: NavigatorScreenParams<MainTabParamList> | undefined;
+  SendMoney: undefined;
+  ReceiveMoney: undefined;
+  QRPay: undefined;
 };
 
 export type RootStackScreenProps<Screen extends keyof RootStackParamList> =

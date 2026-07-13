@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Avatar, Card, IconButton, Snackbar, Text } from 'react-native-paper';
+import { Avatar, Card, IconButton, Text } from 'react-native-paper';
 import { colors } from '../theme/colors';
 import type { MainTabScreenProps } from '../navigation/types';
 
@@ -17,14 +17,11 @@ type QuickAction = {
 
 export default function DashboardScreen({ navigation }: MainTabScreenProps<'Home'>) {
   const [showBalance, setShowBalance] = useState(true);
-  const [snackbarVisible, setSnackbarVisible] = useState(false);
-
-  const showComingSoon = () => setSnackbarVisible(true);
 
   const quickActions: QuickAction[] = [
-    { key: 'send', label: 'Send', icon: 'arrow-up-circle-outline', onPress: showComingSoon },
-    { key: 'receive', label: 'Receive', icon: 'arrow-down-circle-outline', onPress: showComingSoon },
-    { key: 'qr', label: 'QR Pay', icon: 'qrcode-scan', onPress: showComingSoon },
+    { key: 'send', label: 'Send', icon: 'arrow-up-circle-outline', onPress: () => navigation.navigate('SendMoney') },
+    { key: 'receive', label: 'Receive', icon: 'arrow-down-circle-outline', onPress: () => navigation.navigate('ReceiveMoney') },
+    { key: 'qr', label: 'QR Pay', icon: 'qrcode-scan', onPress: () => navigation.navigate('QRPay') },
     { key: 'cards', label: 'Cards', icon: 'credit-card-outline', onPress: () => navigation.navigate('Cards') },
   ];
 
@@ -103,10 +100,6 @@ export default function DashboardScreen({ navigation }: MainTabScreenProps<'Home
           </Card.Content>
         </Card>
       </ScrollView>
-
-      <Snackbar visible={snackbarVisible} onDismiss={() => setSnackbarVisible(false)} duration={2000}>
-        This feature is coming soon.
-      </Snackbar>
     </View>
   );
 }

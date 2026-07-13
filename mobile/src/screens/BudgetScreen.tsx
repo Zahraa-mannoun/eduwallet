@@ -2,28 +2,19 @@ import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Card, ProgressBar, Snackbar, Text } from 'react-native-paper';
-import type { MaterialCommunityIcons } from '@expo/vector-icons';
 import IconBadge from '../components/IconBadge';
-import { categoryColors, colors } from '../theme/colors';
+import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
+import { colors } from '../theme/colors';
 import type { MainTabScreenProps } from '../navigation/types';
 
-type BudgetCategory = {
-  key: string;
-  icon: keyof typeof MaterialCommunityIcons.glyphMap;
-  color: string;
-  label: string;
-  spent: number;
-  limit: number;
+const MOCK_SPENDING: Record<string, { spent: number; limit: number }> = {
+  tuition: { spent: 0, limit: 0 },
+  books: { spent: 0, limit: 0 },
+  food: { spent: 0, limit: 0 },
+  transport: { spent: 0, limit: 0 },
+  software: { spent: 0, limit: 0 },
+  rent: { spent: 0, limit: 0 },
 };
-
-const BUDGET_CATEGORIES: BudgetCategory[] = [
-  { key: 'tuition', icon: 'school-outline', color: categoryColors.tuition, label: 'Tuition', spent: 0, limit: 0 },
-  { key: 'books', icon: 'book-open-outline', color: categoryColors.books, label: 'Books', spent: 0, limit: 0 },
-  { key: 'food', icon: 'food-outline', color: categoryColors.food, label: 'Food', spent: 0, limit: 0 },
-  { key: 'transport', icon: 'bus', color: categoryColors.transport, label: 'Transport', spent: 0, limit: 0 },
-  { key: 'software', icon: 'laptop', color: categoryColors.software, label: 'Software', spent: 0, limit: 0 },
-  { key: 'rent', icon: 'home-outline', color: categoryColors.rent, label: 'Rent', spent: 0, limit: 0 },
-];
 
 export default function BudgetScreen(_props: MainTabScreenProps<'Budget'>) {
   const [snackbarVisible, setSnackbarVisible] = useState(false);
@@ -38,7 +29,8 @@ export default function BudgetScreen(_props: MainTabScreenProps<'Budget'>) {
 
       <ScrollView contentContainerStyle={styles.content}>
         {BUDGET_CATEGORIES.map((category) => {
-          const progress = category.limit > 0 ? category.spent / category.limit : 0;
+          const { spent, limit } = MOCK_SPENDING[category.key];
+          const progress = limit > 0 ? spent / limit : 0;
 
           return (
             <Card key={category.key} style={styles.categoryCard} mode="elevated">
@@ -51,7 +43,7 @@ export default function BudgetScreen(_props: MainTabScreenProps<'Budget'>) {
                     </Text>
                   </View>
                   <Text style={styles.categoryAmount}>
-                    ${category.spent.toFixed(0)} / ${category.limit.toFixed(0)}
+                    ${spent.toFixed(0)} / ${limit.toFixed(0)}
                   </Text>
                 </View>
 
