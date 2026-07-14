@@ -8,24 +8,24 @@ import CardsScreen from '../screens/CardsScreen';
 import BudgetScreen from '../screens/BudgetScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import { colors } from '../theme/colors';
-import type { MainTabParamList } from './types';
+import type { StudentTabParamList } from './types';
 
-const Tab = createBottomTabNavigator<MainTabParamList>();
+const Tab = createBottomTabNavigator<StudentTabParamList>();
 
-const TAB_ICONS: Record<keyof MainTabParamList, keyof typeof MaterialCommunityIcons.glyphMap> = {
+const TAB_ICONS: Record<keyof StudentTabParamList, keyof typeof MaterialCommunityIcons.glyphMap> = {
   Home: 'home-variant',
   Cards: 'credit-card-outline',
   Budget: 'chart-donut',
   Profile: 'account-circle-outline',
 };
 
-export default function MainTabNavigator() {
+export default function StudentMainNavigator() {
   return (
     <Tab.Navigator
       screenOptions={({
         route,
       }: {
-        route: RouteProp<MainTabParamList, keyof MainTabParamList>;
+        route: RouteProp<StudentTabParamList, keyof StudentTabParamList>;
       }): BottomTabNavigationOptions => ({
         headerShown: false,
         tabBarActiveTintColor: colors.primary,

@@ -6,25 +6,15 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { Button, Text, TextInput, TouchableRipple } from 'react-native-paper';
-import type { MaterialCommunityIcons } from '@expo/vector-icons';
-import IconBadge from '../components/IconBadge';
+import { Button, Text, TextInput } from 'react-native-paper';
+import UserTypeSelector from '../components/UserTypeSelector';
+import { useAuth } from '../context/AuthContext';
+import type { UserType } from '../context/AuthContext';
 import { colors } from '../theme/colors';
 import type { RootStackScreenProps } from '../navigation/types';
 
-type UserType = 'STUDENT' | 'PARENT' | 'INSTITUTION';
-
-const USER_TYPES: {
-  key: UserType;
-  label: string;
-  icon: keyof typeof MaterialCommunityIcons.glyphMap;
-}[] = [
-  { key: 'STUDENT', label: 'Student', icon: 'school-outline' },
-  { key: 'PARENT', label: 'Parent', icon: 'account-heart-outline' },
-  { key: 'INSTITUTION', label: 'Institution', icon: 'bank-outline' },
-];
-
 export default function RegisterScreen({ navigation }: RootStackScreenProps<'Register'>) {
+  const { login } = useAuth();
   const [userType, setUserType] = useState<UserType>('STUDENT');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -33,7 +23,15 @@ export default function RegisterScreen({ navigation }: RootStackScreenProps<'Reg
   const [secure, setSecure] = useState(true);
 
   const handleCreateAccount = () => {
-    navigation.replace('Main');
+    login(userType, fullName.trim() || 'there');
+
+    if (userType === 'STUDENT') {
+      navigation.replace('StudentMain');
+    } else if (userType === 'PARENT') {
+      navigation.replace('ParentMain');
+    } else {
+      navigation.replace('InstitutionMain');
+    }
   };
 
   return (
@@ -52,31 +50,8 @@ export default function RegisterScreen({ navigation }: RootStackScreenProps<'Reg
 
         <View style={styles.form}>
           <Text style={styles.sectionLabel}>I am a...</Text>
-          <View style={styles.typeRow}>
-            {USER_TYPES.map((type) => {
-              const selected = userType === type.key;
-              return (
-                <TouchableRipple
-                  key={type.key}
-                  onPress={() => setUserType(type.key)}
-                  style={[styles.typeCard, selected && styles.typeCardSelected]}
-                  borderless
-                >
-                  <View style={styles.typeCardContent}>
-                    <IconBadge
-                      icon={type.icon}
-                      color={selected ? colors.primary : colors.muted}
-                      size={40}
-                      iconSize={22}
-                      style={styles.typeIconBadge}
-                    />
-                    <Text style={[styles.typeLabel, selected && styles.typeLabelSelected]}>
-                      {type.label}
-                    </Text>
-                  </View>
-                </TouchableRipple>
-              );
-            })}
+          <View style={styles.selectorWrapper}>
+            <UserTypeSelector value={userType} onChange={setUserType} />
           </View>
 
           <TextInput
@@ -195,39 +170,8 @@ const styles = StyleSheet.create({
     color: colors.label,
     marginBottom: 10,
   },
-  typeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  selectorWrapper: {
     marginBottom: 24,
-  },
-  typeCard: {
-    flex: 1,
-    marginHorizontal: 4,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.inputBackground,
-  },
-  typeCardSelected: {
-    borderColor: colors.primary,
-    backgroundColor: '#EAF0FA',
-  },
-  typeCardContent: {
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 6,
-  },
-  typeIconBadge: {
-    marginBottom: 8,
-  },
-  typeLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.muted,
-    textAlign: 'center',
-  },
-  typeLabelSelected: {
-    color: colors.primary,
   },
   input: {
     marginBottom: 16,

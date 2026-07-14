@@ -1,12 +1,24 @@
 import { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Avatar, Card, IconButton, Text } from 'react-native-paper';
+import { Avatar, Badge, Button, Card, IconButton, Text } from 'react-native-paper';
+import IconBadge from '../components/IconBadge';
+import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
+import { MOCK_TRANSACTIONS } from '../constants/mockTransactions';
+import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationsContext';
 import { colors } from '../theme/colors';
-import type { MainTabScreenProps } from '../navigation/types';
+import { getInitials } from '../utils/getInitials';
+import type { StudentTabScreenProps } from '../navigation/types';
 
 const MOCK_BALANCE = 1250.0;
+
+const categoryLookup = new Map(BUDGET_CATEGORIES.map((category) => [category.key, category]));
+
+const RECENT_TRANSACTIONS = [...MOCK_TRANSACTIONS]
+  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  .slice(0, 3);
 
 type QuickAction = {
   key: string;
@@ -15,8 +27,11 @@ type QuickAction = {
   onPress: () => void;
 };
 
-export default function DashboardScreen({ navigation }: MainTabScreenProps<'Home'>) {
+export default function DashboardScreen({ navigation }: StudentTabScreenProps<'Home'>) {
+  const { userName } = useAuth();
+  const { unreadCount } = useNotifications();
   const [showBalance, setShowBalance] = useState(true);
+  const displayName = userName || 'Student';
 
   const quickActions: QuickAction[] = [
     { key: 'send', label: 'Send', icon: 'arrow-up-circle-outline', onPress: () => navigation.navigate('SendMoney') },
@@ -37,9 +52,30 @@ export default function DashboardScreen({ navigation }: MainTabScreenProps<'Home
           <View style={styles.headerTop}>
             <View>
               <Text style={styles.greeting}>Welcome back,</Text>
-              <Text style={styles.userName}>Zahraa</Text>
+              <Text style={styles.userName}>{displayName}</Text>
             </View>
-            <Avatar.Text size={44} label="ZS" style={styles.avatar} color={colors.primary} />
+            <View style={styles.headerActions}>
+              <View style={styles.bellWrapper}>
+                <IconButton
+                  icon="bell-outline"
+                  iconColor={colors.onPrimary}
+                  size={24}
+                  onPress={() => navigation.navigate('Notifications')}
+                  style={styles.bellButton}
+                />
+                {unreadCount > 0 && (
+                  <Badge style={styles.bellBadge} size={16}>
+                    {unreadCount}
+                  </Badge>
+                )}
+              </View>
+              <Avatar.Text
+                size={44}
+                label={getInitials(displayName)}
+                style={styles.avatar}
+                color={colors.primary}
+              />
+            </View>
           </View>
 
           <View style={styles.balanceBlock}>
@@ -83,20 +119,62 @@ export default function DashboardScreen({ navigation }: MainTabScreenProps<'Home
               <Text variant="titleMedium" style={styles.transactionsTitle}>
                 Recent Transactions
               </Text>
+              <Button
+                mode="text"
+                compact
+                textColor={colors.primary}
+                onPress={() => navigation.navigate('TransactionHistory')}
+              >
+                See All
+              </Button>
             </View>
 
-            <View style={styles.emptyState}>
-              <Avatar.Icon
-                icon="receipt-text-outline"
-                size={56}
-                style={styles.emptyIcon}
-                color={colors.primary}
-              />
-              <Text style={styles.emptyTitle}>No transactions yet</Text>
-              <Text style={styles.emptySubtitle}>
-                Your recent activity will show up here once you start using your wallet.
-              </Text>
-            </View>
+            {RECENT_TRANSACTIONS.length > 0 ? (
+              RECENT_TRANSACTIONS.map((transaction) => {
+                const category = categoryLookup.get(transaction.category);
+                const isReceived = transaction.type === 'RECEIVED';
+                return (
+                  <TouchableOpacity
+                    key={transaction.id}
+                    style={styles.transactionRow}
+                    onPress={() =>
+                      navigation.navigate('TransactionDetail', { transactionId: transaction.id })
+                    }
+                  >
+                    <IconBadge
+                      icon={category?.icon ?? 'wallet-outline'}
+                      color={category?.color ?? colors.primary}
+                      size={40}
+                    />
+                    <View style={styles.transactionMiddle}>
+                      <Text style={styles.transactionTitle}>{transaction.counterparty}</Text>
+                      <Text style={styles.transactionSubtitle}>{category?.label ?? 'Other'}</Text>
+                    </View>
+                    <Text
+                      style={[
+                        styles.transactionAmount,
+                        { color: isReceived ? colors.accent : colors.heading },
+                      ]}
+                    >
+                      {isReceived ? '+' : '-'}${transaction.amount.toFixed(2)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })
+            ) : (
+              <View style={styles.emptyState}>
+                <Avatar.Icon
+                  icon="receipt-text-outline"
+                  size={56}
+                  style={styles.emptyIcon}
+                  color={colors.primary}
+                />
+                <Text style={styles.emptyTitle}>No transactions yet</Text>
+                <Text style={styles.emptySubtitle}>
+                  Your recent activity will show up here once you start using your wallet.
+                </Text>
+              </View>
+            )}
           </Card.Content>
         </Card>
       </ScrollView>
@@ -132,6 +210,22 @@ const styles = StyleSheet.create({
   },
   avatar: {
     backgroundColor: colors.onPrimary,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  bellWrapper: {
+    marginRight: 4,
+  },
+  bellButton: {
+    margin: 0,
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: colors.danger,
   },
   balanceBlock: {
     marginTop: 28,
@@ -178,11 +272,37 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   transactionsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 4,
   },
   transactionsTitle: {
     fontWeight: '700',
     color: colors.heading,
+  },
+  transactionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  transactionMiddle: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  transactionTitle: {
+    fontWeight: '700',
+    color: colors.heading,
+    fontSize: 14,
+  },
+  transactionSubtitle: {
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 2,
+  },
+  transactionAmount: {
+    fontWeight: '700',
+    fontSize: 14,
   },
   emptyState: {
     alignItems: 'center',

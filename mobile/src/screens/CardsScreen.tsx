@@ -5,9 +5,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Snackbar, Text } from 'react-native-paper';
 import { colors } from '../theme/colors';
 import { generateMockCard } from '../utils/generateMockCard';
-import type { MainTabScreenProps } from '../navigation/types';
+import type { StudentTabScreenProps } from '../navigation/types';
 
-export default function CardsScreen(_props: MainTabScreenProps<'Cards'>) {
+export default function CardsScreen(_props: StudentTabScreenProps<'Cards'>) {
   const [card, setCard] = useState(() => generateMockCard('Zahraa Student'));
   const [snackbarVisible, setSnackbarVisible] = useState(false);
 

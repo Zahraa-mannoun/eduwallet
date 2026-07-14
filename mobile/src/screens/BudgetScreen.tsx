@@ -5,7 +5,7 @@ import { Button, Card, ProgressBar, Snackbar, Text } from 'react-native-paper';
 import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import { colors } from '../theme/colors';
-import type { MainTabScreenProps } from '../navigation/types';
+import type { StudentTabScreenProps } from '../navigation/types';
 
 const MOCK_SPENDING: Record<string, { spent: number; limit: number }> = {
   tuition: { spent: 0, limit: 0 },
@@ -16,7 +16,7 @@ const MOCK_SPENDING: Record<string, { spent: number; limit: number }> = {
   rent: { spent: 0, limit: 0 },
 };
 
-export default function BudgetScreen(_props: MainTabScreenProps<'Budget'>) {
+export default function BudgetScreen(_props: StudentTabScreenProps<'Budget'>) {
   const [snackbarVisible, setSnackbarVisible] = useState(false);
 
   return (

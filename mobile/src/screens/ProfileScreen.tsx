@@ -2,8 +2,13 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar, Button, Chip, Divider, List, Text } from 'react-native-paper';
+import type { NavigationProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { USER_TYPES } from '../constants/userTypes';
+import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme/colors';
-import type { MainTabScreenProps } from '../navigation/types';
+import { getInitials } from '../utils/getInitials';
+import type { RootStackParamList } from '../navigation/types';
 
 type ListIconRenderProps = Readonly<{ color: string; style?: StyleProp<ViewStyle> }>;
 
@@ -12,6 +17,21 @@ const renderChevron = (props: ListIconRenderProps) => <List.Icon {...props} icon
 const renderLeftIcon = (icon: string) => (props: ListIconRenderProps) =>
   <List.Icon {...props} icon={icon} />;
 
+const renderRightWithBadge = (badge?: { label: string; color: string }) => (props: ListIconRenderProps) => (
+  <View style={styles.menuItemRight}>
+    {badge ? (
+      <Chip
+        compact
+        style={[styles.menuBadge, { backgroundColor: `${badge.color}1F` }]}
+        textStyle={[styles.menuBadgeText, { color: badge.color }]}
+      >
+        {badge.label}
+      </Chip>
+    ) : null}
+    <List.Icon {...props} icon="chevron-right" />
+  </View>
+);
+
 const PROFILE_MENU_ITEMS = [
   { title: 'Account Settings', icon: 'account-cog-outline' },
   { title: 'Security & 2FA', icon: 'shield-check-outline' },
@@ -19,34 +39,91 @@ const PROFILE_MENU_ITEMS = [
   { title: 'Help & Support', icon: 'help-circle-outline' },
 ] as const;
 
-export default function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
+type ProfileScreenProps = Readonly<{
+  navigation: NavigationProp<RootStackParamList>;
+}>;
+
+export default function ProfileScreen({ navigation }: ProfileScreenProps) {
+  const { userType, userName, logout } = useAuth();
+  const displayName = userName || 'there';
+  const typeDefinition = USER_TYPES.find((type) => type.key === userType) ?? USER_TYPES[0];
+  const email = `${displayName.toLowerCase().replace(/\s+/g, '.')}@university.edu.lb`;
+
   const handleLogout = () => {
-    navigation.getParent()?.reset({
+    logout();
+    navigation.getParent<NativeStackNavigationProp<RootStackParamList>>()?.reset({
       index: 0,
       routes: [{ name: 'Login' }],
     });
   };
 
+  const ACCOUNT_LINKS = [
+    {
+      title: 'Transaction History',
+      icon: 'history',
+      onPress: () => navigation.navigate('TransactionHistory'),
+    },
+    ...(userType === 'STUDENT'
+      ? [
+          {
+            title: 'University Verification',
+            icon: 'card-account-details-outline',
+            badge: { label: 'Pending', color: '#F59E0B' },
+            onPress: () => navigation.navigate('KYC'),
+          },
+          {
+            title: 'Blockchain Vault',
+            icon: 'cube-outline',
+            onPress: () => navigation.navigate('BlockchainVault'),
+          },
+          {
+            title: 'AI Assistant',
+            icon: 'robot-outline',
+            onPress: () => navigation.navigate('AIAssistant'),
+          },
+        ]
+      : []),
+  ] as const;
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.header}>
-          <Avatar.Text size={72} label="ZS" style={styles.avatar} color={colors.onPrimary} />
+          <Avatar.Text
+            size={72}
+            label={getInitials(displayName)}
+            style={styles.avatar}
+            color={colors.onPrimary}
+          />
           <Text variant="titleLarge" style={styles.name}>
-            Zahraa Student
+            {displayName}
           </Text>
-          <Text style={styles.email}>student@university.edu.lb</Text>
+          <Text style={styles.email}>{email}</Text>
           <Chip
-            icon="school-outline"
+            icon={typeDefinition.icon}
             style={styles.typeBadge}
             textStyle={styles.typeBadgeText}
             compact
           >
-            Student
+            {typeDefinition.label}
           </Chip>
         </View>
 
         <List.Section style={styles.section}>
+          {ACCOUNT_LINKS.map((item, index) => (
+            <View key={item.title}>
+              <List.Item
+                title={item.title}
+                onPress={item.onPress}
+                left={renderLeftIcon(item.icon)}
+                right={renderRightWithBadge('badge' in item ? item.badge : undefined)}
+              />
+              {index < ACCOUNT_LINKS.length - 1 && <Divider />}
+            </View>
+          ))}
+        </List.Section>
+
+        <List.Section style={[styles.section, styles.secondSection]}>
           {PROFILE_MENU_ITEMS.map((item, index) => (
             <View key={item.title}>
               <List.Item
@@ -79,6 +156,20 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingBottom: 32,
+  },
+  menuItemRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  menuBadge: {
+    height: 26,
+  },
+  menuBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  secondSection: {
+    marginTop: 16,
   },
   header: {
     alignItems: 'center',

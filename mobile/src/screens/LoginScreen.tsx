@@ -8,16 +8,35 @@ import {
   View,
 } from 'react-native';
 import { Button, Text, TextInput } from 'react-native-paper';
+import UserTypeSelector from '../components/UserTypeSelector';
+import { useAuth } from '../context/AuthContext';
+import type { UserType } from '../context/AuthContext';
 import { colors } from '../theme/colors';
 import type { RootStackScreenProps } from '../navigation/types';
 
+const deriveNameFromEmail = (email: string) => {
+  const prefix = email.trim().split('@')[0];
+  if (!prefix) return 'there';
+  return prefix.charAt(0).toUpperCase() + prefix.slice(1);
+};
+
 export default function LoginScreen({ navigation }: RootStackScreenProps<'Login'>) {
+  const { login } = useAuth();
+  const [userType, setUserType] = useState<UserType>('STUDENT');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [secure, setSecure] = useState(true);
 
   const handleLogin = () => {
-    navigation.replace('Main');
+    login(userType, deriveNameFromEmail(email));
+
+    if (userType === 'STUDENT') {
+      navigation.replace('StudentMain');
+    } else if (userType === 'PARENT') {
+      navigation.replace('ParentMain');
+    } else {
+      navigation.replace('InstitutionMain');
+    }
   };
 
   return (
@@ -41,6 +60,11 @@ export default function LoginScreen({ navigation }: RootStackScreenProps<'Login'
         <Text style={styles.tagline}>Financial Access for Lebanese Students</Text>
 
         <View style={styles.form}>
+          <Text style={styles.sectionLabel}>I am a...</Text>
+          <View style={styles.selectorWrapper}>
+            <UserTypeSelector value={userType} onChange={setUserType} />
+          </View>
+
           <TextInput
             mode="outlined"
             label="Email"
@@ -112,10 +136,10 @@ const styles = StyleSheet.create({
     paddingVertical: 48,
   },
   logo: {
-    width: 96,
-    height: 96,
-    borderRadius: 20,
-    marginBottom: 12,
+    width: 72,
+    height: 72,
+    borderRadius: 16,
+    marginBottom: 8,
   },
   appName: {
     fontWeight: '700',
@@ -125,11 +149,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.muted,
     marginTop: 4,
-    marginBottom: 32,
+    marginBottom: 24,
     textAlign: 'center',
   },
   form: {
     width: '100%',
+  },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.label,
+    marginBottom: 10,
+  },
+  selectorWrapper: {
+    marginBottom: 20,
   },
   input: {
     marginBottom: 16,
