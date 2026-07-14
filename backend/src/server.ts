@@ -9,6 +9,7 @@ import authRoutes from './modules/auth/auth.routes';
 import walletRoutes from './modules/wallet/wallet.routes';
 import parentalRoutes from './modules/parental/parental.routes';
 import cardsRoutes from './modules/cards/cards.routes';
+import budgetRoutes from './modules/budget/budget.routes';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-me';
@@ -34,6 +35,7 @@ async function buildServer() {
   await app.register(walletRoutes, { prefix: '/wallet' });
   await app.register(parentalRoutes, { prefix: '/parental' });
   await app.register(cardsRoutes, { prefix: '/cards' });
+  await app.register(budgetRoutes, { prefix: '/budget' });
 
   return app;
 }

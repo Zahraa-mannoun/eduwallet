@@ -1,6 +1,7 @@
 import type { Transaction, Wallet } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
+import { updateSpent } from '../budget/budget.service';
 import { runAllChecks } from './fraud.service';
 import type { GetTransactionsInput, TopUpInput, TransferInput } from './wallet.schema';
 
@@ -143,6 +144,8 @@ export async function transfer(
         },
       });
     });
+
+    await updateSpent(fromWallet.id, transaction.category, Number(transaction.amount));
   }
 
   await runAllChecks(transaction);
