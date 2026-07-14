@@ -6,7 +6,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { Button, Text, TextInput } from 'react-native-paper';
+import { ActivityIndicator, Button, HelperText, Text, TextInput } from 'react-native-paper';
 import UserTypeSelector from '../components/UserTypeSelector';
 import { useAuth } from '../context/AuthContext';
 import type { UserType } from '../context/AuthContext';
@@ -14,23 +14,40 @@ import { colors } from '../theme/colors';
 import type { RootStackScreenProps } from '../navigation/types';
 
 export default function RegisterScreen({ navigation }: RootStackScreenProps<'Register'>) {
-  const { login } = useAuth();
+  const { register, error, clearError } = useAuth();
   const [userType, setUserType] = useState<UserType>('STUDENT');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [secure, setSecure] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleCreateAccount = () => {
-    login(userType, fullName.trim() || 'there');
+  const passwordsMatch = password.length > 0 && password === confirmPassword;
+  const formError =
+    password.length > 0 && password.length < 8
+      ? 'Password must be at least 8 characters'
+      : confirmPassword.length > 0 && !passwordsMatch
+        ? 'Passwords do not match'
+        : null;
 
-    if (userType === 'STUDENT') {
-      navigation.replace('StudentMain');
-    } else if (userType === 'PARENT') {
-      navigation.replace('ParentMain');
-    } else {
-      navigation.replace('InstitutionMain');
+  const canSubmit =
+    fullName.trim().length > 0 &&
+    email.trim().length > 0 &&
+    password.length >= 8 &&
+    passwordsMatch &&
+    !isSubmitting;
+
+  const handleCreateAccount = async () => {
+    if (!canSubmit) return;
+    setIsSubmitting(true);
+    try {
+      await register({ fullName: fullName.trim(), email: email.trim(), password, userType });
+      // AppNavigator reacts to the resulting auth state and switches stacks on its own.
+    } catch {
+      // error is already surfaced via useAuth().error
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -59,7 +76,10 @@ export default function RegisterScreen({ navigation }: RootStackScreenProps<'Reg
             label="Full Name"
             placeholder="Your full name"
             value={fullName}
-            onChangeText={setFullName}
+            onChangeText={(text: string) => {
+              setFullName(text);
+              clearError();
+            }}
             autoCapitalize="words"
             left={<TextInput.Icon icon="account-outline" />}
             outlineColor={colors.border}
@@ -72,7 +92,10 @@ export default function RegisterScreen({ navigation }: RootStackScreenProps<'Reg
             label="University Email"
             placeholder="you@university.edu.lb"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(text: string) => {
+              setEmail(text);
+              clearError();
+            }}
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="email-address"
@@ -87,7 +110,10 @@ export default function RegisterScreen({ navigation }: RootStackScreenProps<'Reg
             label="Password"
             placeholder="Create a password"
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(text: string) => {
+              setPassword(text);
+              clearError();
+            }}
             secureTextEntry={secure}
             left={<TextInput.Icon icon="lock-outline" />}
             right={
@@ -106,7 +132,10 @@ export default function RegisterScreen({ navigation }: RootStackScreenProps<'Reg
             label="Confirm Password"
             placeholder="Re-enter your password"
             value={confirmPassword}
-            onChangeText={setConfirmPassword}
+            onChangeText={(text: string) => {
+              setConfirmPassword(text);
+              clearError();
+            }}
             secureTextEntry={secure}
             left={<TextInput.Icon icon="lock-check-outline" />}
             outlineColor={colors.border}
@@ -114,14 +143,23 @@ export default function RegisterScreen({ navigation }: RootStackScreenProps<'Reg
             style={styles.input}
           />
 
+          <HelperText type="error" visible={Boolean(formError || error)}>
+            {formError ?? error}
+          </HelperText>
+
           <Button
             mode="contained"
             buttonColor={colors.primary}
             style={styles.registerButton}
             contentStyle={styles.registerButtonContent}
             onPress={handleCreateAccount}
+            disabled={!canSubmit}
           >
-            Create Account
+            {isSubmitting ? (
+              <ActivityIndicator size={18} color={colors.onPrimary} />
+            ) : (
+              'Create Account'
+            )}
           </Button>
 
           <Button
@@ -129,6 +167,7 @@ export default function RegisterScreen({ navigation }: RootStackScreenProps<'Reg
             textColor={colors.primary}
             style={styles.loginLink}
             onPress={() => navigation.navigate('Login')}
+            disabled={isSubmitting}
           >
             Already have an account? Log In
           </Button>

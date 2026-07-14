@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import Fastify from 'fastify';
+import type { FastifyError } from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
 import multipart from '@fastify/multipart';
@@ -16,6 +17,8 @@ import kycRoutes from './modules/kyc/kyc.routes';
 import blockchainRoutes from './modules/blockchain/blockchain.routes';
 import adminRoutes from './modules/admin/admin.routes';
 import { initSocket } from './modules/notifications/notifications.socket';
+import { AppError } from './utils/AppError';
+import { errorResponse } from './utils/apiResponse';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-me';
@@ -33,6 +36,30 @@ async function buildServer() {
   });
   await app.register(multipart, {
     limits: { fileSize: 10 * 1024 * 1024 },
+  });
+
+  // Safety net: guarantees the { success:false, error, code } contract holds even for
+  // errors that never reach a controller's own try/catch (malformed JSON bodies, Fastify's
+  // built-in validation, @fastify/multipart size-limit errors, @fastify/rate-limit 429s, etc).
+  app.setErrorHandler((error: FastifyError, request, reply) => {
+    if (error instanceof AppError) {
+      return reply.status(error.statusCode).send(errorResponse(error.message, error.code));
+    }
+
+    if (typeof error.statusCode === 'number' && error.statusCode < 500) {
+      return reply
+        .status(error.statusCode)
+        .send(errorResponse(error.message, error.code ?? 'REQUEST_ERROR'));
+    }
+
+    request.log.error({ err: error }, 'Unhandled error');
+    return reply
+      .status(500)
+      .send(errorResponse('Something went wrong. Please try again.', 'INTERNAL_ERROR'));
+  });
+
+  app.setNotFoundHandler((_request, reply) => {
+    return reply.status(404).send(errorResponse('Route not found', 'NOT_FOUND'));
   });
 
   app.get('/health', async () => ({

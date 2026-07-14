@@ -1,6 +1,7 @@
 import { FraudAlertType, FraudSeverity } from '@prisma/client';
 import type { Transaction } from '@prisma/client';
 import { prisma } from '../../config/database';
+import { createNotification } from '../notifications/notifications.service';
 
 const CIRCULAR_WINDOW_MS = 60 * 60 * 1000;
 const VELOCITY_WINDOW_MS = 10 * 60 * 1000;
@@ -116,12 +117,43 @@ export async function runAllChecks(transaction: Transaction): Promise<void> {
   }
 
   if (alerts.length > 0) {
-    await prisma.fraudAlert.createMany({
-      data: alerts.map((alert) => ({
+    // runAllChecks can run more than once for the same transaction (e.g. once at PENDING
+    // creation, again when a parent later approves it) — don't create a second identical
+    // alert row, or a second admin notification, for a pattern already on record.
+    const existingAlertTypes = await prisma.fraudAlert.findMany({
+      where: {
         transactionId: transaction.id,
-        alertType: alert.alertType,
-        severity: alert.severity,
-      })),
+        alertType: { in: alerts.map((alert) => alert.alertType) },
+      },
+      select: { alertType: true },
     });
+    const alreadyFlagged = new Set(existingAlertTypes.map((alert) => alert.alertType));
+    const newAlerts = alerts.filter((alert) => !alreadyFlagged.has(alert.alertType));
+
+    if (newAlerts.length > 0) {
+      await prisma.fraudAlert.createMany({
+        data: newAlerts.map((alert) => ({
+          transactionId: transaction.id,
+          alertType: alert.alertType,
+          severity: alert.severity,
+        })),
+      });
+
+      const admins = await prisma.user.findMany({
+        where: { userType: 'ADMIN' },
+        select: { id: true },
+      });
+      const alertTypesList = newAlerts.map((alert) => alert.alertType).join(', ');
+      await Promise.all(
+        admins.map((admin) =>
+          createNotification(
+            admin.id,
+            'Fraud Alert Triggered',
+            `Transaction ${transaction.id} was flagged for: ${alertTypesList}.`,
+            'FRAUD_ALERT'
+          )
+        )
+      );
+    }
   }
 }

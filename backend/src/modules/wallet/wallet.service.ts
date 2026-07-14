@@ -1,10 +1,15 @@
-import type { Transaction, Wallet } from '@prisma/client';
+import type { Currency, Transaction, Wallet } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
 import { updateSpent } from '../budget/budget.service';
 import { createNotification } from '../notifications/notifications.service';
 import { runAllChecks } from './fraud.service';
-import type { GetTransactionsInput, TopUpInput, TransferInput } from './wallet.schema';
+import type {
+  GetTransactionsInput,
+  LookupWalletInput,
+  TopUpInput,
+  TransferInput,
+} from './wallet.schema';
 
 export async function getWallet(userId: string): Promise<Wallet> {
   const wallet = await prisma.wallet.findFirst({
@@ -24,16 +29,10 @@ export async function topUp(
   input: TopUpInput
 ): Promise<{ wallet: Wallet; transaction: Transaction }> {
   const result = await prisma.$transaction(async (tx) => {
-    const existingWallet = await tx.wallet.findFirst({
-      where: { userId, currency: input.currency },
-    });
-    const wallet =
-      existingWallet ??
-      (await tx.wallet.create({ data: { userId, currency: input.currency, balance: 0 } }));
-
-    const updatedWallet = await tx.wallet.update({
-      where: { id: wallet.id },
-      data: { balance: { increment: input.amount } },
+    const updatedWallet = await tx.wallet.upsert({
+      where: { userId_currency: { userId, currency: input.currency } },
+      create: { userId, currency: input.currency, balance: input.amount },
+      update: { balance: { increment: input.amount } },
     });
 
     const transaction = await tx.transaction.create({
@@ -220,4 +219,27 @@ export async function getTransactionById(
   }
 
   return transaction;
+}
+
+export async function lookupWalletByEmail(
+  requestingUserId: string,
+  input: LookupWalletInput
+): Promise<{ walletId: string; fullName: string; currency: Currency }> {
+  const user = await prisma.user.findUnique({ where: { email: input.email } });
+  if (!user) {
+    throw new AppError(404, 'USER_NOT_FOUND', 'No account found with this email');
+  }
+  if (user.id === requestingUserId) {
+    throw new AppError(400, 'INVALID_RECIPIENT', 'You cannot send money to yourself');
+  }
+
+  const wallet = input.currency
+    ? await prisma.wallet.findFirst({ where: { userId: user.id, currency: input.currency } })
+    : await prisma.wallet.findFirst({ where: { userId: user.id }, orderBy: { createdAt: 'asc' } });
+
+  if (!wallet) {
+    throw new AppError(404, 'WALLET_NOT_FOUND', 'This user has no wallet in that currency');
+  }
+
+  return { walletId: wallet.id, fullName: user.fullName, currency: wallet.currency };
 }

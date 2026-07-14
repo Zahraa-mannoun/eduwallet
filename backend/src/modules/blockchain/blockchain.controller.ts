@@ -14,9 +14,28 @@ import {
   verifyDocument,
 } from './blockchain.service';
 
+function isFrameworkRequestError(
+  error: unknown
+): error is { statusCode: number; code?: string; message: string } {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'statusCode' in error &&
+    typeof (error as { statusCode: unknown }).statusCode === 'number' &&
+    (error as { statusCode: number }).statusCode < 500
+  );
+}
+
 function handleBlockchainError(request: FastifyRequest, reply: FastifyReply, error: unknown) {
   if (error instanceof AppError) {
     return reply.status(error.statusCode).send(errorResponse(error.message, error.code));
+  }
+  // @fastify/multipart throws framework errors (e.g. FST_REQ_FILE_TOO_LARGE, 413) directly
+  // inside the upload handler's own try/catch, so they never reach server.ts's global handler.
+  if (isFrameworkRequestError(error)) {
+    return reply
+      .status(error.statusCode)
+      .send(errorResponse(error.message, error.code ?? 'REQUEST_ERROR'));
   }
   request.log.error({ err: error }, 'Unexpected error in blockchain module');
   return reply

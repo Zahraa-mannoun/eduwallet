@@ -3,6 +3,7 @@ import { AppError } from '../../utils/AppError';
 import { errorResponse, successResponse } from '../../utils/apiResponse';
 import {
   getTransactionsSchema,
+  lookupWalletSchema,
   topUpSchema,
   transactionIdParamsSchema,
   transferSchema,
@@ -11,6 +12,7 @@ import {
   getTransactionById,
   getTransactions,
   getWallet,
+  lookupWalletByEmail,
   topUp,
   transfer,
 } from './wallet.service';
@@ -105,6 +107,23 @@ export async function getTransactionByIdHandler(request: FastifyRequest, reply: 
     const authUser = requireAuthUser(request);
     const transaction = await getTransactionById(authUser.id, parsed.data.id);
     return reply.status(200).send(successResponse(transaction));
+  } catch (error) {
+    return handleWalletError(request, reply, error);
+  }
+}
+
+export async function lookupWalletHandler(request: FastifyRequest, reply: FastifyReply) {
+  const parsed = lookupWalletSchema.safeParse(request.query);
+  if (!parsed.success) {
+    return reply
+      .status(400)
+      .send(errorResponse(parsed.error.issues[0]?.message ?? 'Invalid input', 'VALIDATION_ERROR'));
+  }
+
+  try {
+    const authUser = requireAuthUser(request);
+    const result = await lookupWalletByEmail(authUser.id, parsed.data);
+    return reply.status(200).send(successResponse(result));
   } catch (error) {
     return handleWalletError(request, reply, error);
   }

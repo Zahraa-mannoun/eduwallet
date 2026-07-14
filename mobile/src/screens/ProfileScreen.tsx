@@ -3,7 +3,7 @@ import type { StyleProp, ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar, Button, Chip, Divider, List, Text } from 'react-native-paper';
 import type { NavigationProp } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { KYCStatus } from '../types/api';
 import { USER_TYPES } from '../constants/userTypes';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme/colors';
@@ -39,22 +39,25 @@ const PROFILE_MENU_ITEMS = [
   { title: 'Help & Support', icon: 'help-circle-outline' },
 ] as const;
 
+const KYC_BADGES: Record<KYCStatus, { label: string; color: string }> = {
+  PENDING: { label: 'Pending', color: '#F59E0B' },
+  VERIFIED: { label: 'Verified', color: '#3DDC97' },
+  REJECTED: { label: 'Rejected', color: '#DC2626' },
+};
+
 type ProfileScreenProps = Readonly<{
   navigation: NavigationProp<RootStackParamList>;
 }>;
 
 export default function ProfileScreen({ navigation }: ProfileScreenProps) {
-  const { userType, userName, logout } = useAuth();
-  const displayName = userName || 'there';
-  const typeDefinition = USER_TYPES.find((type) => type.key === userType) ?? USER_TYPES[0];
-  const email = `${displayName.toLowerCase().replace(/\s+/g, '.')}@university.edu.lb`;
+  const { user, logout } = useAuth();
+  const displayName = user?.fullName || 'there';
+  const typeDefinition = USER_TYPES.find((type) => type.key === user?.userType) ?? USER_TYPES[0];
+  const kycBadge = user ? KYC_BADGES[user.kycStatus] : undefined;
 
-  const handleLogout = () => {
-    logout();
-    navigation.getParent<NativeStackNavigationProp<RootStackParamList>>()?.reset({
-      index: 0,
-      routes: [{ name: 'Login' }],
-    });
+  const handleLogout = async () => {
+    await logout();
+    // AppNavigator reacts to the resulting auth state and switches back to Login on its own.
   };
 
   const ACCOUNT_LINKS = [
@@ -63,12 +66,12 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
       icon: 'history',
       onPress: () => navigation.navigate('TransactionHistory'),
     },
-    ...(userType === 'STUDENT'
+    ...(user?.userType === 'STUDENT'
       ? [
           {
             title: 'University Verification',
             icon: 'card-account-details-outline',
-            badge: { label: 'Pending', color: '#F59E0B' },
+            badge: kycBadge,
             onPress: () => navigation.navigate('KYC'),
           },
           {
@@ -98,7 +101,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
           <Text variant="titleLarge" style={styles.name}>
             {displayName}
           </Text>
-          <Text style={styles.email}>{email}</Text>
+          <Text style={styles.email}>{user?.email ?? ''}</Text>
           <Chip
             icon={typeDefinition.icon}
             style={styles.typeBadge}

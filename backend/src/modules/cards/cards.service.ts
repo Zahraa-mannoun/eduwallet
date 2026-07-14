@@ -1,9 +1,10 @@
 import { randomInt } from 'crypto';
-import { Prisma } from '@prisma/client';
 import type { Transaction, VirtualCard } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
+import { isUniqueConstraintError } from '../../utils/prismaErrors';
 import { updateSpent } from '../budget/budget.service';
+import { createNotification } from '../notifications/notifications.service';
 import { getWallet } from '../wallet/wallet.service';
 import { runAllChecks } from '../wallet/fraud.service';
 import type { CreateCardInput, UseCardInput } from './cards.schema';
@@ -39,10 +40,6 @@ export type SafeCard = Omit<VirtualCard, 'cvv'>;
 function toSafeCard(card: VirtualCard): SafeCard {
   const { cvv: _cvv, ...safeCard } = card;
   return safeCard;
-}
-
-function isUniqueConstraintError(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
 }
 
 async function getOwnedCard(userId: string, cardId: string): Promise<VirtualCard> {
@@ -181,6 +178,13 @@ export async function useCard(input: UseCardInput): Promise<{ transaction: Trans
   });
 
   await updateSpent(wallet.id, transaction.category, Number(transaction.amount));
+
+  await createNotification(
+    wallet.userId,
+    'Card Payment',
+    `Your card was charged ${input.amount} ${input.currency} at ${input.merchantName}.`,
+    'CARD_PAYMENT'
+  );
 
   await runAllChecks(transaction);
 

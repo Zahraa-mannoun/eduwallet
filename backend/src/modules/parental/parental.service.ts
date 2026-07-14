@@ -1,8 +1,10 @@
 import type { ParentalControl, Transaction, User, Wallet } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
+import { isUniqueConstraintError } from '../../utils/prismaErrors';
 import { updateSpent } from '../budget/budget.service';
 import { createNotification } from '../notifications/notifications.service';
+import { runAllChecks } from '../wallet/fraud.service';
 import type { LinkStudentInput, UpdateSettingsInput } from './parental.schema';
 
 async function assertLinked(
@@ -37,14 +39,21 @@ export async function linkStudent(
     throw new AppError(409, 'ALREADY_LINKED', 'You are already linked to this student');
   }
 
-  return prisma.parentalControl.create({
-    data: {
-      parentUserId,
-      studentUserId: student.id,
-      approvalThreshold: input.approvalThreshold,
-      categories: input.categories,
-    },
-  });
+  try {
+    return await prisma.parentalControl.create({
+      data: {
+        parentUserId,
+        studentUserId: student.id,
+        approvalThreshold: input.approvalThreshold,
+        categories: input.categories,
+      },
+    });
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      throw new AppError(409, 'ALREADY_LINKED', 'You are already linked to this student');
+    }
+    throw error;
+  }
 }
 
 export async function unlinkStudent(parentUserId: string, studentUserId: string): Promise<void> {
@@ -147,6 +156,8 @@ export async function approveTransaction(
   });
 
   await updateSpent(fromWallet.id, transaction.category, Number(transaction.amount));
+
+  await runAllChecks(updatedTransaction);
 
   await createNotification(
     fromWallet.userId,

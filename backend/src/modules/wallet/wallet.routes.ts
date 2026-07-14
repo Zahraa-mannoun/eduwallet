@@ -4,6 +4,7 @@ import {
   getTransactionByIdHandler,
   getTransactionsHandler,
   getWalletHandler,
+  lookupWalletHandler,
   topUpHandler,
   transferHandler,
 } from './wallet.controller';
@@ -16,4 +17,5 @@ export default async function walletRoutes(fastify: FastifyInstance): Promise<vo
   fastify.post('/transfer', transferHandler);
   fastify.get('/transactions', getTransactionsHandler);
   fastify.get('/transactions/:id', getTransactionByIdHandler);
+  fastify.get('/lookup', lookupWalletHandler);
 }

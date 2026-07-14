@@ -1,8 +1,8 @@
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar, Card, IconButton, Text } from 'react-native-paper';
 import IconBadge from '../components/IconBadge';
-import { NOTIFICATION_META, useNotifications } from '../context/NotificationsContext';
+import { getNotificationMeta, useNotifications } from '../context/NotificationsContext';
 import { colors } from '../theme/colors';
 import type { RootStackScreenProps } from '../navigation/types';
 
@@ -15,7 +15,7 @@ const formatTimestamp = (isoDate: string) =>
   });
 
 export default function NotificationsScreen({ navigation }: RootStackScreenProps<'Notifications'>) {
-  const { notifications, markAsRead } = useNotifications();
+  const { notifications, isLoading, markAsRead, refresh } = useNotifications();
 
   return (
     <SafeAreaView style={styles.flex} edges={['top']}>
@@ -26,10 +26,13 @@ export default function NotificationsScreen({ navigation }: RootStackScreenProps
         </Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refresh} />}
+      >
         {notifications.length > 0 ? (
           notifications.map((notification) => {
-            const meta = NOTIFICATION_META[notification.type];
+            const meta = getNotificationMeta(notification.type);
             return (
               <TouchableOpacity
                 key={notification.id}
@@ -41,7 +44,7 @@ export default function NotificationsScreen({ navigation }: RootStackScreenProps
                 <View style={styles.rowMiddle}>
                   <Text style={styles.rowTitle}>{notification.title}</Text>
                   <Text style={styles.rowMessage}>{notification.message}</Text>
-                  <Text style={styles.rowTimestamp}>{formatTimestamp(notification.timestamp)}</Text>
+                  <Text style={styles.rowTimestamp}>{formatTimestamp(notification.createdAt)}</Text>
                 </View>
                 {!notification.read && <View style={styles.unreadDot} />}
               </TouchableOpacity>

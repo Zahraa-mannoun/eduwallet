@@ -35,3 +35,10 @@ export const transactionIdParamsSchema = z.object({
 });
 
 export type TransactionIdParams = z.infer<typeof transactionIdParamsSchema>;
+
+export const lookupWalletSchema = z.object({
+  email: z.string().trim().toLowerCase().email('Invalid email address'),
+  currency: z.enum(['USD', 'EUR', 'LBP']).optional(),
+});
+
+export type LookupWalletInput = z.infer<typeof lookupWalletSchema>;

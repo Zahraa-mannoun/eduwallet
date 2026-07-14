@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AppNavigator from './src/navigation/AppNavigator';
 import { AuthProvider } from './src/context/AuthContext';
+import { WalletProvider } from './src/context/WalletContext';
 import { NotificationsProvider } from './src/context/NotificationsContext';
 import { paperTheme } from './src/theme/paperTheme';
 
@@ -16,12 +17,14 @@ export default function App() {
         settings={{ icon: (props) => <MaterialCommunityIcons {...props} /> }}
       >
         <AuthProvider>
-          <NotificationsProvider>
-            <NavigationContainer>
-              <AppNavigator />
-              <StatusBar style="light" />
-            </NavigationContainer>
-          </NotificationsProvider>
+          <WalletProvider>
+            <NotificationsProvider>
+              <NavigationContainer>
+                <AppNavigator />
+                <StatusBar style="light" />
+              </NavigationContainer>
+            </NotificationsProvider>
+          </WalletProvider>
         </AuthProvider>
       </PaperProvider>
     </SafeAreaProvider>

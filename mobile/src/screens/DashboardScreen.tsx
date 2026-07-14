@@ -1,24 +1,33 @@
 import { useState } from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Avatar, Badge, Button, Card, IconButton, Text } from 'react-native-paper';
+import { ActivityIndicator, Avatar, Badge, Button, Card, IconButton, Text } from 'react-native-paper';
+import type { Transaction } from '../types/api';
 import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
-import { MOCK_TRANSACTIONS } from '../constants/mockTransactions';
+import type { BudgetCategoryKey } from '../constants/budgetCategories';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationsContext';
+import { useWallet } from '../context/WalletContext';
 import { colors } from '../theme/colors';
 import { getInitials } from '../utils/getInitials';
 import type { StudentTabScreenProps } from '../navigation/types';
 
-const MOCK_BALANCE = 1250.0;
-
 const categoryLookup = new Map(BUDGET_CATEGORIES.map((category) => [category.key, category]));
 
-const RECENT_TRANSACTIONS = [...MOCK_TRANSACTIONS]
-  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-  .slice(0, 3);
+function transactionTitle(transaction: Transaction): string {
+  if (transaction.note) return transaction.note;
+  if (!transaction.fromWalletId) return 'Wallet Top-up';
+  const category = categoryLookup.get(transaction.category.toLowerCase() as BudgetCategoryKey);
+  return category?.label ?? 'Transfer';
+}
+
+function transactionSubtitle(transaction: Transaction): string {
+  if (transaction.status === 'PENDING') return 'Awaiting parent approval';
+  if (transaction.status === 'REJECTED') return 'Rejected';
+  return new Date(transaction.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
 
 type QuickAction = {
   key: string;
@@ -28,10 +37,11 @@ type QuickAction = {
 };
 
 export default function DashboardScreen({ navigation }: StudentTabScreenProps<'Home'>) {
-  const { userName } = useAuth();
+  const { user } = useAuth();
   const { unreadCount } = useNotifications();
+  const { wallet, transactions, isLoading, error, refresh } = useWallet();
   const [showBalance, setShowBalance] = useState(true);
-  const displayName = userName || 'Student';
+  const displayName = user?.fullName || 'Student';
 
   const quickActions: QuickAction[] = [
     { key: 'send', label: 'Send', icon: 'arrow-up-circle-outline', onPress: () => navigation.navigate('SendMoney') },
@@ -39,6 +49,8 @@ export default function DashboardScreen({ navigation }: StudentTabScreenProps<'H
     { key: 'qr', label: 'QR Pay', icon: 'qrcode-scan', onPress: () => navigation.navigate('QRPay') },
     { key: 'cards', label: 'Cards', icon: 'credit-card-outline', onPress: () => navigation.navigate('Cards') },
   ];
+
+  const balanceLabel = wallet ? `${Number(wallet.balance).toFixed(2)} ${wallet.currency}` : '0.00';
 
   return (
     <View style={styles.flex}>
@@ -89,14 +101,22 @@ export default function DashboardScreen({ navigation }: StudentTabScreenProps<'H
                 style={styles.eyeButton}
               />
             </View>
-            <Text style={styles.balanceValue}>
-              {showBalance ? `$${MOCK_BALANCE.toFixed(2)}` : '••••••'}
-            </Text>
+            {isLoading && !wallet ? (
+              <ActivityIndicator color={colors.onPrimary} style={styles.balanceLoading} />
+            ) : (
+              <Text style={styles.balanceValue}>
+                {showBalance ? `$${balanceLabel}` : '••••••'}
+              </Text>
+            )}
           </View>
         </SafeAreaView>
       </LinearGradient>
 
-      <ScrollView style={styles.flex} contentContainerStyle={styles.body}>
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.body}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refresh} />}
+      >
         <View style={styles.quickActionsRow}>
           {quickActions.map((action) => (
             <View key={action.key} style={styles.quickAction}>
@@ -129,10 +149,12 @@ export default function DashboardScreen({ navigation }: StudentTabScreenProps<'H
               </Button>
             </View>
 
-            {RECENT_TRANSACTIONS.length > 0 ? (
-              RECENT_TRANSACTIONS.map((transaction) => {
-                const category = categoryLookup.get(transaction.category);
-                const isReceived = transaction.type === 'RECEIVED';
+            {error ? (
+              <Text style={styles.errorText}>{error}</Text>
+            ) : transactions.length > 0 ? (
+              transactions.map((transaction) => {
+                const category = categoryLookup.get(transaction.category.toLowerCase() as BudgetCategoryKey);
+                const isReceived = wallet !== null && transaction.toWalletId === wallet.id;
                 return (
                   <TouchableOpacity
                     key={transaction.id}
@@ -147,8 +169,8 @@ export default function DashboardScreen({ navigation }: StudentTabScreenProps<'H
                       size={40}
                     />
                     <View style={styles.transactionMiddle}>
-                      <Text style={styles.transactionTitle}>{transaction.counterparty}</Text>
-                      <Text style={styles.transactionSubtitle}>{category?.label ?? 'Other'}</Text>
+                      <Text style={styles.transactionTitle}>{transactionTitle(transaction)}</Text>
+                      <Text style={styles.transactionSubtitle}>{transactionSubtitle(transaction)}</Text>
                     </View>
                     <Text
                       style={[
@@ -156,7 +178,7 @@ export default function DashboardScreen({ navigation }: StudentTabScreenProps<'H
                         { color: isReceived ? colors.accent : colors.heading },
                       ]}
                     >
-                      {isReceived ? '+' : '-'}${transaction.amount.toFixed(2)}
+                      {isReceived ? '+' : '-'}${Number(transaction.amount).toFixed(2)}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -248,6 +270,10 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginTop: 4,
   },
+  balanceLoading: {
+    marginTop: 12,
+    alignSelf: 'flex-start',
+  },
   body: {
     paddingHorizontal: 20,
     paddingTop: 24,
@@ -320,5 +346,10 @@ const styles = StyleSheet.create({
   emptySubtitle: {
     color: colors.muted,
     textAlign: 'center',
+  },
+  errorText: {
+    color: colors.danger,
+    textAlign: 'center',
+    paddingVertical: 16,
   },
 });

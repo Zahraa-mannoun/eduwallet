@@ -98,6 +98,7 @@ model Wallet {
   outgoingTransactions Transaction[] @relation("FromWallet")
   incomingTransactions Transaction[] @relation("ToWallet")
 
+  @@unique([userId, currency])
   @@index([userId])
   @@map("wallets")
 }

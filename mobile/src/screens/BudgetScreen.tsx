@@ -1,23 +1,84 @@
-import { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, Card, ProgressBar, Snackbar, Text } from 'react-native-paper';
+import {
+  ActivityIndicator,
+  Button,
+  Card,
+  Dialog,
+  Portal,
+  ProgressBar,
+  Snackbar,
+  Text,
+  TextInput,
+} from 'react-native-paper';
+import type { TransactionCategory } from '../types/api';
 import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
+import type { BudgetCategoryDefinition } from '../constants/budgetCategories';
 import { colors } from '../theme/colors';
+import * as budgetService from '../services/budgetService';
+import type { BudgetSummary } from '../services/budgetService';
+import { ApiError } from '../services/api';
 import type { StudentTabScreenProps } from '../navigation/types';
 
-const MOCK_SPENDING: Record<string, { spent: number; limit: number }> = {
-  tuition: { spent: 0, limit: 0 },
-  books: { spent: 0, limit: 0 },
-  food: { spent: 0, limit: 0 },
-  transport: { spent: 0, limit: 0 },
-  software: { spent: 0, limit: 0 },
-  rent: { spent: 0, limit: 0 },
-};
+export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Budget'>>) {
+  const [summary, setSummary] = useState<BudgetSummary | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [dialogCategory, setDialogCategory] = useState<BudgetCategoryDefinition | null>(null);
+  const [dialogAmount, setDialogAmount] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
 
-export default function BudgetScreen(_props: StudentTabScreenProps<'Budget'>) {
-  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await budgetService.getBudgetSummary();
+      setSummary(result);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to load your budgets.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const categoryData = (category: BudgetCategoryDefinition) =>
+    summary?.categories.find((entry) => entry.category === category.key.toUpperCase()) ?? null;
+
+  const openDialog = (category: BudgetCategoryDefinition) => {
+    const existing = categoryData(category);
+    setDialogAmount(existing ? String(existing.monthlyLimit) : '');
+    setDialogCategory(category);
+  };
+
+  const handleSaveBudget = async () => {
+    if (!dialogCategory) return;
+    const limit = Number(dialogAmount);
+    if (!(limit > 0)) return;
+
+    setIsSaving(true);
+    try {
+      const month = new Date().toISOString().slice(0, 7);
+      await budgetService.setBudget(
+        dialogCategory.key.toUpperCase() as TransactionCategory,
+        limit,
+        month
+      );
+      setDialogCategory(null);
+      setSnackbarMessage(`${dialogCategory.label} budget updated.`);
+      await load();
+    } catch (err) {
+      setSnackbarMessage(err instanceof ApiError ? err.message : 'Could not save that budget.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -27,10 +88,40 @@ export default function BudgetScreen(_props: StudentTabScreenProps<'Budget'>) {
         </Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={load} />}
+      >
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+        {summary?.alerts.map((alert) => (
+          <Card
+            key={alert.category}
+            style={[
+              styles.alertCard,
+              { backgroundColor: alert.severity === 'OVERSPENT' ? '#FEF2F2' : '#FFFBEB' },
+            ]}
+            mode="contained"
+          >
+            <Card.Content>
+              <Text
+                style={{
+                  color: alert.severity === 'OVERSPENT' ? colors.danger : '#B45309',
+                  fontWeight: '600',
+                  fontSize: 12,
+                }}
+              >
+                {alert.message}
+              </Text>
+            </Card.Content>
+          </Card>
+        ))}
+
         {BUDGET_CATEGORIES.map((category) => {
-          const { spent, limit } = MOCK_SPENDING[category.key];
-          const progress = limit > 0 ? spent / limit : 0;
+          const data = categoryData(category);
+          const spent = data?.spent ?? 0;
+          const limit = data?.monthlyLimit ?? 0;
+          const progress = limit > 0 ? Math.min(spent / limit, 1) : 0;
 
           return (
             <Card key={category.key} style={styles.categoryCard} mode="elevated">
@@ -49,34 +140,55 @@ export default function BudgetScreen(_props: StudentTabScreenProps<'Budget'>) {
 
                 <ProgressBar
                   progress={progress}
-                  color={category.color}
+                  color={data?.overspent ? colors.danger : category.color}
                   style={styles.progressBar}
                 />
 
-                <Text style={styles.categoryUsed}>{Math.round(progress * 100)}% used</Text>
+                <View style={styles.categoryFooterRow}>
+                  <Text style={styles.categoryUsed}>
+                    {limit > 0 ? `${Math.round(progress * 100)}% used` : 'No budget set'}
+                  </Text>
+                  <Button mode="text" compact textColor={colors.primary} onPress={() => openDialog(category)}>
+                    {limit > 0 ? 'Edit' : 'Set Budget'}
+                  </Button>
+                </View>
               </Card.Content>
             </Card>
           );
         })}
-
-        <Button
-          mode="contained"
-          buttonColor={colors.primary}
-          icon="wallet-plus-outline"
-          style={styles.setBudgetButton}
-          contentStyle={styles.setBudgetButtonContent}
-          onPress={() => setSnackbarVisible(true)}
-        >
-          Set Budget
-        </Button>
       </ScrollView>
 
+      <Portal>
+        <Dialog visible={dialogCategory !== null} onDismiss={() => setDialogCategory(null)}>
+          <Dialog.Title>{dialogCategory?.label} Budget</Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              mode="outlined"
+              label="Monthly limit"
+              value={dialogAmount}
+              onChangeText={(text: string) => setDialogAmount(text.replace(/[^0-9.]/g, ''))}
+              keyboardType="decimal-pad"
+              outlineColor={colors.border}
+              activeOutlineColor={colors.primary}
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setDialogCategory(null)} disabled={isSaving}>
+              Cancel
+            </Button>
+            <Button onPress={handleSaveBudget} disabled={!(Number(dialogAmount) > 0) || isSaving}>
+              {isSaving ? <ActivityIndicator size={16} color={colors.primary} /> : 'Save'}
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
       <Snackbar
-        visible={snackbarVisible}
-        onDismiss={() => setSnackbarVisible(false)}
-        duration={2000}
+        visible={snackbarMessage !== null}
+        onDismiss={() => setSnackbarMessage(null)}
+        duration={2500}
       >
-        Budget management is coming soon.
+        {snackbarMessage}
       </Snackbar>
     </SafeAreaView>
   );
@@ -99,6 +211,15 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingBottom: 32,
+  },
+  errorText: {
+    color: colors.danger,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  alertCard: {
+    borderRadius: 12,
+    marginBottom: 12,
   },
   categoryCard: {
     borderRadius: 16,
@@ -129,16 +250,14 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: colors.surface,
   },
+  categoryFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
   categoryUsed: {
     fontSize: 12,
     color: colors.muted,
-    marginTop: 8,
-  },
-  setBudgetButton: {
-    borderRadius: 10,
-    marginTop: 8,
-  },
-  setBudgetButtonContent: {
-    paddingVertical: 6,
   },
 });

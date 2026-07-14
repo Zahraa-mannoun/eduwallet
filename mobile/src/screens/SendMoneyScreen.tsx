@@ -1,49 +1,48 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
   TextInput as NativeTextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
+  ActivityIndicator,
   Avatar,
   Button,
   Chip,
+  HelperText,
   IconButton,
-  Searchbar,
   Text,
   TextInput,
   TouchableRipple,
 } from 'react-native-paper';
+import type { TransactionCategory } from '../types/api';
 import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryDefinition } from '../constants/budgetCategories';
+import { useWallet } from '../context/WalletContext';
+import * as walletService from '../services/walletService';
+import { ApiError } from '../services/api';
 import { colors } from '../theme/colors';
+import { getInitials } from '../utils/getInitials';
 import type { RootStackScreenProps } from '../navigation/types';
 
-type Contact = {
-  id: string;
-  name: string;
+type ResolvedRecipient = {
+  walletId: string;
+  fullName: string;
   email: string;
-  initials: string;
 };
 
-const CONTACTS: Contact[] = [
-  { id: '1', name: 'Layla Hassan', email: 'layla.hassan@lau.edu.lb', initials: 'LH' },
-  { id: '2', name: 'Omar Fares', email: 'omar.fares@aub.edu.lb', initials: 'OF' },
-  { id: '3', name: 'Sara Khalil', email: 'sara.khalil@usek.edu.lb', initials: 'SK' },
-];
-
-type TransactionResult = {
+type SentTransaction = {
   id: string;
-  recipient: Contact;
+  recipient: ResolvedRecipient;
   amount: number;
   category: BudgetCategoryDefinition;
   note: string;
+  requiresApproval: boolean;
   timestamp: Date;
 };
 
@@ -52,48 +51,75 @@ const renderCategoryChipIcon = (category: BudgetCategoryDefinition) => () => (
 );
 
 export default function SendMoneyScreen({ navigation }: RootStackScreenProps<'SendMoney'>) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [recipient, setRecipient] = useState<Contact | null>(null);
+  const { wallet, refresh } = useWallet();
+  const [recipientEmail, setRecipientEmail] = useState('');
+  const [recipient, setRecipient] = useState<ResolvedRecipient | null>(null);
+  const [lookupError, setLookupError] = useState<string | null>(null);
+  const [isLookingUp, setIsLookingUp] = useState(false);
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<BudgetCategoryDefinition | null>(null);
   const [note, setNote] = useState('');
-  const [transaction, setTransaction] = useState<TransactionResult | null>(null);
-
-  const searchResults = useMemo(() => {
-    if (!searchQuery.trim()) return [];
-    const query = searchQuery.trim().toLowerCase();
-    return CONTACTS.filter(
-      (contact) =>
-        contact.name.toLowerCase().includes(query) || contact.email.toLowerCase().includes(query)
-    );
-  }, [searchQuery]);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [isSending, setIsSending] = useState(false);
+  const [transaction, setTransaction] = useState<SentTransaction | null>(null);
 
   const parsedAmount = Number(amount);
-  const canSend = Boolean(recipient) && parsedAmount > 0 && Boolean(category);
+  const canSend = Boolean(recipient) && parsedAmount > 0 && Boolean(category) && !isSending;
 
-  const handleSelectContact = (contact: Contact) => {
-    setRecipient(contact);
-    setSearchQuery('');
+  const handleFindRecipient = async () => {
+    const email = recipientEmail.trim().toLowerCase();
+    if (!email || !wallet) return;
+    setIsLookingUp(true);
+    setLookupError(null);
+    try {
+      const result = await walletService.lookupWalletByEmail(email, wallet.currency);
+      setRecipient({ walletId: result.walletId, fullName: result.fullName, email });
+    } catch (err) {
+      setLookupError(err instanceof ApiError ? err.message : 'Could not find that recipient.');
+      setRecipient(null);
+    } finally {
+      setIsLookingUp(false);
+    }
   };
 
-  const handleSend = () => {
-    if (!recipient || !category) return;
-    setTransaction({
-      id: `TXN-${Date.now().toString(36).toUpperCase()}`,
-      recipient,
-      amount: parsedAmount,
-      category,
-      note: note.trim(),
-      timestamp: new Date(),
-    });
+  const handleSend = async () => {
+    if (!recipient || !category || !wallet) return;
+    setIsSending(true);
+    setSendError(null);
+    try {
+      const result = await walletService.transfer({
+        toWalletId: recipient.walletId,
+        amount: parsedAmount,
+        currency: wallet.currency,
+        category: category.key.toUpperCase() as TransactionCategory,
+        note: note.trim() || undefined,
+      });
+      setTransaction({
+        id: result.transaction.id,
+        recipient,
+        amount: parsedAmount,
+        category,
+        note: note.trim(),
+        requiresApproval: result.requiresApproval,
+        timestamp: new Date(),
+      });
+      void refresh();
+    } catch (err) {
+      setSendError(err instanceof ApiError ? err.message : 'Could not send money. Try again.');
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleSendAnother = () => {
     setTransaction(null);
     setRecipient(null);
+    setRecipientEmail('');
     setAmount('');
     setCategory(null);
     setNote('');
+    setSendError(null);
+    setLookupError(null);
   };
 
   return (
@@ -111,18 +137,28 @@ export default function SendMoneyScreen({ navigation }: RootStackScreenProps<'Se
 
       {transaction ? (
         <ScrollView contentContainerStyle={styles.successContent}>
-          <IconBadge icon="check-circle-outline" color={colors.accent} size={88} iconSize={48} />
+          <IconBadge
+            icon={transaction.requiresApproval ? 'clock-outline' : 'check-circle-outline'}
+            color={transaction.requiresApproval ? colors.primary : colors.accent}
+            size={88}
+            iconSize={48}
+          />
           <Text variant="headlineSmall" style={styles.successTitle}>
-            Money Sent!
+            {transaction.requiresApproval ? 'Sent for Approval' : 'Money Sent!'}
           </Text>
           <Text style={styles.successAmount}>
-            ${transaction.amount.toFixed(2)} to {transaction.recipient.name}
+            ${transaction.amount.toFixed(2)} to {transaction.recipient.fullName}
           </Text>
+          {transaction.requiresApproval && (
+            <Text style={styles.successNote}>
+              This amount needs your parent&apos;s approval before it&apos;s sent.
+            </Text>
+          )}
 
           <View style={styles.receiptCard}>
             <View style={styles.receiptRow}>
               <Text style={styles.receiptLabel}>Transaction ID</Text>
-              <Text style={styles.receiptValue}>{transaction.id}</Text>
+              <Text style={styles.receiptValue}>{transaction.id.slice(0, 8).toUpperCase()}</Text>
             </View>
             <View style={styles.receiptRow}>
               <Text style={styles.receiptLabel}>Category</Text>
@@ -169,62 +205,60 @@ export default function SendMoneyScreen({ navigation }: RootStackScreenProps<'Se
         </ScrollView>
       ) : (
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Searchbar
-            placeholder="Search by name or email"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            style={styles.searchbar}
-            iconColor={colors.muted}
-          />
-
-          {searchResults.length > 0 ? (
-            <View style={styles.searchResults}>
-              {searchResults.map((contact) => (
-                <TouchableOpacity
-                  key={contact.id}
-                  style={styles.searchResultRow}
-                  onPress={() => handleSelectContact(contact)}
-                >
-                  <Avatar.Text size={40} label={contact.initials} style={styles.contactAvatar} color={colors.onPrimary} />
-                  <View style={styles.searchResultText}>
-                    <Text style={styles.contactName}>{contact.name}</Text>
-                    <Text style={styles.contactEmail}>{contact.email}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-          ) : (
-            <View style={styles.recentSection}>
-              <Text style={styles.sectionLabel}>Recent Contacts</Text>
-              <View style={styles.recentRow}>
-                {CONTACTS.map((contact) => (
-                  <TouchableOpacity
-                    key={contact.id}
-                    style={styles.recentContact}
-                    onPress={() => handleSelectContact(contact)}
-                  >
-                    <Avatar.Text size={52} label={contact.initials} style={styles.contactAvatar} color={colors.onPrimary} />
-                    <Text style={styles.recentContactName} numberOfLines={1}>
-                      {contact.name.split(' ')[0]}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          )}
-
           {recipient ? (
             <Chip
-              avatar={<Avatar.Text size={24} label={recipient.initials} color={colors.onPrimary} style={styles.contactAvatar} />}
-              onClose={() => setRecipient(null)}
+              avatar={
+                <Avatar.Text
+                  size={24}
+                  label={getInitials(recipient.fullName)}
+                  color={colors.onPrimary}
+                  style={styles.contactAvatar}
+                />
+              }
+              onClose={() => {
+                setRecipient(null);
+                setRecipientEmail('');
+              }}
               style={styles.recipientChip}
             >
-              To: {recipient.name}
+              To: {recipient.fullName}
             </Chip>
-          ) : null}
+          ) : (
+            <View style={styles.lookupRow}>
+              <TextInput
+                mode="outlined"
+                label="Recipient email"
+                placeholder="friend@university.edu.lb"
+                value={recipientEmail}
+                onChangeText={(text: string) => {
+                  setRecipientEmail(text);
+                  setLookupError(null);
+                }}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+                outlineColor={colors.border}
+                activeOutlineColor={colors.primary}
+                style={styles.lookupInput}
+                onSubmitEditing={handleFindRecipient}
+              />
+              <Button
+                mode="contained"
+                buttonColor={colors.primary}
+                style={styles.findButton}
+                onPress={handleFindRecipient}
+                disabled={!recipientEmail.trim() || isLookingUp}
+              >
+                {isLookingUp ? <ActivityIndicator size={16} color={colors.onPrimary} /> : 'Find'}
+              </Button>
+            </View>
+          )}
+          <HelperText type="error" visible={Boolean(lookupError)}>
+            {lookupError}
+          </HelperText>
 
           <View style={styles.amountContainer}>
-            <Text style={styles.currencySymbol}>$</Text>
+            <Text style={styles.currencySymbol}>{wallet?.currency ?? 'USD'}</Text>
             <NativeTextInput
               style={styles.amountInput}
               value={amount}
@@ -272,6 +306,10 @@ export default function SendMoneyScreen({ navigation }: RootStackScreenProps<'Se
             multiline
           />
 
+          <HelperText type="error" visible={Boolean(sendError)}>
+            {sendError}
+          </HelperText>
+
           <Button
             mode="contained"
             buttonColor={colors.primary}
@@ -280,7 +318,7 @@ export default function SendMoneyScreen({ navigation }: RootStackScreenProps<'Se
             contentStyle={styles.sendButtonContent}
             onPress={handleSend}
           >
-            Send Money
+            {isSending ? <ActivityIndicator size={18} color={colors.onPrimary} /> : 'Send Money'}
           </Button>
         </ScrollView>
       )}
@@ -312,62 +350,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 32,
   },
-  searchbar: {
-    backgroundColor: colors.inputBackground,
-    borderRadius: 10,
-    marginBottom: 16,
-  },
-  searchResults: {
-    marginBottom: 8,
-  },
-  searchResultRow: {
+  lookupRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
+    alignItems: 'flex-start',
   },
-  searchResultText: {
-    marginLeft: 12,
+  lookupInput: {
+    flex: 1,
+    backgroundColor: colors.inputBackground,
+    marginRight: 8,
+  },
+  findButton: {
+    marginTop: 6,
+    borderRadius: 10,
   },
   contactAvatar: {
     backgroundColor: colors.primary,
   },
-  contactName: {
-    fontWeight: '600',
-    color: colors.heading,
-  },
-  contactEmail: {
-    fontSize: 12,
-    color: colors.muted,
-  },
-  recentSection: {
-    marginBottom: 8,
+  recipientChip: {
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    marginBottom: 4,
+    backgroundColor: '#EAF0FA',
   },
   sectionLabel: {
     fontSize: 13,
     fontWeight: '600',
     color: colors.label,
     marginBottom: 10,
-  },
-  recentRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-  },
-  recentContact: {
-    alignItems: 'center',
-    width: 72,
-    marginRight: 8,
-  },
-  recentContactName: {
-    fontSize: 12,
-    color: colors.label,
-    fontWeight: '600',
-    marginTop: 6,
-  },
-  recipientChip: {
-    alignSelf: 'flex-start',
-    marginTop: 4,
-    marginBottom: 20,
-    backgroundColor: '#EAF0FA',
   },
   amountContainer: {
     flexDirection: 'row',
@@ -376,10 +385,10 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
   },
   currencySymbol: {
-    fontSize: 36,
+    fontSize: 20,
     fontWeight: '700',
     color: colors.heading,
-    marginRight: 4,
+    marginRight: 8,
   },
   amountInput: {
     fontSize: 48,
@@ -415,7 +424,7 @@ const styles = StyleSheet.create({
   },
   noteInput: {
     backgroundColor: colors.inputBackground,
-    marginBottom: 20,
+    marginBottom: 4,
   },
   sendButton: {
     borderRadius: 10,
@@ -438,13 +447,19 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.muted,
     marginTop: 4,
-    marginBottom: 24,
+  },
+  successNote: {
+    fontSize: 13,
+    color: colors.muted,
+    textAlign: 'center',
+    marginTop: 8,
   },
   receiptCard: {
     width: '100%',
     backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 18,
+    marginTop: 24,
     marginBottom: 24,
   },
   receiptRow: {
