@@ -1,4 +1,5 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { prisma } from '../config/database';
 import { redis } from '../config/redis';
 import { AppError } from '../utils/AppError';
 import { errorResponse } from '../utils/apiResponse';
@@ -26,6 +27,14 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
     const isBlacklisted = await redis.get(`auth:blacklist:${token}`);
     if (isBlacklisted) {
       throw new AppError(401, 'TOKEN_REVOKED', 'This token has been revoked');
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: payload.sub } });
+    if (!user) {
+      throw new AppError(401, 'USER_NOT_FOUND', 'User no longer exists');
+    }
+    if (user.suspended) {
+      throw new AppError(401, 'ACCOUNT_SUSPENDED', 'This account has been suspended');
     }
 
     request.authUser = { id: payload.sub, email: payload.email, userType: payload.userType };

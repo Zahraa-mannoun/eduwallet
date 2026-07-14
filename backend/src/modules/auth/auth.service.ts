@@ -100,6 +100,10 @@ export async function loginUser(
     throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
   }
 
+  if (user.suspended) {
+    throw new AppError(403, 'ACCOUNT_SUSPENDED', 'This account has been suspended');
+  }
+
   const passwordMatches = await bcrypt.compare(input.password, user.password);
   if (!passwordMatches) {
     await recordFailedLoginAttempt(input.email);

@@ -2,6 +2,7 @@ import type { Transaction, Wallet } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
 import { updateSpent } from '../budget/budget.service';
+import { createNotification } from '../notifications/notifications.service';
 import { runAllChecks } from './fraud.service';
 import type { GetTransactionsInput, TopUpInput, TransferInput } from './wallet.schema';
 
@@ -105,6 +106,14 @@ export async function transfer(
   let transaction: Transaction;
 
   if (requiresApproval) {
+    if (!parentalControl) {
+      throw new AppError(
+        500,
+        'INTERNAL_ERROR',
+        'Unexpected state: approval required without a parental control link'
+      );
+    }
+
     transaction = await prisma.transaction.create({
       data: {
         fromWalletId: fromWallet.id,
@@ -116,6 +125,13 @@ export async function transfer(
         note: input.note,
       },
     });
+
+    await createNotification(
+      parentalControl.parentUserId,
+      'Approval Needed',
+      `A ${input.category.toLowerCase()} transfer of ${input.amount} ${input.currency} needs your approval.`,
+      'APPROVAL_NEEDED'
+    );
   } else {
     transaction = await prisma.$transaction(async (tx) => {
       const debited = await tx.wallet.updateMany({
@@ -146,6 +162,13 @@ export async function transfer(
     });
 
     await updateSpent(fromWallet.id, transaction.category, Number(transaction.amount));
+
+    await createNotification(
+      toWallet.userId,
+      'Money Received',
+      `You received ${input.amount} ${input.currency} for ${input.category.toLowerCase()}.`,
+      'TRANSFER_RECEIVED'
+    );
   }
 
   await runAllChecks(transaction);

@@ -2,6 +2,7 @@ import 'dotenv/config';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
+import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import { prisma } from './config/database';
 import { redis } from './config/redis';
@@ -10,6 +11,11 @@ import walletRoutes from './modules/wallet/wallet.routes';
 import parentalRoutes from './modules/parental/parental.routes';
 import cardsRoutes from './modules/cards/cards.routes';
 import budgetRoutes from './modules/budget/budget.routes';
+import notificationsRoutes from './modules/notifications/notifications.routes';
+import kycRoutes from './modules/kyc/kyc.routes';
+import blockchainRoutes from './modules/blockchain/blockchain.routes';
+import adminRoutes from './modules/admin/admin.routes';
+import { initSocket } from './modules/notifications/notifications.socket';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-me';
@@ -25,6 +31,9 @@ async function buildServer() {
     timeWindow: '1 minute',
     redis,
   });
+  await app.register(multipart, {
+    limits: { fileSize: 10 * 1024 * 1024 },
+  });
 
   app.get('/health', async () => ({
     status: 'ok',
@@ -36,6 +45,10 @@ async function buildServer() {
   await app.register(parentalRoutes, { prefix: '/parental' });
   await app.register(cardsRoutes, { prefix: '/cards' });
   await app.register(budgetRoutes, { prefix: '/budget' });
+  await app.register(notificationsRoutes, { prefix: '/notifications' });
+  await app.register(kycRoutes, { prefix: '/kyc' });
+  await app.register(blockchainRoutes, { prefix: '/blockchain' });
+  await app.register(adminRoutes, { prefix: '/admin' });
 
   return app;
 }
@@ -49,8 +62,10 @@ async function start() {
     app.log.info('Connected to Redis');
 
     const server = await buildServer();
+    const io = initSocket(server.server, server);
 
     server.addHook('onClose', async () => {
+      io.close();
       await prisma.$disconnect();
       await redis.quit();
     });

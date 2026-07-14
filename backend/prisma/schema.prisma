@@ -49,6 +49,7 @@ enum DocumentVerificationStatus {
   VERIFIED
 }
 
+
 enum FraudAlertType {
   CIRCULAR
   VELOCITY
@@ -69,11 +70,13 @@ model User {
   fullName  String
   userType  UserType
   kycStatus KYCStatus @default(PENDING)
+  suspended Boolean   @default(false)
   createdAt DateTime  @default(now())
 
   wallets           Wallet[]
   academicDocuments AcademicDocument[]
   notifications     Notification[]
+  adminAuditLogs    AdminAuditLog[]
 
   parentalControlsAsParent  ParentalControl[] @relation("ParentControls")
   parentalControlsAsStudent ParentalControl[] @relation("StudentControls")
@@ -170,8 +173,11 @@ model AcademicDocument {
   id                 String                      @id @default(uuid())
   userId             String
   fileName           String
-  fileType           String
-  sha256Hash         String
+  fileType           String?
+  fileSize           Int?
+  documentType       String?
+  documentName       String?
+  sha256Hash         String?
   blockchainTxHash   String?
   verificationStatus DocumentVerificationStatus  @default(STORED)
   createdAt          DateTime                    @default(now())
@@ -209,4 +215,18 @@ model Notification {
 
   @@index([userId])
   @@map("notifications")
+}
+
+model AdminAuditLog {
+  id        String   @id @default(uuid())
+  adminId   String
+  action    String
+  targetId  String?
+  details   String?
+  createdAt DateTime @default(now())
+
+  admin User @relation(fields: [adminId], references: [id])
+
+  @@index([adminId])
+  @@map("admin_audit_logs")
 }

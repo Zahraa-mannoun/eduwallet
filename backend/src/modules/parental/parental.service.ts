@@ -1,6 +1,8 @@
 import type { ParentalControl, Transaction, User, Wallet } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
+import { updateSpent } from '../budget/budget.service';
+import { createNotification } from '../notifications/notifications.service';
 import type { LinkStudentInput, UpdateSettingsInput } from './parental.schema';
 
 async function assertLinked(
@@ -144,14 +146,14 @@ export async function approveTransaction(
     });
   });
 
-  await prisma.notification.create({
-    data: {
-      userId: fromWallet.userId,
-      title: 'Transaction Approved',
-      message: `Your ${transaction.category.toLowerCase()} transaction of ${transaction.amount} ${transaction.currency} was approved.`,
-      type: 'TRANSACTION_APPROVED',
-    },
-  });
+  await updateSpent(fromWallet.id, transaction.category, Number(transaction.amount));
+
+  await createNotification(
+    fromWallet.userId,
+    'Transaction Approved',
+    `Your ${transaction.category.toLowerCase()} transaction of ${transaction.amount} ${transaction.currency} was approved.`,
+    'TRANSACTION_APPROVED'
+  );
 
   return updatedTransaction;
 }
@@ -169,14 +171,12 @@ export async function rejectTransaction(
     data: { status: 'REJECTED' },
   });
 
-  await prisma.notification.create({
-    data: {
-      userId: fromWallet.userId,
-      title: 'Transaction Rejected',
-      message: `Your ${transaction.category.toLowerCase()} transaction of ${transaction.amount} ${transaction.currency} was rejected: ${reason}`,
-      type: 'TRANSACTION_REJECTED',
-    },
-  });
+  await createNotification(
+    fromWallet.userId,
+    'Transaction Rejected',
+    `Your ${transaction.category.toLowerCase()} transaction of ${transaction.amount} ${transaction.currency} was rejected: ${reason}`,
+    'TRANSACTION_REJECTED'
+  );
 
   return updatedTransaction;
 }

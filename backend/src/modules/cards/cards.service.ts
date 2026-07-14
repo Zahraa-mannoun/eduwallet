@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import type { Transaction, VirtualCard } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
+import { updateSpent } from '../budget/budget.service';
 import { getWallet } from '../wallet/wallet.service';
 import { runAllChecks } from '../wallet/fraud.service';
 import type { CreateCardInput, UseCardInput } from './cards.schema';
@@ -178,6 +179,8 @@ export async function useCard(input: UseCardInput): Promise<{ transaction: Trans
       },
     });
   });
+
+  await updateSpent(wallet.id, transaction.category, Number(transaction.amount));
 
   await runAllChecks(transaction);
 
