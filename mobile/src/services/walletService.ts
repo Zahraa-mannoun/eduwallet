@@ -1,4 +1,4 @@
-import type { Currency, Transaction, TransactionCategory, Wallet } from '../types/api';
+import type { Currency, Transaction, TransactionCategory, UserType, Wallet } from '../types/api';
 import { apiRequest } from './api';
 
 export async function getWallet(): Promise<Wallet> {
@@ -42,6 +42,6 @@ export async function getTransactions(
 export async function lookupWalletByEmail(
   email: string,
   currency?: Currency
-): Promise<{ walletId: string; fullName: string; currency: Currency }> {
+): Promise<{ walletId: string; fullName: string; currency: Currency; userType: UserType }> {
   return apiRequest('/wallet/lookup', { query: { email, currency } });
 }

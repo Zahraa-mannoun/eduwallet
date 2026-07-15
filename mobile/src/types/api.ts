@@ -24,6 +24,7 @@ export type TransactionCategory =
   | 'TRANSPORT'
   | 'SOFTWARE'
   | 'RENT'
+  | 'PERSONAL'
   | 'GENERAL';
 
 export type TransactionStatus = 'PENDING' | 'AUTO_APPROVED' | 'APPROVED' | 'REJECTED' | 'EMERGENCY';
@@ -114,6 +115,14 @@ export type AcademicDocument = {
   blockchainTxHash: string | null;
   verificationStatus: DocumentVerificationStatus;
   createdAt: string;
+};
+
+export type ParentalControl = {
+  id: string;
+  parentUserId: string;
+  studentUserId: string;
+  approvalThreshold: string;
+  categories: TransactionCategory[];
 };
 
 export type FraudAlert = {

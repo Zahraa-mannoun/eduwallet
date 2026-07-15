@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar, Card, IconButton, Text } from 'react-native-paper';
 import IconBadge from '../components/IconBadge';
 import { getNotificationMeta, useNotifications } from '../context/NotificationsContext';
+import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
 import { colors } from '../theme/colors';
 import type { RootStackScreenProps } from '../navigation/types';
 
@@ -16,6 +17,8 @@ const formatTimestamp = (isoDate: string) =>
 
 export default function NotificationsScreen({ navigation }: RootStackScreenProps<'Notifications'>) {
   const { notifications, isLoading, markAsRead, refresh } = useNotifications();
+
+  useThrottledFocusEffect(refresh);
 
   return (
     <SafeAreaView style={styles.flex} edges={['top']}>

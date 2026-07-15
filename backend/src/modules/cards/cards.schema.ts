@@ -7,6 +7,7 @@ const transactionCategoryEnum = z.enum([
   'TRANSPORT',
   'SOFTWARE',
   'RENT',
+  'PERSONAL',
   'GENERAL',
 ]);
 

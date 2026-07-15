@@ -15,6 +15,7 @@ export type TransactionCategory =
   | 'TRANSPORT'
   | 'SOFTWARE'
   | 'RENT'
+  | 'PERSONAL'
   | 'GENERAL';
 
 export type TransactionStatus = 'PENDING' | 'AUTO_APPROVED' | 'APPROVED' | 'REJECTED' | 'EMERGENCY';

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,6 +13,7 @@ import {
 } from 'react-native-paper';
 import type { NewVirtualCard, VirtualCard } from '../types/api';
 import { colors } from '../theme/colors';
+import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
 import * as cardService from '../services/cardService';
 import { ApiError } from '../services/api';
 import type { StudentTabScreenProps } from '../navigation/types';
@@ -45,9 +46,7 @@ export default function CardsScreen(_props: StudentTabScreenProps<'Cards'>) {
     }
   }, []);
 
-  useEffect(() => {
-    void loadCards();
-  }, [loadCards]);
+  useThrottledFocusEffect(loadCards);
 
   const handleGenerate = async () => {
     setIsCreating(true);

@@ -1,15 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, Card, Chip, IconButton, Text } from 'react-native-paper';
+import { ActivityIndicator, Button, Card, Chip, IconButton, Snackbar, Text } from 'react-native-paper';
+import * as DocumentPicker from 'expo-document-picker';
 import type { MaterialCommunityIcons } from '@expo/vector-icons';
+import type { AcademicDocument, KYCStatus } from '../types/api';
 import IconBadge from '../components/IconBadge';
 import { colors } from '../theme/colors';
+import * as kycService from '../services/kycService';
+import { ApiError } from '../services/api';
 import type { RootStackScreenProps } from '../navigation/types';
 
-type KYCStatus = 'NOT_STARTED' | 'PENDING' | 'VERIFIED';
-
-const STATUS_META: Record<KYCStatus, { title: string; subtitle: string; icon: keyof typeof MaterialCommunityIcons.glyphMap; color: string }> = {
+const STATUS_META: Record<
+  KYCStatus | 'NOT_STARTED',
+  { title: string; subtitle: string; icon: keyof typeof MaterialCommunityIcons.glyphMap; color: string }
+> = {
   NOT_STARTED: {
     title: 'Verification Not Started',
     subtitle: 'Upload your student ID and enrollment certificate to begin.',
@@ -28,35 +33,84 @@ const STATUS_META: Record<KYCStatus, { title: string; subtitle: string; icon: ke
     icon: 'check-decagram',
     color: colors.accent,
   },
+  REJECTED: {
+    title: 'Verification Rejected',
+    subtitle: 'Your documents were rejected. Please upload new ones.',
+    icon: 'alert-circle-outline',
+    color: colors.danger,
+  },
 };
 
 type DocumentKey = 'studentId' | 'enrollmentCertificate';
 
-const DOCUMENTS: { key: DocumentKey; title: string; icon: keyof typeof MaterialCommunityIcons.glyphMap; filename: string }[] = [
-  { key: 'studentId', title: 'Student ID', icon: 'card-account-details-outline', filename: 'student_id.jpg' },
-  { key: 'enrollmentCertificate', title: 'Enrollment Certificate', icon: 'file-certificate-outline', filename: 'enrollment_certificate.pdf' },
+const DOCUMENTS: {
+  key: DocumentKey;
+  type: 'STUDENT_ID' | 'ENROLLMENT_CERTIFICATE';
+  title: string;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+}[] = [
+  { key: 'studentId', type: 'STUDENT_ID', title: 'Student ID', icon: 'card-account-details-outline' },
+  {
+    key: 'enrollmentCertificate',
+    type: 'ENROLLMENT_CERTIFICATE',
+    title: 'Enrollment Certificate',
+    icon: 'file-certificate-outline',
+  },
 ];
 
-export default function KYCScreen({ navigation }: RootStackScreenProps<'KYC'>) {
-  const [uploaded, setUploaded] = useState<Record<DocumentKey, boolean>>({
-    studentId: false,
-    enrollmentCertificate: false,
-  });
-  const [status, setStatus] = useState<KYCStatus>('NOT_STARTED');
+export default function KYCScreen({ navigation }: Readonly<RootStackScreenProps<'KYC'>>) {
+  const [status, setStatus] = useState<KYCStatus>('PENDING');
+  const [documents, setDocuments] = useState<AcademicDocument[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [uploadingKey, setUploadingKey] = useState<DocumentKey | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
 
-  const allUploaded = uploaded.studentId && uploaded.enrollmentCertificate;
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await kycService.getKYCStatus();
+      setStatus(result.kycStatus);
+      setDocuments(result.documents);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to load your KYC status.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    if (allUploaded && status === 'NOT_STARTED') {
-      setStatus('PENDING');
-    }
-  }, [allUploaded, status]);
+    void load();
+  }, [load]);
 
-  const handleUpload = (key: DocumentKey) => {
-    setUploaded((prev) => ({ ...prev, [key]: true }));
+  const handleUpload = async (key: DocumentKey, documentType: 'STUDENT_ID' | 'ENROLLMENT_CERTIFICATE') => {
+    const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
+    if (result.canceled || result.assets.length === 0) return;
+
+    const asset = result.assets[0];
+    setUploadingKey(key);
+    try {
+      await kycService.submitDocument({
+        documentType,
+        fileName: asset.name,
+        fileSize: asset.size ?? 1,
+      });
+      setSnackbarMessage(`${asset.name} submitted for review.`);
+      await load();
+    } catch (err) {
+      setSnackbarMessage(err instanceof ApiError ? err.message : 'Could not submit that document.');
+    } finally {
+      setUploadingKey(null);
+    }
   };
 
-  const statusMeta = STATUS_META[status];
+  const hasDocument = (documentType: 'STUDENT_ID' | 'ENROLLMENT_CERTIFICATE') =>
+    documents.some((document) => document.documentType === documentType);
+
+  const statusKey: KYCStatus | 'NOT_STARTED' =
+    status === 'PENDING' && documents.length === 0 ? 'NOT_STARTED' : status;
+  const statusMeta = STATUS_META[statusKey];
 
   return (
     <SafeAreaView style={styles.flex} edges={['top']}>
@@ -68,70 +122,77 @@ export default function KYCScreen({ navigation }: RootStackScreenProps<'KYC'>) {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <Card style={styles.statusCard} mode="elevated">
-          <Card.Content style={styles.statusContent}>
-            <IconBadge icon={statusMeta.icon} color={statusMeta.color} size={64} iconSize={32} />
-            <Text variant="titleMedium" style={styles.statusTitle}>
-              {statusMeta.title}
-            </Text>
-            <Text style={styles.statusSubtitle}>{statusMeta.subtitle}</Text>
-          </Card.Content>
-        </Card>
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        <Text style={styles.sectionLabel}>Required Documents</Text>
-        {DOCUMENTS.map((document) => {
-          const isUploaded = uploaded[document.key];
-          return (
-            <Card key={document.key} style={styles.documentCard} mode="elevated">
-              <Card.Content style={styles.documentContent}>
-                <IconBadge
-                  icon={document.icon}
-                  color={isUploaded ? colors.accent : colors.primary}
-                  size={44}
-                />
-                <View style={styles.documentMiddle}>
-                  <Text style={styles.documentTitle}>{document.title}</Text>
-                  <Text style={styles.documentStatus}>
-                    {isUploaded ? document.filename : 'Not uploaded'}
-                  </Text>
-                </View>
-                {isUploaded ? (
-                  <Chip
-                    compact
-                    icon="check"
-                    style={styles.uploadedChip}
-                    textStyle={styles.uploadedChipText}
-                  >
-                    Uploaded
-                  </Chip>
-                ) : (
-                  <Button
-                    mode="contained"
-                    buttonColor={colors.primary}
-                    icon="upload-outline"
-                    compact
-                    onPress={() => handleUpload(document.key)}
-                  >
-                    Upload
-                  </Button>
-                )}
+        {isLoading && documents.length === 0 ? (
+          <ActivityIndicator color={colors.primary} style={styles.loading} />
+        ) : (
+          <>
+            <Card style={styles.statusCard} mode="elevated">
+              <Card.Content style={styles.statusContent}>
+                <IconBadge icon={statusMeta.icon} color={statusMeta.color} size={64} iconSize={32} />
+                <Text variant="titleMedium" style={styles.statusTitle}>
+                  {statusMeta.title}
+                </Text>
+                <Text style={styles.statusSubtitle}>{statusMeta.subtitle}</Text>
               </Card.Content>
             </Card>
-          );
-        })}
 
-        {status === 'PENDING' ? (
-          <Button
-            mode="outlined"
-            textColor={colors.primary}
-            icon="check-decagram-outline"
-            style={styles.simulateButton}
-            onPress={() => setStatus('VERIFIED')}
-          >
-            Simulate University Approval (Demo)
-          </Button>
-        ) : null}
+            <Text style={styles.sectionLabel}>Required Documents</Text>
+            {DOCUMENTS.map((document) => {
+              const isUploaded = hasDocument(document.type);
+              const isUploading = uploadingKey === document.key;
+              return (
+                <Card key={document.key} style={styles.documentCard} mode="elevated">
+                  <Card.Content style={styles.documentContent}>
+                    <IconBadge
+                      icon={document.icon}
+                      color={isUploaded ? colors.accent : colors.primary}
+                      size={44}
+                    />
+                    <View style={styles.documentMiddle}>
+                      <Text style={styles.documentTitle}>{document.title}</Text>
+                      <Text style={styles.documentStatus}>
+                        {isUploaded ? 'Submitted' : 'Not uploaded'}
+                      </Text>
+                    </View>
+                    {isUploaded ? (
+                      <Chip
+                        compact
+                        icon="check"
+                        style={styles.uploadedChip}
+                        textStyle={styles.uploadedChipText}
+                      >
+                        Uploaded
+                      </Chip>
+                    ) : (
+                      <Button
+                        mode="contained"
+                        buttonColor={colors.primary}
+                        icon="upload-outline"
+                        compact
+                        loading={isUploading}
+                        disabled={isUploading}
+                        onPress={() => handleUpload(document.key, document.type)}
+                      >
+                        Upload
+                      </Button>
+                    )}
+                  </Card.Content>
+                </Card>
+              );
+            })}
+          </>
+        )}
       </ScrollView>
+
+      <Snackbar
+        visible={snackbarMessage !== null}
+        onDismiss={() => setSnackbarMessage(null)}
+        duration={2500}
+      >
+        {snackbarMessage ?? ''}
+      </Snackbar>
     </SafeAreaView>
   );
 }
@@ -158,6 +219,14 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingBottom: 32,
+  },
+  loading: {
+    marginTop: 40,
+  },
+  errorText: {
+    color: colors.danger,
+    textAlign: 'center',
+    marginTop: 12,
   },
   statusCard: {
     borderRadius: 16,
@@ -212,10 +281,5 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontWeight: '700',
     fontSize: 11,
-  },
-  simulateButton: {
-    borderRadius: 10,
-    borderColor: colors.primary,
-    marginTop: 12,
   },
 });

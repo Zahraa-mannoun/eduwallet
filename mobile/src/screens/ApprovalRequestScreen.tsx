@@ -1,12 +1,22 @@
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, Chip, IconButton, Text } from 'react-native-paper';
+import {
+  ActivityIndicator,
+  Button,
+  Chip,
+  Dialog,
+  IconButton,
+  Portal,
+  Text,
+  TextInput,
+} from 'react-native-paper';
 import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
-import type { BudgetCategoryDefinition } from '../constants/budgetCategories';
-import { MOCK_TRANSACTIONS } from '../constants/mockTransactions';
+import type { BudgetCategoryDefinition, BudgetCategoryKey } from '../constants/budgetCategories';
 import { colors } from '../theme/colors';
+import * as parentalService from '../services/parentalService';
+import { ApiError } from '../services/api';
 import type { RootStackScreenProps } from '../navigation/types';
 
 type Decision = 'ACCEPTED' | 'REJECTED' | null;
@@ -23,9 +33,13 @@ const renderCategoryChipIcon = (category?: BudgetCategoryDefinition) => () => (
 export default function ApprovalRequestScreen({
   navigation,
   route,
-}: RootStackScreenProps<'ApprovalRequest'>) {
+}: Readonly<RootStackScreenProps<'ApprovalRequest'>>) {
+  const { transaction, studentName } = route.params;
   const [decision, setDecision] = useState<Decision>(null);
-  const transaction = MOCK_TRANSACTIONS.find((tx) => tx.id === route.params.transactionId);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [rejectDialogVisible, setRejectDialogVisible] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
 
   const header = (
     <View style={styles.header}>
@@ -36,24 +50,43 @@ export default function ApprovalRequestScreen({
     </View>
   );
 
-  if (!transaction) {
-    return (
-      <SafeAreaView style={styles.flex} edges={['top']}>
-        {header}
-        <View style={styles.notFound}>
-          <Text style={styles.notFoundText}>Request not found.</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  const category = BUDGET_CATEGORIES.find((c) => c.key === transaction.category);
-  const dateLabel = new Date(transaction.date).toLocaleString([], {
+  const category = BUDGET_CATEGORIES.find(
+    (c) => c.key === (transaction.category.toLowerCase() as BudgetCategoryKey)
+  );
+  const dateLabel = new Date(transaction.createdAt).toLocaleString([], {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
   });
+
+  const handleAccept = async () => {
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await parentalService.approveTransaction(transaction.id);
+      setDecision('ACCEPTED');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not approve this transaction.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!rejectReason.trim()) return;
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await parentalService.rejectTransaction(transaction.id, rejectReason.trim());
+      setRejectDialogVisible(false);
+      setDecision('REJECTED');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not reject this transaction.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   if (decision) {
     const accepted = decision === 'ACCEPTED';
@@ -71,7 +104,7 @@ export default function ApprovalRequestScreen({
             {accepted ? 'Payment Approved' : 'Payment Rejected'}
           </Text>
           <Text style={styles.resultSubtitle}>
-            ${transaction.amount.toFixed(2)} to {transaction.counterparty}
+            ${Number(transaction.amount).toFixed(2)} for {studentName}
           </Text>
           <Button
             mode="contained"
@@ -91,6 +124,8 @@ export default function ApprovalRequestScreen({
     <SafeAreaView style={styles.flex} edges={['top']}>
       {header}
       <ScrollView contentContainerStyle={styles.content}>
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
         <View style={styles.summary}>
           <IconBadge
             icon={category?.icon ?? 'wallet-outline'}
@@ -99,8 +134,8 @@ export default function ApprovalRequestScreen({
             iconSize={36}
           />
           <Text style={styles.requestTitle}>Payment requires your approval</Text>
-          <Text style={styles.amount}>${transaction.amount.toFixed(2)}</Text>
-          <Text style={styles.counterparty}>to {transaction.counterparty}</Text>
+          <Text style={styles.amount}>${Number(transaction.amount).toFixed(2)}</Text>
+          <Text style={styles.counterparty}>for {studentName}</Text>
           <Chip
             compact
             icon={renderCategoryChipIcon(category)}
@@ -134,7 +169,8 @@ export default function ApprovalRequestScreen({
             mode="outlined"
             textColor={colors.danger}
             style={[styles.actionButton, styles.rejectButton]}
-            onPress={() => setDecision('REJECTED')}
+            disabled={isSubmitting}
+            onPress={() => setRejectDialogVisible(true)}
           >
             Reject
           </Button>
@@ -142,12 +178,38 @@ export default function ApprovalRequestScreen({
             mode="contained"
             buttonColor={colors.accent}
             style={styles.actionButton}
-            onPress={() => setDecision('ACCEPTED')}
+            disabled={isSubmitting}
+            onPress={handleAccept}
           >
-            Accept
+            {isSubmitting ? <ActivityIndicator size={16} color={colors.onPrimary} /> : 'Accept'}
           </Button>
         </View>
       </ScrollView>
+
+      <Portal>
+        <Dialog visible={rejectDialogVisible} onDismiss={() => setRejectDialogVisible(false)}>
+          <Dialog.Title>Reject Payment</Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              mode="outlined"
+              label="Reason"
+              value={rejectReason}
+              onChangeText={(text: string) => setRejectReason(text)}
+              outlineColor={colors.border}
+              activeOutlineColor={colors.primary}
+              multiline
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setRejectDialogVisible(false)} disabled={isSubmitting}>
+              Cancel
+            </Button>
+            <Button onPress={handleReject} disabled={!rejectReason.trim() || isSubmitting}>
+              {isSubmitting ? <ActivityIndicator size={16} color={colors.danger} /> : 'Reject'}
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </SafeAreaView>
   );
 }
@@ -171,17 +233,14 @@ const styles = StyleSheet.create({
     color: colors.heading,
     marginLeft: 4,
   },
-  notFound: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  notFoundText: {
-    color: colors.muted,
-  },
   content: {
     paddingHorizontal: 20,
     paddingBottom: 32,
+  },
+  errorText: {
+    color: colors.danger,
+    textAlign: 'center',
+    marginTop: 12,
   },
   summary: {
     alignItems: 'center',

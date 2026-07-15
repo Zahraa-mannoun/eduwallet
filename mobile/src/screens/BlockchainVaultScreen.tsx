@@ -1,78 +1,130 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, Card, Chip, IconButton, Snackbar, Text } from 'react-native-paper';
+import {
+  ActivityIndicator,
+  Button,
+  Card,
+  Chip,
+  Dialog,
+  IconButton,
+  Portal,
+  Snackbar,
+  Text,
+  TextInput,
+} from 'react-native-paper';
+import * as DocumentPicker from 'expo-document-picker';
 import QRCode from 'react-native-qrcode-svg';
 import type { MaterialCommunityIcons } from '@expo/vector-icons';
+import type { AcademicDocument } from '../types/api';
 import IconBadge from '../components/IconBadge';
 import { colors } from '../theme/colors';
-import { generateMockHash, truncateHash } from '../utils/generateMockHash';
+import * as blockchainService from '../services/blockchainService';
+import { ApiError } from '../services/api';
 import type { RootStackScreenProps } from '../navigation/types';
 
-type DocumentType = 'Degree' | 'Transcript' | 'Certificate';
+type DocumentType = 'DEGREE' | 'TRANSCRIPT' | 'CERTIFICATE';
 
-type VaultDocument = {
-  id: string;
-  name: string;
-  type: DocumentType;
-  uploadDate: string;
-  hash: string;
-  verified: boolean;
-};
+const DOC_TYPES: { key: DocumentType; label: string }[] = [
+  { key: 'DEGREE', label: 'Degree' },
+  { key: 'TRANSCRIPT', label: 'Transcript' },
+  { key: 'CERTIFICATE', label: 'Certificate' },
+];
 
 const DOC_TYPE_ICONS: Record<DocumentType, keyof typeof MaterialCommunityIcons.glyphMap> = {
-  Degree: 'school-outline',
-  Transcript: 'file-document-outline',
-  Certificate: 'file-certificate-outline',
+  DEGREE: 'school-outline',
+  TRANSCRIPT: 'file-document-outline',
+  CERTIFICATE: 'file-certificate-outline',
 };
-
-const DOC_TYPE_ROTATION: DocumentType[] = ['Degree', 'Transcript', 'Certificate'];
-
-const INITIAL_DOCUMENTS: VaultDocument[] = [
-  {
-    id: 'DOC-1',
-    name: 'Bachelor Degree.pdf',
-    type: 'Degree',
-    uploadDate: '2026-06-01T10:00:00',
-    hash: generateMockHash(),
-    verified: true,
-  },
-  {
-    id: 'DOC-2',
-    name: 'Fall 2025 Transcript.pdf',
-    type: 'Transcript',
-    uploadDate: '2026-06-15T09:30:00',
-    hash: generateMockHash(),
-    verified: false,
-  },
-];
 
 const formatDate = (isoDate: string) =>
   new Date(isoDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 
-export default function BlockchainVaultScreen({ navigation }: RootStackScreenProps<'BlockchainVault'>) {
-  const [documents, setDocuments] = useState<VaultDocument[]>(INITIAL_DOCUMENTS);
-  const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
+function truncateHash(hash: string): string {
+  return `${hash.slice(0, 10)}...${hash.slice(-8)}`;
+}
 
-  const handleUpload = () => {
-    const type = DOC_TYPE_ROTATION[documents.length % DOC_TYPE_ROTATION.length];
-    const newDocument: VaultDocument = {
-      id: `DOC-${Date.now().toString(36).toUpperCase()}`,
-      name: `${type} - ${new Date().toLocaleDateString([], { month: 'short', day: 'numeric' })}.pdf`,
-      type,
-      uploadDate: new Date().toISOString(),
-      hash: generateMockHash(),
-      verified: false,
-    };
-    setDocuments((prev) => [newDocument, ...prev]);
-    setSnackbarMessage('Document stored on blockchain.');
+type PendingUpload = { uri: string; name: string; mimeType: string };
+
+export default function BlockchainVaultScreen({
+  navigation,
+}: Readonly<RootStackScreenProps<'BlockchainVault'>>) {
+  const [documents, setDocuments] = useState<AcademicDocument[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
+  const [verifiedIds, setVerifiedIds] = useState<Set<string>>(new Set());
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
+
+  const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null);
+  const [documentName, setDocumentName] = useState('');
+  const [documentType, setDocumentType] = useState<DocumentType>('DEGREE');
+  const [isUploading, setIsUploading] = useState(false);
+
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await blockchainService.getDocuments();
+      setDocuments(result);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to load your documents.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const handlePick = async () => {
+    const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
+    if (result.canceled || result.assets.length === 0) return;
+
+    const asset = result.assets[0];
+    setPendingUpload({ uri: asset.uri, name: asset.name, mimeType: asset.mimeType ?? 'application/octet-stream' });
+    setDocumentName(asset.name);
+    setDocumentType('DEGREE');
   };
 
-  const handleVerify = (id: string) => {
-    setDocuments((prev) =>
-      prev.map((document) => (document.id === id ? { ...document, verified: true } : document))
-    );
-    setSnackbarMessage('Authentic — hash matches the blockchain record.');
+  const handleConfirmUpload = async () => {
+    if (!pendingUpload || !documentName.trim()) return;
+    setIsUploading(true);
+    try {
+      await blockchainService.uploadDocument({
+        fileUri: pendingUpload.uri,
+        fileName: pendingUpload.name,
+        fileType: pendingUpload.mimeType,
+        documentName: documentName.trim(),
+        documentType,
+      });
+      setPendingUpload(null);
+      setSnackbarMessage('Document stored on blockchain.');
+      await load();
+    } catch (err) {
+      setSnackbarMessage(err instanceof ApiError ? err.message : 'Could not upload that document.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleVerify = async (document: AcademicDocument) => {
+    if (!document.sha256Hash) return;
+    setVerifyingId(document.id);
+    try {
+      const result = await blockchainService.verifyDocument(document.sha256Hash);
+      if (result.status === 'AUTHENTIC') {
+        setVerifiedIds((prev) => new Set(prev).add(document.id));
+        setSnackbarMessage('Authentic — hash matches the blockchain record.');
+      } else {
+        setSnackbarMessage('No matching blockchain record found.');
+      }
+    } catch (err) {
+      setSnackbarMessage(err instanceof ApiError ? err.message : 'Could not verify that document.');
+    } finally {
+      setVerifyingId(null);
+    }
   };
 
   return (
@@ -85,79 +137,133 @@ export default function BlockchainVaultScreen({ navigation }: RootStackScreenPro
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
         <Button
           mode="contained"
           buttonColor={colors.primary}
           icon="cloud-upload-outline"
           style={styles.uploadButton}
           contentStyle={styles.uploadButtonContent}
-          onPress={handleUpload}
+          onPress={handlePick}
         >
           Upload Document
         </Button>
 
-        {documents.map((document) => {
-          const qrValue = `eduwallet://verify?hash=${document.hash}`;
-          return (
-            <Card key={document.id} style={styles.documentCard} mode="elevated">
-              <Card.Content>
-                <View style={styles.docHeaderRow}>
-                  <IconBadge icon={DOC_TYPE_ICONS[document.type]} color={colors.primary} size={44} />
-                  <View style={styles.docHeaderMiddle}>
-                    <Text style={styles.docName}>{document.name}</Text>
-                    <View style={styles.docMetaRow}>
-                      <Chip compact style={styles.typeChip} textStyle={styles.typeChipText}>
-                        {document.type}
-                      </Chip>
-                      <Text style={styles.docDate}>{formatDate(document.uploadDate)}</Text>
+        {isLoading && documents.length === 0 ? (
+          <ActivityIndicator color={colors.primary} style={styles.loading} />
+        ) : (
+          documents.map((document) => {
+            const type = (document.documentType ?? 'CERTIFICATE') as DocumentType;
+            const isVerified = verifiedIds.has(document.id);
+            const qrValue = document.sha256Hash ? `eduwallet://verify?hash=${document.sha256Hash}` : '';
+
+            return (
+              <Card key={document.id} style={styles.documentCard} mode="elevated">
+                <Card.Content>
+                  <View style={styles.docHeaderRow}>
+                    <IconBadge icon={DOC_TYPE_ICONS[type] ?? 'file-outline'} color={colors.primary} size={44} />
+                    <View style={styles.docHeaderMiddle}>
+                      <Text style={styles.docName}>{document.documentName ?? document.fileName}</Text>
+                      <View style={styles.docMetaRow}>
+                        <Chip compact style={styles.typeChip} textStyle={styles.typeChipText}>
+                          {type}
+                        </Chip>
+                        <Text style={styles.docDate}>{formatDate(document.createdAt)}</Text>
+                      </View>
                     </View>
                   </View>
-                </View>
 
-                <View style={styles.hashRow}>
-                  <Text style={styles.hashLabel}>SHA-256</Text>
-                  <Text style={styles.hashValue}>{truncateHash(document.hash)}</Text>
-                </View>
+                  {document.sha256Hash ? (
+                    <View style={styles.hashRow}>
+                      <Text style={styles.hashLabel}>SHA-256</Text>
+                      <Text style={styles.hashValue}>{truncateHash(document.sha256Hash)}</Text>
+                    </View>
+                  ) : null}
 
-                <Chip
-                  compact
-                  icon="cube-outline"
-                  style={styles.storedChip}
-                  textStyle={styles.storedChipText}
-                >
-                  Stored on Blockchain
-                </Chip>
+                  <Chip
+                    compact
+                    icon="cube-outline"
+                    style={styles.storedChip}
+                    textStyle={styles.storedChipText}
+                  >
+                    Stored on Blockchain
+                  </Chip>
 
-                <View style={styles.footerRow}>
-                  <View style={styles.qrWrapper}>
-                    <QRCode value={qrValue} size={64} color={colors.heading} backgroundColor={colors.background} />
+                  <View style={styles.footerRow}>
+                    {qrValue ? (
+                      <View style={styles.qrWrapper}>
+                        <QRCode value={qrValue} size={64} color={colors.heading} backgroundColor={colors.background} />
+                      </View>
+                    ) : (
+                      <View />
+                    )}
+
+                    {isVerified ? (
+                      <Chip
+                        compact
+                        icon="check-decagram"
+                        style={styles.verifiedChip}
+                        textStyle={styles.verifiedChipText}
+                      >
+                        Authentic
+                      </Chip>
+                    ) : (
+                      <Button
+                        mode="outlined"
+                        textColor={colors.primary}
+                        icon="link-variant"
+                        loading={verifyingId === document.id}
+                        disabled={verifyingId === document.id}
+                        onPress={() => handleVerify(document)}
+                      >
+                        Verify
+                      </Button>
+                    )}
                   </View>
-
-                  {document.verified ? (
-                    <Chip
-                      compact
-                      icon="check-decagram"
-                      style={styles.verifiedChip}
-                      textStyle={styles.verifiedChipText}
-                    >
-                      Authentic
-                    </Chip>
-                  ) : (
-                    <Button
-                      mode="outlined"
-                      textColor={colors.primary}
-                      icon="link-variant"
-                      onPress={() => handleVerify(document.id)}
-                    >
-                      Verify
-                    </Button>
-                  )}
-                </View>
-              </Card.Content>
-            </Card>
-          );
-        })}
+                </Card.Content>
+              </Card>
+            );
+          })
+        )}
       </ScrollView>
+
+      <Portal>
+        <Dialog visible={pendingUpload !== null} onDismiss={() => setPendingUpload(null)}>
+          <Dialog.Title>Upload Document</Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              mode="outlined"
+              label="Document name"
+              value={documentName}
+              onChangeText={(text: string) => setDocumentName(text)}
+              outlineColor={colors.border}
+              activeOutlineColor={colors.primary}
+              style={styles.dialogInput}
+            />
+            <View style={styles.typeChipsRow}>
+              {DOC_TYPES.map((type) => (
+                <Chip
+                  key={type.key}
+                  selected={documentType === type.key}
+                  onPress={() => setDocumentType(type.key)}
+                  style={styles.typeChoiceChip}
+                >
+                  {type.label}
+                </Chip>
+              ))}
+            </View>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setPendingUpload(null)} disabled={isUploading}>
+              Cancel
+            </Button>
+            <Button onPress={handleConfirmUpload} disabled={!documentName.trim() || isUploading}>
+              {isUploading ? <ActivityIndicator size={16} color={colors.primary} /> : 'Upload'}
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
 
       <Snackbar
         visible={snackbarMessage !== null}
@@ -192,6 +298,14 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingBottom: 32,
+  },
+  loading: {
+    marginTop: 24,
+  },
+  errorText: {
+    color: colors.danger,
+    textAlign: 'center',
+    marginBottom: 12,
   },
   uploadButton: {
     borderRadius: 10,
@@ -285,5 +399,16 @@ const styles = StyleSheet.create({
   verifiedChipText: {
     color: colors.accent,
     fontWeight: '700',
+  },
+  dialogInput: {
+    marginBottom: 12,
+  },
+  typeChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  typeChoiceChip: {
+    marginRight: 4,
   },
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -15,12 +15,24 @@ import {
 import type { TransactionCategory } from '../types/api';
 import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
-import type { BudgetCategoryDefinition } from '../constants/budgetCategories';
+import type { BudgetCategoryDefinition, BudgetCategoryKey } from '../constants/budgetCategories';
 import { colors } from '../theme/colors';
+import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
 import * as budgetService from '../services/budgetService';
 import type { BudgetSummary } from '../services/budgetService';
 import { ApiError } from '../services/api';
 import type { StudentTabScreenProps } from '../navigation/types';
+
+const CATEGORY_DESCRIPTIONS: Record<BudgetCategoryKey, string> = {
+  tuition: 'University fees and academic expenses',
+  books: 'Textbooks, courses and educational materials',
+  food: 'Meals and groceries',
+  transport: 'Bus, taxi and travel expenses',
+  software: 'Dev tools, apps and subscriptions',
+  rent: 'Housing and accommodation',
+  personal: 'Everyday personal expenses',
+  general: 'Miscellaneous spending',
+};
 
 export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Budget'>>) {
   const [summary, setSummary] = useState<BudgetSummary | null>(null);
@@ -44,9 +56,7 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
     }
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useThrottledFocusEffect(load);
 
   const categoryData = (category: BudgetCategoryDefinition) =>
     summary?.categories.find((entry) => entry.category === category.key.toUpperCase()) ?? null;
@@ -94,6 +104,15 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
       >
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
+        <Card style={styles.explainerCard} mode="contained">
+          <Card.Content>
+            <Text style={styles.explainerText}>
+              Set your own monthly spending limits for each category. This is your personal
+              financial management tool — track and control your own spending goals.
+            </Text>
+          </Card.Content>
+        </Card>
+
         {summary?.alerts.map((alert) => (
           <Card
             key={alert.category}
@@ -138,6 +157,8 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
                   </Text>
                 </View>
 
+                <Text style={styles.categoryDescription}>{CATEGORY_DESCRIPTIONS[category.key]}</Text>
+
                 <ProgressBar
                   progress={progress}
                   color={data?.overspent ? colors.danger : category.color}
@@ -149,7 +170,7 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
                     {limit > 0 ? `${Math.round(progress * 100)}% used` : 'No budget set'}
                   </Text>
                   <Button mode="text" compact textColor={colors.primary} onPress={() => openDialog(category)}>
-                    {limit > 0 ? 'Edit' : 'Set Budget'}
+                    Edit
                   </Button>
                 </View>
               </Card.Content>
@@ -217,6 +238,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 12,
   },
+  explainerCard: {
+    borderRadius: 14,
+    marginBottom: 16,
+    backgroundColor: colors.surface,
+  },
+  explainerText: {
+    fontSize: 13,
+    color: colors.label,
+    lineHeight: 19,
+  },
   alertCard: {
     borderRadius: 12,
     marginBottom: 12,
@@ -244,6 +275,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: colors.muted,
+  },
+  categoryDescription: {
+    fontSize: 12,
+    color: colors.muted,
+    marginBottom: 10,
   },
   progressBar: {
     height: 8,

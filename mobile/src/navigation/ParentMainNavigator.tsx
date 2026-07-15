@@ -4,6 +4,7 @@ import type { BottomTabNavigationOptions } from '@react-navigation/bottom-tabs';
 import type { RouteProp } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import ParentDashboardScreen from '../screens/ParentDashboardScreen';
+import ParentSendMoneyScreen from '../screens/ParentSendMoneyScreen';
 import ApprovalsListScreen from '../screens/ApprovalsListScreen';
 import StudentsListScreen from '../screens/StudentsListScreen';
 import ProfileScreen from '../screens/ProfileScreen';
@@ -14,6 +15,7 @@ const Tab = createBottomTabNavigator<ParentTabParamList>();
 
 const TAB_ICONS: Record<keyof ParentTabParamList, keyof typeof MaterialCommunityIcons.glyphMap> = {
   Home: 'view-dashboard-outline',
+  Send: 'send-outline',
   Approvals: 'clipboard-check-outline',
   Students: 'account-group-outline',
   Profile: 'account-circle-outline',
@@ -38,6 +40,7 @@ export default function ParentMainNavigator() {
       })}
     >
       <Tab.Screen name="Home" component={ParentDashboardScreen} />
+      <Tab.Screen name="Send" component={ParentSendMoneyScreen} />
       <Tab.Screen name="Approvals" component={ApprovalsListScreen} />
       <Tab.Screen name="Students" component={StudentsListScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />

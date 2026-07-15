@@ -1,6 +1,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { CompositeScreenProps, NavigatorScreenParams } from '@react-navigation/native';
+import type { Transaction } from '../types/api';
 
 export type StudentTabParamList = {
   Home: undefined;
@@ -11,6 +12,7 @@ export type StudentTabParamList = {
 
 export type ParentTabParamList = {
   Home: undefined;
+  Send: undefined;
   Approvals: undefined;
   Students: undefined;
   Profile: undefined;
@@ -27,7 +29,7 @@ export type RootStackParamList = {
   QRPay: undefined;
   TransactionHistory: undefined;
   TransactionDetail: { transactionId: string };
-  ApprovalRequest: { transactionId: string };
+  ApprovalRequest: { transaction: Transaction; studentName: string };
   KYC: undefined;
   BlockchainVault: undefined;
   AIAssistant: undefined;

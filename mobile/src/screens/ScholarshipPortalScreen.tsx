@@ -1,54 +1,63 @@
-import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, TextInput as NativeTextInput, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, TextInput as NativeTextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Avatar, Button, Card, Checkbox, Chip, IconButton, Snackbar, Text } from 'react-native-paper';
+import { ActivityIndicator, Avatar, Button, Card, Checkbox, Chip, IconButton, Snackbar, Text } from 'react-native-paper';
+import type { Transaction, TransactionCategory, User } from '../types/api';
 import CategorySelectorGrid from '../components/CategorySelectorGrid';
 import IconBadge from '../components/IconBadge';
-import type { BudgetCategoryDefinition } from '../constants/budgetCategories';
+import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
+import type { BudgetCategoryDefinition, BudgetCategoryKey } from '../constants/budgetCategories';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme/colors';
 import { getInitials } from '../utils/getInitials';
+import * as scholarshipService from '../services/scholarshipService';
+import * as walletService from '../services/walletService';
+import { ApiError } from '../services/api';
 import type { RootStackScreenProps } from '../navigation/types';
 
-type RegisteredStudent = {
-  id: string;
-  name: string;
-  university: string;
-};
-
-const REGISTERED_STUDENTS: RegisteredStudent[] = [
-  { id: 'STU-1', name: 'Zahraa Student', university: 'American University of Beirut' },
-  { id: 'STU-2', name: 'Karim Youssef', university: 'Lebanese American University' },
-  { id: 'STU-3', name: 'Nour Chamoun', university: 'Université Saint-Joseph' },
-  { id: 'STU-4', name: 'Ali Mansour', university: 'Lebanese University' },
-];
-
-type Disbursement = {
-  id: string;
-  studentCount: number;
-  amountPerStudent: number;
-  totalAmount: number;
-  category: BudgetCategoryDefinition;
-  date: string;
-};
-
-const INITIAL_DISBURSEMENTS: Disbursement[] = [];
+const categoryLookup = new Map(BUDGET_CATEGORIES.map((category) => [category.key, category]));
 
 const formatDate = (isoDate: string) =>
   new Date(isoDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 
 export default function ScholarshipPortalScreen({
   navigation,
-}: RootStackScreenProps<'InstitutionMain'>) {
+}: Readonly<RootStackScreenProps<'InstitutionMain'>>) {
   const { logout } = useAuth();
+  const [students, setStudents] = useState<User[]>([]);
+  const [disbursements, setDisbursements] = useState<Transaction[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<BudgetCategoryDefinition | null>(null);
-  const [disbursements, setDisbursements] = useState<Disbursement[]>(INITIAL_DISBURSEMENTS);
+  const [isSending, setIsSending] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
 
   const parsedAmount = Number(amount);
-  const canSend = selectedIds.size > 0 && parsedAmount > 0 && Boolean(category);
+  const canSend = selectedIds.size > 0 && parsedAmount > 0 && Boolean(category) && !isSending;
+
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const [studentsResult, transactionsResult] = await Promise.all([
+        scholarshipService.getStudents(),
+        walletService.getTransactions({ limit: 100 }),
+      ]);
+      setStudents(studentsResult);
+      setDisbursements(transactionsResult.transactions.filter((tx) => tx.fromWalletId !== null));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to load the scholarship portal.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const handleLogout = () => {
     logout();
@@ -67,37 +76,43 @@ export default function ScholarshipPortalScreen({
     });
   };
 
-  const handleSendDisbursement = () => {
-    if (!category) return;
-    const newDisbursement: Disbursement = {
-      id: `DSB-${Date.now().toString(36).toUpperCase()}`,
-      studentCount: selectedIds.size,
-      amountPerStudent: parsedAmount,
-      totalAmount: parsedAmount * selectedIds.size,
-      category,
-      date: new Date().toISOString(),
-    };
-    setDisbursements((prev) => [newDisbursement, ...prev]);
-    setSnackbarMessage(`Disbursement sent to ${selectedIds.size} student${selectedIds.size === 1 ? '' : 's'}.`);
-    setSelectedIds(new Set());
-    setAmount('');
-    setCategory(null);
+  const handleSendDisbursement = async () => {
+    if (!category || !canSend) return;
+    setIsSending(true);
+    try {
+      await scholarshipService.bulkDisburse({
+        studentIds: [...selectedIds],
+        amountPerStudent: parsedAmount,
+        currency: 'USD',
+        category: category.key.toUpperCase() as TransactionCategory,
+      });
+      setSnackbarMessage(`Disbursement sent to ${selectedIds.size} student${selectedIds.size === 1 ? '' : 's'}.`);
+      setSelectedIds(new Set());
+      setAmount('');
+      setCategory(null);
+      await load();
+    } catch (err) {
+      setSnackbarMessage(err instanceof ApiError ? err.message : 'Could not send that disbursement.');
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const reports = useMemo(() => {
-    const totalDisbursed = disbursements.reduce((sum, d) => sum + d.totalAmount, 0);
-    const studentsFunded = disbursements.reduce((sum, d) => sum + d.studentCount, 0);
+    const totalDisbursed = disbursements.reduce((sum, tx) => sum + Number(tx.amount), 0);
+    const studentsFunded = new Set(disbursements.map((tx) => tx.toWalletId)).size;
     const totalsByCategory = new Map<string, number>();
-    disbursements.forEach((d) => {
-      totalsByCategory.set(d.category.key, (totalsByCategory.get(d.category.key) ?? 0) + d.totalAmount);
+    disbursements.forEach((tx) => {
+      const key = tx.category.toLowerCase();
+      totalsByCategory.set(key, (totalsByCategory.get(key) ?? 0) + Number(tx.amount));
     });
-    const topCategory: BudgetCategoryDefinition | null = disbursements.reduce<{
+    const topCategory = [...totalsByCategory.entries()].reduce<{
       category: BudgetCategoryDefinition | null;
       amount: number;
     }>(
-      (best, d) => {
-        const total = totalsByCategory.get(d.category.key) ?? 0;
-        return total > best.amount ? { category: d.category, amount: total } : best;
+      (best, [key, total]) => {
+        if (total <= best.amount) return best;
+        return { category: categoryLookup.get(key as BudgetCategoryKey) ?? null, amount: total };
       },
       { category: null, amount: 0 }
     ).category;
@@ -114,38 +129,49 @@ export default function ScholarshipPortalScreen({
         <IconButton icon="logout" iconColor={colors.danger} onPress={handleLogout} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={load} />}
+      >
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
         <Text style={styles.sectionLabel}>
           Registered Students {selectedIds.size > 0 ? `(${selectedIds.size} selected)` : ''}
         </Text>
         <Card style={styles.card} mode="elevated">
           <Card.Content>
-            {REGISTERED_STUDENTS.map((student) => {
-              const checked = selectedIds.has(student.id);
-              return (
-                <TouchableOpacity
-                  key={student.id}
-                  style={styles.studentRow}
-                  onPress={() => toggleStudent(student.id)}
-                >
-                  <Checkbox
-                    status={checked ? 'checked' : 'unchecked'}
+            {isLoading && students.length === 0 ? (
+              <ActivityIndicator color={colors.primary} />
+            ) : students.length > 0 ? (
+              students.map((student) => {
+                const checked = selectedIds.has(student.id);
+                return (
+                  <TouchableOpacity
+                    key={student.id}
+                    style={styles.studentRow}
                     onPress={() => toggleStudent(student.id)}
-                    color={colors.primary}
-                  />
-                  <Avatar.Text
-                    size={36}
-                    label={getInitials(student.name)}
-                    style={styles.studentAvatar}
-                    color={colors.onPrimary}
-                  />
-                  <View style={styles.studentMiddle}>
-                    <Text style={styles.studentName}>{student.name}</Text>
-                    <Text style={styles.studentUniversity}>{student.university}</Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
+                  >
+                    <Checkbox
+                      status={checked ? 'checked' : 'unchecked'}
+                      onPress={() => toggleStudent(student.id)}
+                      color={colors.primary}
+                    />
+                    <Avatar.Text
+                      size={36}
+                      label={getInitials(student.fullName)}
+                      style={styles.studentAvatar}
+                      color={colors.onPrimary}
+                    />
+                    <View style={styles.studentMiddle}>
+                      <Text style={styles.studentName}>{student.fullName}</Text>
+                      <Text style={styles.studentUniversity}>{student.email}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })
+            ) : (
+              <Text style={styles.emptySubtitle}>No students registered yet.</Text>
+            )}
           </Card.Content>
         </Card>
 
@@ -173,6 +199,7 @@ export default function ScholarshipPortalScreen({
               buttonColor={colors.primary}
               icon="send-outline"
               disabled={!canSend}
+              loading={isSending}
               style={styles.sendButton}
               contentStyle={styles.sendButtonContent}
               onPress={handleSendDisbursement}
@@ -184,19 +211,21 @@ export default function ScholarshipPortalScreen({
 
         <Text style={styles.sectionLabel}>Disbursement History</Text>
         {disbursements.length > 0 ? (
-          disbursements.map((disbursement) => (
-            <View key={disbursement.id} style={styles.historyRow}>
-              <IconBadge icon={disbursement.category.icon} color={disbursement.category.color} size={40} />
-              <View style={styles.historyMiddle}>
-                <Text style={styles.historyTitle}>
-                  {disbursement.studentCount} student{disbursement.studentCount === 1 ? '' : 's'} • $
-                  {disbursement.amountPerStudent.toFixed(2)} each
-                </Text>
-                <Text style={styles.historySubtitle}>{formatDate(disbursement.date)}</Text>
+          disbursements.map((tx) => {
+            const cat = categoryLookup.get(tx.category.toLowerCase() as BudgetCategoryKey);
+            return (
+              <View key={tx.id} style={styles.historyRow}>
+                <IconBadge icon={cat?.icon ?? 'wallet-outline'} color={cat?.color ?? colors.primary} size={40} />
+                <View style={styles.historyMiddle}>
+                  <Text style={styles.historyTitle}>
+                    {cat?.label ?? 'Payment'} • ${Number(tx.amount).toFixed(2)}
+                  </Text>
+                  <Text style={styles.historySubtitle}>{formatDate(tx.createdAt)}</Text>
+                </View>
+                <Text style={styles.historyAmount}>${Number(tx.amount).toFixed(2)}</Text>
               </View>
-              <Text style={styles.historyAmount}>${disbursement.totalAmount.toFixed(2)}</Text>
-            </View>
-          ))
+            );
+          })
         ) : (
           <Card style={styles.card} mode="elevated">
             <Card.Content style={styles.emptyState}>
@@ -271,6 +300,11 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingBottom: 32,
+  },
+  errorText: {
+    color: colors.danger,
+    textAlign: 'center',
+    marginBottom: 12,
   },
   sectionLabel: {
     fontSize: 13,

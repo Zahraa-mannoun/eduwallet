@@ -1,12 +1,17 @@
-import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Avatar, Card, Chip, IconButton, SegmentedButtons, Text } from 'react-native-paper';
+import { ActivityIndicator, Avatar, Card, Chip, IconButton, SegmentedButtons, Text } from 'react-native-paper';
+import type { Transaction } from '../types/api';
 import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
-import { MOCK_TRANSACTIONS, TRANSACTION_STATUS_META } from '../constants/mockTransactions';
-import type { MockTransaction } from '../constants/mockTransactions';
+import type { BudgetCategoryKey } from '../constants/budgetCategories';
+import { TRANSACTION_STATUS_META } from '../constants/mockTransactions';
+import { useWallet } from '../context/WalletContext';
+import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
 import { colors } from '../theme/colors';
+import * as walletService from '../services/walletService';
+import { ApiError } from '../services/api';
 import type { RootStackScreenProps } from '../navigation/types';
 
 type FilterValue = 'ALL' | 'SENT' | 'RECEIVED' | 'PENDING';
@@ -28,22 +33,53 @@ const formatDate = (isoDate: string) =>
     minute: '2-digit',
   });
 
-export default function TransactionHistoryScreen({ navigation }: RootStackScreenProps<'TransactionHistory'>) {
+function transactionTitle(transaction: Transaction): string {
+  if (transaction.note) return transaction.note;
+  if (!transaction.fromWalletId) return 'Wallet Top-up';
+  const category = categoryLookup.get(transaction.category.toLowerCase() as BudgetCategoryKey);
+  return category?.label ?? 'Transfer';
+}
+
+export default function TransactionHistoryScreen({
+  navigation,
+}: Readonly<RootStackScreenProps<'TransactionHistory'>>) {
+  const { wallet } = useWallet();
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterValue>('ALL');
 
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await walletService.getTransactions({ limit: 100 });
+      setTransactions(result.transactions);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to load your transactions.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useThrottledFocusEffect(load);
+
   const filteredTransactions = useMemo(() => {
-    const sorted = [...MOCK_TRANSACTIONS].sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    const sorted = [...transactions].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
     if (filter === 'ALL') return sorted;
     if (filter === 'PENDING') return sorted.filter((tx) => tx.status === 'PENDING');
-    return sorted.filter((tx) => tx.type === filter);
-  }, [filter]);
+    if (filter === 'RECEIVED') {
+      return sorted.filter((tx) => wallet !== null && tx.toWalletId === wallet.id);
+    }
+    return sorted.filter((tx) => !(wallet !== null && tx.toWalletId === wallet.id));
+  }, [transactions, filter, wallet]);
 
-  const renderRow = (transaction: MockTransaction) => {
-    const category = categoryLookup.get(transaction.category);
+  const renderRow = (transaction: Transaction) => {
+    const category = categoryLookup.get(transaction.category.toLowerCase() as BudgetCategoryKey);
     const statusMeta = TRANSACTION_STATUS_META[transaction.status];
-    const isReceived = transaction.type === 'RECEIVED';
+    const isReceived = wallet !== null && transaction.toWalletId === wallet.id;
 
     return (
       <TouchableOpacity
@@ -59,14 +95,14 @@ export default function TransactionHistoryScreen({ navigation }: RootStackScreen
           size={44}
         />
         <View style={styles.rowMiddle}>
-          <Text style={styles.rowTitle}>{transaction.counterparty}</Text>
+          <Text style={styles.rowTitle}>{transactionTitle(transaction)}</Text>
           <Text style={styles.rowSubtitle}>
-            {category?.label ?? 'Other'} • {formatDate(transaction.date)}
+            {category?.label ?? 'Other'} • {formatDate(transaction.createdAt)}
           </Text>
         </View>
         <View style={styles.rowRight}>
           <Text style={[styles.rowAmount, { color: isReceived ? colors.accent : colors.heading }]}>
-            {isReceived ? '+' : '-'}${transaction.amount.toFixed(2)}
+            {isReceived ? '+' : '-'}${Number(transaction.amount).toFixed(2)}
           </Text>
           <Chip
             compact
@@ -77,6 +113,31 @@ export default function TransactionHistoryScreen({ navigation }: RootStackScreen
           </Chip>
         </View>
       </TouchableOpacity>
+    );
+  };
+
+  const renderList = () => {
+    if (isLoading && transactions.length === 0) {
+      return <ActivityIndicator color={colors.primary} style={styles.loading} />;
+    }
+    if (filteredTransactions.length > 0) {
+      return filteredTransactions.map(renderRow);
+    }
+    return (
+      <Card style={styles.emptyCard} mode="elevated">
+        <Card.Content style={styles.emptyState}>
+          <Avatar.Icon
+            icon="receipt-text-outline"
+            size={56}
+            style={styles.emptyIcon}
+            color={colors.primary}
+          />
+          <Text style={styles.emptyTitle}>No transactions found</Text>
+          <Text style={styles.emptySubtitle}>
+            Nothing matches this filter yet. Try a different one.
+          </Text>
+        </Card.Content>
+      </Card>
     );
   };
 
@@ -97,25 +158,13 @@ export default function TransactionHistoryScreen({ navigation }: RootStackScreen
         />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        {filteredTransactions.length > 0 ? (
-          filteredTransactions.map(renderRow)
-        ) : (
-          <Card style={styles.emptyCard} mode="elevated">
-            <Card.Content style={styles.emptyState}>
-              <Avatar.Icon
-                icon="receipt-text-outline"
-                size={56}
-                style={styles.emptyIcon}
-                color={colors.primary}
-              />
-              <Text style={styles.emptyTitle}>No transactions found</Text>
-              <Text style={styles.emptySubtitle}>
-                Nothing matches this filter yet. Try a different one.
-              </Text>
-            </Card.Content>
-          </Card>
-        )}
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={load} />}
+      >
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+        {renderList()}
       </ScrollView>
     </SafeAreaView>
   );
@@ -148,6 +197,14 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingBottom: 32,
+  },
+  loading: {
+    marginTop: 24,
+  },
+  errorText: {
+    color: colors.danger,
+    textAlign: 'center',
+    marginBottom: 12,
   },
   row: {
     flexDirection: 'row',

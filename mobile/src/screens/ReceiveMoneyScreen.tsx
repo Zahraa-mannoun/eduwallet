@@ -1,35 +1,41 @@
 import { useMemo, useState } from 'react';
-import { ScrollView, Share, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Share, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import QRCode from 'react-native-qrcode-svg';
 import { Button, IconButton, Snackbar, Text, TextInput } from 'react-native-paper';
+import { useWallet } from '../context/WalletContext';
 import { colors } from '../theme/colors';
 import type { RootStackScreenProps } from '../navigation/types';
 
-const MOCK_WALLET_ID = 'EDW-7F3K-9QXP-4471';
-
 export default function ReceiveMoneyScreen({ navigation }: RootStackScreenProps<'ReceiveMoney'>) {
+  const { wallet } = useWallet();
+  const walletId = wallet?.id ?? '';
   const [requestAmount, setRequestAmount] = useState('');
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
 
   const qrValue = useMemo(() => {
+    if (!walletId) return '';
     const amount = Number(requestAmount);
     return amount > 0
-      ? `eduwallet://receive?wallet=${MOCK_WALLET_ID}&amount=${amount.toFixed(2)}`
-      : `eduwallet://receive?wallet=${MOCK_WALLET_ID}`;
-  }, [requestAmount]);
+      ? `eduwallet://receive?wallet=${walletId}&amount=${amount.toFixed(2)}`
+      : `eduwallet://receive?wallet=${walletId}`;
+  }, [requestAmount, walletId]);
 
   const handleCopy = async () => {
-    await Clipboard.setStringAsync(MOCK_WALLET_ID);
+    if (!walletId) return;
+    await Clipboard.setStringAsync(walletId);
     setSnackbarMessage('Wallet ID copied to clipboard.');
   };
 
-  const handleShare = async () => {
+  const handleShareWalletId = async () => {
+    if (!walletId) return;
     try {
+      await Clipboard.setStringAsync(walletId);
       await Share.share({
-        message: `Send me money on EduWallet — my wallet ID is ${MOCK_WALLET_ID}`,
+        message: `Send me money on EduWallet — my wallet ID is ${walletId}`,
       });
+      setSnackbarMessage('Wallet ID copied and ready to share.');
     } catch {
       setSnackbarMessage('Sharing is not supported on this device.');
     }
@@ -46,10 +52,17 @@ export default function ReceiveMoneyScreen({ navigation }: RootStackScreenProps<
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.qrCard}>
-          <QRCode value={qrValue} size={200} color={colors.heading} backgroundColor={colors.background} />
+          {walletId ? (
+            <QRCode value={qrValue} size={200} color={colors.heading} backgroundColor={colors.background} />
+          ) : (
+            <ActivityIndicator color={colors.primary} style={styles.qrLoading} />
+          )}
         </View>
 
-        <Text style={styles.walletId}>{MOCK_WALLET_ID}</Text>
+        <Text style={styles.walletIdLabel}>Your Wallet ID</Text>
+        <Text selectable style={styles.walletId}>
+          {walletId || 'Loading…'}
+        </Text>
 
         <View style={styles.actionsRow}>
           <Button
@@ -57,18 +70,20 @@ export default function ReceiveMoneyScreen({ navigation }: RootStackScreenProps<
             icon="content-copy"
             textColor={colors.primary}
             style={styles.actionButton}
+            disabled={!walletId}
             onPress={handleCopy}
           >
-            Copy Wallet ID
+            Copy
           </Button>
           <Button
             mode="contained"
             buttonColor={colors.primary}
             icon="share-variant-outline"
             style={styles.actionButton}
-            onPress={handleShare}
+            disabled={!walletId}
+            onPress={handleShareWalletId}
           >
-            Share
+            Share Wallet ID
           </Button>
         </View>
 
@@ -86,8 +101,9 @@ export default function ReceiveMoneyScreen({ navigation }: RootStackScreenProps<
         />
 
         <Text style={styles.instructions}>
-          Share your QR code or wallet ID with another EduWallet user to receive money instantly.
-          If you entered an amount, it will be pre-filled for the sender when they scan your code.
+          Share your QR code or wallet ID with another EduWallet user to receive money instantly —
+          this is also the easiest way for a parent to find your wallet. If you entered an amount,
+          it will be pre-filled for the sender when they scan your code.
         </Text>
       </ScrollView>
 
@@ -134,12 +150,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 200,
+    minWidth: 200,
+  },
+  qrLoading: {
+    margin: 20,
+  },
+  walletIdLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.muted,
+    marginBottom: 4,
   },
   walletId: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.heading,
-    letterSpacing: 1,
+    letterSpacing: 0.5,
+    textAlign: 'center',
     marginBottom: 20,
   },
   actionsRow: {

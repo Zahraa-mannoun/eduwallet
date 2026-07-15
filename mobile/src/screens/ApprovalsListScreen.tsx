@@ -1,16 +1,59 @@
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Avatar, Card, Chip, Text } from 'react-native-paper';
+import { ActivityIndicator, Avatar, Card, Chip, Text } from 'react-native-paper';
+import type { Transaction } from '../types/api';
 import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
-import { MOCK_TRANSACTIONS, TRANSACTION_STATUS_META } from '../constants/mockTransactions';
+import type { BudgetCategoryKey } from '../constants/budgetCategories';
+import { TRANSACTION_STATUS_META } from '../constants/mockTransactions';
 import { colors } from '../theme/colors';
+import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
+import * as parentalService from '../services/parentalService';
+import type { LinkedStudent } from '../services/parentalService';
+import { ApiError } from '../services/api';
 import type { ParentTabScreenProps } from '../navigation/types';
 
 const categoryLookup = new Map(BUDGET_CATEGORIES.map((category) => [category.key, category]));
 
+function transactionTitle(transaction: Transaction): string {
+  if (transaction.note) return transaction.note;
+  const category = categoryLookup.get(transaction.category.toLowerCase() as BudgetCategoryKey);
+  return category?.label ?? 'Payment';
+}
+
 export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps<'Approvals'>) {
-  const pendingApprovals = MOCK_TRANSACTIONS.filter((tx) => tx.status === 'PENDING');
+  const [approvals, setApprovals] = useState<Transaction[]>([]);
+  const [students, setStudents] = useState<LinkedStudent[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const [approvalsResult, studentsResult] = await Promise.all([
+        parentalService.getPendingApprovals(),
+        parentalService.getLinkedStudents(),
+      ]);
+      setApprovals(approvalsResult);
+      setStudents(studentsResult);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to load approvals.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useThrottledFocusEffect(load);
+
+  const walletToStudentName = useMemo(() => {
+    const map = new Map<string, string>();
+    students.forEach(({ student, wallets }) => {
+      wallets.forEach((wallet) => map.set(wallet.id, student.fullName));
+    });
+    return map;
+  }, [students]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -20,17 +63,36 @@ export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps
         </Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        {pendingApprovals.length > 0 ? (
-          pendingApprovals.map((transaction) => {
-            const category = categoryLookup.get(transaction.category);
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={load} />}
+      >
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+        <View style={styles.infoBanner}>
+          <Text style={styles.infoBannerText}>
+            These are general transfers your student made above your approval threshold.
+            Education-locked spending is handled automatically.
+          </Text>
+        </View>
+
+        {isLoading && approvals.length === 0 ? (
+          <ActivityIndicator color={colors.primary} style={styles.loading} />
+        ) : approvals.length > 0 ? (
+          approvals.map((transaction) => {
+            const category = categoryLookup.get(
+              transaction.category.toLowerCase() as BudgetCategoryKey
+            );
             const statusMeta = TRANSACTION_STATUS_META[transaction.status];
+            const studentName = transaction.fromWalletId
+              ? (walletToStudentName.get(transaction.fromWalletId) ?? 'Student')
+              : 'Student';
             return (
               <TouchableOpacity
                 key={transaction.id}
                 style={styles.approvalRow}
                 onPress={() =>
-                  navigation.navigate('ApprovalRequest', { transactionId: transaction.id })
+                  navigation.navigate('ApprovalRequest', { transaction, studentName })
                 }
               >
                 <IconBadge
@@ -39,9 +101,9 @@ export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps
                   size={44}
                 />
                 <View style={styles.approvalMiddle}>
-                  <Text style={styles.approvalTitle}>{transaction.counterparty}</Text>
+                  <Text style={styles.approvalTitle}>{transactionTitle(transaction)}</Text>
                   <Text style={styles.approvalSubtitle}>
-                    {category?.label ?? 'Other'} • ${transaction.amount.toFixed(2)}
+                    {studentName} • ${Number(transaction.amount).toFixed(2)}
                   </Text>
                 </View>
                 <Chip
@@ -90,6 +152,25 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingBottom: 32,
+  },
+  loading: {
+    marginTop: 24,
+  },
+  errorText: {
+    color: colors.danger,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  infoBanner: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  infoBannerText: {
+    fontSize: 12,
+    color: colors.label,
+    lineHeight: 18,
   },
   approvalRow: {
     flexDirection: 'row',

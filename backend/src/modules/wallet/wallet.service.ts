@@ -1,4 +1,4 @@
-import type { Currency, Transaction, Wallet } from '@prisma/client';
+import type { Currency, Transaction, UserType, Wallet } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
 import { updateSpent } from '../budget/budget.service';
@@ -96,11 +96,26 @@ export async function transfer(
   const parentalControl = await prisma.parentalControl.findFirst({
     where: { studentUserId: fromUserId },
   });
-  const requiresApproval =
-    parentalControl !== null &&
-    input.amount > Number(parentalControl.approvalThreshold) &&
-    (parentalControl.categories.length === 0 ||
-      parentalControl.categories.includes(input.category));
+
+  // Category semantics: GENERAL is unrestricted spending, gated only by the approval
+  // threshold. Any other category is an education lock — the parent must have explicitly
+  // authorized it (parentalControl.categories) or the transfer is rejected outright, but an
+  // authorized locked category never needs approval regardless of amount.
+  let requiresApproval = false;
+  if (parentalControl) {
+    const isGeneral = input.category === 'GENERAL';
+    const isAuthorizedLockedCategory = !isGeneral && parentalControl.categories.includes(input.category);
+
+    if (!isGeneral && !isAuthorizedLockedCategory) {
+      throw new AppError(
+        403,
+        'CATEGORY_NOT_AUTHORIZED',
+        `Your parent has not authorized spending in the ${input.category.toLowerCase()} category`
+      );
+    }
+
+    requiresApproval = isGeneral && input.amount > Number(parentalControl.approvalThreshold);
+  }
 
   let transaction: Transaction;
 
@@ -224,7 +239,7 @@ export async function getTransactionById(
 export async function lookupWalletByEmail(
   requestingUserId: string,
   input: LookupWalletInput
-): Promise<{ walletId: string; fullName: string; currency: Currency }> {
+): Promise<{ walletId: string; fullName: string; currency: Currency; userType: UserType }> {
   const user = await prisma.user.findUnique({ where: { email: input.email } });
   if (!user) {
     throw new AppError(404, 'USER_NOT_FOUND', 'No account found with this email');
@@ -241,5 +256,5 @@ export async function lookupWalletByEmail(
     throw new AppError(404, 'WALLET_NOT_FOUND', 'This user has no wallet in that currency');
   }
 
-  return { walletId: wallet.id, fullName: user.fullName, currency: wallet.currency };
+  return { walletId: wallet.id, fullName: user.fullName, currency: wallet.currency, userType: user.userType };
 }

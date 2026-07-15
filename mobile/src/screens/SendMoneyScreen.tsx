@@ -17,12 +17,9 @@ import {
   IconButton,
   Text,
   TextInput,
-  TouchableRipple,
 } from 'react-native-paper';
-import type { TransactionCategory } from '../types/api';
+import type { TransactionCategory, UserType } from '../types/api';
 import IconBadge from '../components/IconBadge';
-import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
-import type { BudgetCategoryDefinition } from '../constants/budgetCategories';
 import { useWallet } from '../context/WalletContext';
 import * as walletService from '../services/walletService';
 import { ApiError } from '../services/api';
@@ -34,21 +31,17 @@ type ResolvedRecipient = {
   walletId: string;
   fullName: string;
   email: string;
+  userType: UserType;
 };
 
 type SentTransaction = {
   id: string;
   recipient: ResolvedRecipient;
   amount: number;
-  category: BudgetCategoryDefinition;
   note: string;
   requiresApproval: boolean;
   timestamp: Date;
 };
-
-const renderCategoryChipIcon = (category: BudgetCategoryDefinition) => () => (
-  <IconBadge icon={category.icon} color={category.color} size={20} iconSize={12} />
-);
 
 export default function SendMoneyScreen({ navigation }: RootStackScreenProps<'SendMoney'>) {
   const { wallet, refresh } = useWallet();
@@ -57,14 +50,13 @@ export default function SendMoneyScreen({ navigation }: RootStackScreenProps<'Se
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState<BudgetCategoryDefinition | null>(null);
   const [note, setNote] = useState('');
   const [sendError, setSendError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [transaction, setTransaction] = useState<SentTransaction | null>(null);
 
   const parsedAmount = Number(amount);
-  const canSend = Boolean(recipient) && parsedAmount > 0 && Boolean(category) && !isSending;
+  const canSend = Boolean(recipient) && parsedAmount > 0 && !isSending;
 
   const handleFindRecipient = async () => {
     const email = recipientEmail.trim().toLowerCase();
@@ -73,7 +65,12 @@ export default function SendMoneyScreen({ navigation }: RootStackScreenProps<'Se
     setLookupError(null);
     try {
       const result = await walletService.lookupWalletByEmail(email, wallet.currency);
-      setRecipient({ walletId: result.walletId, fullName: result.fullName, email });
+      setRecipient({
+        walletId: result.walletId,
+        fullName: result.fullName,
+        email,
+        userType: result.userType,
+      });
     } catch (err) {
       setLookupError(err instanceof ApiError ? err.message : 'Could not find that recipient.');
       setRecipient(null);
@@ -83,7 +80,7 @@ export default function SendMoneyScreen({ navigation }: RootStackScreenProps<'Se
   };
 
   const handleSend = async () => {
-    if (!recipient || !category || !wallet) return;
+    if (!recipient || !wallet) return;
     setIsSending(true);
     setSendError(null);
     try {
@@ -91,14 +88,13 @@ export default function SendMoneyScreen({ navigation }: RootStackScreenProps<'Se
         toWalletId: recipient.walletId,
         amount: parsedAmount,
         currency: wallet.currency,
-        category: category.key.toUpperCase() as TransactionCategory,
+        category: 'GENERAL' as TransactionCategory,
         note: note.trim() || undefined,
       });
       setTransaction({
         id: result.transaction.id,
         recipient,
         amount: parsedAmount,
-        category,
         note: note.trim(),
         requiresApproval: result.requiresApproval,
         timestamp: new Date(),
@@ -116,7 +112,6 @@ export default function SendMoneyScreen({ navigation }: RootStackScreenProps<'Se
     setRecipient(null);
     setRecipientEmail('');
     setAmount('');
-    setCategory(null);
     setNote('');
     setSendError(null);
     setLookupError(null);
@@ -159,17 +154,6 @@ export default function SendMoneyScreen({ navigation }: RootStackScreenProps<'Se
             <View style={styles.receiptRow}>
               <Text style={styles.receiptLabel}>Transaction ID</Text>
               <Text style={styles.receiptValue}>{transaction.id.slice(0, 8).toUpperCase()}</Text>
-            </View>
-            <View style={styles.receiptRow}>
-              <Text style={styles.receiptLabel}>Category</Text>
-              <Chip
-                icon={renderCategoryChipIcon(transaction.category)}
-                style={[styles.receiptCategoryChip, { backgroundColor: `${transaction.category.color}14` }]}
-                textStyle={{ color: transaction.category.color, fontWeight: '700' }}
-                compact
-              >
-                {transaction.category.label}
-              </Chip>
             </View>
             {transaction.note ? (
               <View style={styles.receiptRow}>
@@ -269,31 +253,6 @@ export default function SendMoneyScreen({ navigation }: RootStackScreenProps<'Se
             />
           </View>
 
-          <Text style={styles.sectionLabel}>Category (education lock)</Text>
-          <View style={styles.categoryGrid}>
-            {BUDGET_CATEGORIES.map((cat) => {
-              const selected = category?.key === cat.key;
-              return (
-                <TouchableRipple
-                  key={cat.key}
-                  onPress={() => setCategory(cat)}
-                  style={[
-                    styles.categoryItem,
-                    selected && { borderColor: cat.color, backgroundColor: `${cat.color}14` },
-                  ]}
-                  borderless
-                >
-                  <View style={styles.categoryItemContent}>
-                    <IconBadge icon={cat.icon} color={cat.color} size={36} iconSize={20} />
-                    <Text style={[styles.categoryItemLabel, selected && { color: cat.color }]}>
-                      {cat.label}
-                    </Text>
-                  </View>
-                </TouchableRipple>
-              );
-            })}
-          </View>
-
           <TextInput
             mode="outlined"
             label="Note (optional)"
@@ -305,6 +264,10 @@ export default function SendMoneyScreen({ navigation }: RootStackScreenProps<'Se
             style={styles.noteInput}
             multiline
           />
+
+          <Text style={styles.restrictionNote}>
+            Transfer will be sent without spending restrictions.
+          </Text>
 
           <HelperText type="error" visible={Boolean(sendError)}>
             {sendError}
@@ -372,12 +335,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     backgroundColor: '#EAF0FA',
   },
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.label,
-    marginBottom: 10,
-  },
   amountContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -398,33 +355,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     padding: 0,
   },
-  categoryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  categoryItem: {
-    width: '31%',
-    marginBottom: 12,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.inputBackground,
-  },
-  categoryItemContent: {
-    alignItems: 'center',
-    paddingVertical: 14,
-  },
-  categoryItemLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.muted,
-    marginTop: 6,
-  },
   noteInput: {
     backgroundColor: colors.inputBackground,
     marginBottom: 4,
+  },
+  restrictionNote: {
+    fontSize: 12,
+    color: colors.muted,
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 12,
   },
   sendButton: {
     borderRadius: 10,
@@ -476,9 +416,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: colors.heading,
-  },
-  receiptCategoryChip: {
-    height: 28,
   },
   doneButton: {
     width: '100%',

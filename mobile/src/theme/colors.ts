@@ -24,4 +24,6 @@ export const categoryColors = {
   transport: '#10B981',
   software: '#6366F1',
   rent: '#EC4899',
+  personal: '#F97316',
+  general: '#64748B',
 };

@@ -33,6 +33,7 @@ enum TransactionCategory {
   TRANSPORT
   SOFTWARE
   RENT
+  PERSONAL
   GENERAL
 }
 

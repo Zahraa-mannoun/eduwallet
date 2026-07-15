@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,6 +10,8 @@ import type { BudgetCategoryKey } from '../constants/budgetCategories';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationsContext';
 import { useWallet } from '../context/WalletContext';
+import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
+import * as walletService from '../services/walletService';
 import { colors } from '../theme/colors';
 import { getInitials } from '../utils/getInitials';
 import type { StudentTabScreenProps } from '../navigation/types';
@@ -36,12 +38,54 @@ type QuickAction = {
   onPress: () => void;
 };
 
-export default function DashboardScreen({ navigation }: StudentTabScreenProps<'Home'>) {
+export default function DashboardScreen({ navigation }: Readonly<StudentTabScreenProps<'Home'>>) {
   const { user } = useAuth();
   const { unreadCount } = useNotifications();
   const { wallet, transactions, isLoading, error, refresh } = useWallet();
   const [showBalance, setShowBalance] = useState(true);
+  const [lockedTransactions, setLockedTransactions] = useState<Transaction[]>([]);
   const displayName = user?.fullName || 'Student';
+
+  const loadLockedTransactions = useCallback(async () => {
+    try {
+      const result = await walletService.getTransactions({ limit: 100, status: 'AUTO_APPROVED' });
+      setLockedTransactions(result.transactions);
+    } catch {
+      // Balance Breakdown is a supplementary view — leave the previous data in place on failure.
+    }
+  }, []);
+
+  const refreshDashboard = useCallback(() => {
+    void refresh();
+    void loadLockedTransactions();
+  }, [refresh, loadLockedTransactions]);
+
+  useThrottledFocusEffect(refreshDashboard);
+
+  const lockedByCategory = useMemo(() => {
+    const totals = new Map<BudgetCategoryKey, number>();
+    if (!wallet) return totals;
+
+    for (const tx of lockedTransactions) {
+      if (tx.category === 'GENERAL') continue;
+      const key = tx.category.toLowerCase() as BudgetCategoryKey;
+      const amount = Number(tx.amount);
+      let delta = 0;
+      if (tx.toWalletId === wallet.id) delta += amount;
+      if (tx.fromWalletId === wallet.id) delta -= amount;
+      if (delta === 0) continue;
+      totals.set(key, (totals.get(key) ?? 0) + delta);
+    }
+    return totals;
+  }, [lockedTransactions, wallet]);
+
+  const lockedCategoryRows = BUDGET_CATEGORIES.map((category) => ({
+    category,
+    amount: lockedByCategory.get(category.key) ?? 0,
+  })).filter((row) => row.amount > 0);
+
+  const totalLocked = lockedCategoryRows.reduce((sum, row) => sum + row.amount, 0);
+  const freeToUse = wallet ? Math.max(0, Number(wallet.balance) - totalLocked) : 0;
 
   const quickActions: QuickAction[] = [
     { key: 'send', label: 'Send', icon: 'arrow-up-circle-outline', onPress: () => navigation.navigate('SendMoney') },
@@ -132,6 +176,35 @@ export default function DashboardScreen({ navigation }: StudentTabScreenProps<'H
             </View>
           ))}
         </View>
+
+        {wallet ? (
+          <Card style={styles.breakdownCard} mode="elevated">
+            <Card.Content>
+              <Text variant="titleMedium" style={styles.breakdownTitle}>
+                Balance Breakdown
+              </Text>
+
+              <View style={styles.breakdownRow}>
+                <IconBadge icon="lock-open-variant-outline" color={colors.accent} size={36} />
+                <View style={styles.breakdownMiddle}>
+                  <Text style={styles.breakdownLabel}>Free to use</Text>
+                  <Text style={styles.breakdownSublabel}>No spending restrictions</Text>
+                </View>
+                <Text style={styles.breakdownAmount}>${freeToUse.toFixed(2)}</Text>
+              </View>
+
+              {lockedCategoryRows.map(({ category, amount }) => (
+                <View key={category.key} style={styles.breakdownRow}>
+                  <IconBadge icon={category.icon} color={category.color} size={36} />
+                  <View style={styles.breakdownMiddle}>
+                    <Text style={styles.breakdownLabel}>{category.label} locked</Text>
+                  </View>
+                  <Text style={styles.breakdownAmount}>${amount.toFixed(2)}</Text>
+                </View>
+              ))}
+            </Card.Content>
+          </Card>
+        ) : null}
 
         <Card style={styles.transactionsCard} mode="elevated">
           <Card.Content>
@@ -293,6 +366,39 @@ const styles = StyleSheet.create({
     color: colors.label,
     fontWeight: '600',
     marginTop: -4,
+  },
+  breakdownCard: {
+    borderRadius: 16,
+    marginBottom: 20,
+  },
+  breakdownTitle: {
+    fontWeight: '700',
+    color: colors.heading,
+    marginBottom: 12,
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  breakdownMiddle: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  breakdownLabel: {
+    fontWeight: '700',
+    color: colors.heading,
+    fontSize: 14,
+  },
+  breakdownSublabel: {
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 2,
+  },
+  breakdownAmount: {
+    fontWeight: '700',
+    fontSize: 14,
+    color: colors.heading,
   },
   transactionsCard: {
     borderRadius: 16,
