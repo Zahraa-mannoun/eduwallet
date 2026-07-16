@@ -56,10 +56,13 @@ export type Transaction = {
   createdAt: string;
 };
 
+// Demo prototype: CVV is always included and shown on the card face, not hidden after
+// creation like a real card issuer would — there's no real money or PCI scope here.
 export type VirtualCard = {
   id: string;
   walletId: string;
   cardNumber: string;
+  cvv: string;
   expiry: string;
   merchantLock: string | null;
   categoryLock: TransactionCategory | null;
@@ -68,10 +71,8 @@ export type VirtualCard = {
   createdAt: string;
 };
 
-// Only the create-card response includes the CVV (and formatted expiry) — a one-time
-// reveal. Every other card endpoint returns VirtualCard without it.
+// The create-card response additionally includes a pre-formatted MM/YY expiry.
 export type NewVirtualCard = VirtualCard & {
-  cvv: string;
   expiryFormatted: string;
 };
 

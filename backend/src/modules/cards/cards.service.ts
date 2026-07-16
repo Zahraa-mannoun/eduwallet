@@ -35,13 +35,8 @@ export function formatExpiryMMYY(expiry: Date): string {
   return `${month}/${year}`;
 }
 
-export type SafeCard = Omit<VirtualCard, 'cvv'>;
-
-function toSafeCard(card: VirtualCard): SafeCard {
-  const { cvv: _cvv, ...safeCard } = card;
-  return safeCard;
-}
-
+// Demo prototype: CVV is always returned and shown on the card face, not hidden after
+// creation like a real card issuer would — there's no real money or PCI scope here.
 async function getOwnedCard(userId: string, cardId: string): Promise<VirtualCard> {
   const card = await prisma.virtualCard.findUnique({ where: { id: cardId } });
   if (!card) {
@@ -86,30 +81,26 @@ export async function createCard(userId: string, input: CreateCardInput): Promis
   throw new AppError(500, 'CARD_GENERATION_FAILED', 'Could not generate a unique card number');
 }
 
-export async function getCards(userId: string): Promise<SafeCard[]> {
+export async function getCards(userId: string): Promise<VirtualCard[]> {
   const wallets = await prisma.wallet.findMany({ where: { userId }, select: { id: true } });
   const walletIds = wallets.map((wallet) => wallet.id);
 
-  const cards = await prisma.virtualCard.findMany({
+  return prisma.virtualCard.findMany({
     where: { walletId: { in: walletIds } },
     orderBy: { createdAt: 'desc' },
   });
-
-  return cards.map(toSafeCard);
 }
 
-export async function getCardById(userId: string, cardId: string): Promise<SafeCard> {
-  const card = await getOwnedCard(userId, cardId);
-  return toSafeCard(card);
+export async function getCardById(userId: string, cardId: string): Promise<VirtualCard> {
+  return getOwnedCard(userId, cardId);
 }
 
-export async function freezeCard(userId: string, cardId: string): Promise<SafeCard> {
+export async function freezeCard(userId: string, cardId: string): Promise<VirtualCard> {
   const card = await getOwnedCard(userId, cardId);
-  const updated = await prisma.virtualCard.update({
+  return prisma.virtualCard.update({
     where: { id: card.id },
     data: { frozen: !card.frozen },
   });
-  return toSafeCard(updated);
 }
 
 export async function deleteCard(userId: string, cardId: string): Promise<void> {
@@ -136,7 +127,11 @@ export async function useCard(input: UseCardInput): Promise<{ transaction: Trans
     throw new AppError(403, 'MERCHANT_LOCKED', 'This card is locked to a different merchant');
   }
   if (card.categoryLock && card.categoryLock !== input.category) {
-    throw new AppError(403, 'CATEGORY_LOCKED', 'This card is locked to a different category');
+    throw new AppError(
+      403,
+      'CARD_CATEGORY_MISMATCH',
+      `This card is locked to ${card.categoryLock.toLowerCase()} — it can't be used for ${input.category.toLowerCase()}`
+    );
   }
 
   const wallet = await prisma.wallet.findUnique({ where: { id: card.walletId } });

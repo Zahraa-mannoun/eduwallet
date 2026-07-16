@@ -4,24 +4,28 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ActivityIndicator,
   Button,
-  Card,
   Dialog,
   Portal,
-  ProgressBar,
   Snackbar,
   Text,
   TextInput,
 } from 'react-native-paper';
-import type { TransactionCategory } from '../types/api';
+import type { BudgetCategory, TransactionCategory } from '../types/api';
 import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryDefinition, BudgetCategoryKey } from '../constants/budgetCategories';
 import { colors } from '../theme/colors';
 import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
 import * as budgetService from '../services/budgetService';
-import type { BudgetSummary } from '../services/budgetService';
 import { ApiError } from '../services/api';
 import type { StudentTabScreenProps } from '../navigation/types';
+
+// NOTE: this screen deliberately avoids react-native-paper's Card and ProgressBar.
+// Both use elevation/shadow-driven internals that were confirmed (via live screenshots)
+// to break on the web renderer here: every category's progress bar / used-text / Edit
+// button was collapsing out of its own card and stacking on top of each other below
+// the last card, so tapping "Edit" on any card opened whichever category rendered last.
+// Plain Views render correctly everywhere, so the whole card body is built from those.
 
 const CATEGORY_DESCRIPTIONS: Record<BudgetCategoryKey, string> = {
   tuition: 'University fees and academic expenses',
@@ -34,8 +38,25 @@ const CATEGORY_DESCRIPTIONS: Record<BudgetCategoryKey, string> = {
   general: 'Miscellaneous spending',
 };
 
+const OVERSPENT_THRESHOLD = 100;
+const APPROACHING_THRESHOLD = 90;
+
+type CategoryStats = {
+  spent: number;
+  limit: number;
+  percentUsed: number;
+  overspent: boolean;
+};
+
+function statsFor(budget: BudgetCategory | undefined): CategoryStats {
+  const spent = budget ? Number(budget.spent) : 0;
+  const limit = budget ? Number(budget.monthlyLimit) : 0;
+  const percentUsed = limit > 0 ? Math.round((spent / limit) * 100) : 0;
+  return { spent, limit, overspent: spent > limit && limit > 0, percentUsed };
+}
+
 export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Budget'>>) {
-  const [summary, setSummary] = useState<BudgetSummary | null>(null);
+  const [budgets, setBudgets] = useState<BudgetCategory[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dialogCategory, setDialogCategory] = useState<BudgetCategoryDefinition | null>(null);
@@ -47,8 +68,8 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
     setIsLoading(true);
     setError(null);
     try {
-      const result = await budgetService.getBudgetSummary();
-      setSummary(result);
+      const result = await budgetService.getBudgets();
+      setBudgets(result.budgets);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to load your budgets.');
     } finally {
@@ -58,14 +79,16 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
 
   useThrottledFocusEffect(load);
 
-  const categoryData = (category: BudgetCategoryDefinition) =>
-    summary?.categories.find((entry) => entry.category === category.key.toUpperCase()) ?? null;
+  const budgetFor = (category: BudgetCategoryDefinition): BudgetCategory | undefined =>
+    budgets.find((entry) => entry.category === category.key.toUpperCase());
 
   const openDialog = (category: BudgetCategoryDefinition) => {
-    const existing = categoryData(category);
-    setDialogAmount(existing ? String(existing.monthlyLimit) : '');
+    const existing = budgetFor(category);
+    setDialogAmount(existing ? existing.monthlyLimit : '');
     setDialogCategory(category);
   };
+
+  const closeDialog = () => setDialogCategory(null);
 
   const handleSaveBudget = async () => {
     if (!dialogCategory) return;
@@ -80,7 +103,7 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
         limit,
         month
       );
-      setDialogCategory(null);
+      closeDialog();
       setSnackbarMessage(`${dialogCategory.label} budget updated.`);
       await load();
     } catch (err) {
@@ -102,85 +125,88 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={load} />}
       >
+        <View style={styles.bannerCard}>
+          <Text style={styles.bannerText}>
+            Set your own monthly spending limits for each category. This is your personal
+            financial management tool — track and control your own spending goals.
+          </Text>
+        </View>
+
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        <Card style={styles.explainerCard} mode="contained">
-          <Card.Content>
-            <Text style={styles.explainerText}>
-              Set your own monthly spending limits for each category. This is your personal
-              financial management tool — track and control your own spending goals.
-            </Text>
-          </Card.Content>
-        </Card>
+        {BUDGET_CATEGORIES.map((category, index) => {
+          console.log(`[BudgetScreen] rendering category card ${index + 1}/${BUDGET_CATEGORIES.length}: ${category.key}`);
+          const stats = statsFor(budgetFor(category));
+          const progress = stats.limit > 0 ? Math.min(stats.spent / stats.limit, 1) : 0;
 
-        {summary?.alerts.map((alert) => (
-          <Card
-            key={alert.category}
-            style={[
-              styles.alertCard,
-              { backgroundColor: alert.severity === 'OVERSPENT' ? '#FEF2F2' : '#FFFBEB' },
-            ]}
-            mode="contained"
-          >
-            <Card.Content>
-              <Text
-                style={{
-                  color: alert.severity === 'OVERSPENT' ? colors.danger : '#B45309',
-                  fontWeight: '600',
-                  fontSize: 12,
-                }}
-              >
-                {alert.message}
-              </Text>
-            </Card.Content>
-          </Card>
-        ))}
-
-        {BUDGET_CATEGORIES.map((category) => {
-          const data = categoryData(category);
-          const spent = data?.spent ?? 0;
-          const limit = data?.monthlyLimit ?? 0;
-          const progress = limit > 0 ? Math.min(spent / limit, 1) : 0;
+          let alertText: string | null = null;
+          if (stats.limit > 0 && stats.percentUsed >= OVERSPENT_THRESHOLD) {
+            alertText = `Overspent by $${(stats.spent - stats.limit).toFixed(2)}`;
+          } else if (stats.limit > 0 && stats.percentUsed >= APPROACHING_THRESHOLD) {
+            alertText = `${stats.percentUsed}% of this budget used`;
+          }
 
           return (
-            <Card key={category.key} style={styles.categoryCard} mode="elevated">
-              <Card.Content>
-                <View style={styles.categoryHeaderRow}>
-                  <View style={styles.categoryTitleRow}>
-                    <IconBadge icon={category.icon} color={category.color} size={40} />
-                    <Text variant="titleMedium" style={styles.categoryLabel}>
-                      {category.label}
-                    </Text>
-                  </View>
-                  <Text style={styles.categoryAmount}>
-                    ${spent.toFixed(0)} / ${limit.toFixed(0)}
+            <View key={category.key} style={styles.categoryCard}>
+              <View style={styles.categoryHeaderRow}>
+                <View style={styles.categoryTitleRow}>
+                  <IconBadge icon={category.icon} color={category.color} size={40} />
+                  <Text variant="titleMedium" style={styles.categoryLabel}>
+                    {category.label}
                   </Text>
                 </View>
+                <Text style={styles.categoryAmount}>
+                  ${stats.spent.toFixed(0)} / ${stats.limit.toFixed(0)}
+                </Text>
+              </View>
 
-                <Text style={styles.categoryDescription}>{CATEGORY_DESCRIPTIONS[category.key]}</Text>
+              <Text style={styles.categoryDescription}>{CATEGORY_DESCRIPTIONS[category.key]}</Text>
 
-                <ProgressBar
-                  progress={progress}
-                  color={data?.overspent ? colors.danger : category.color}
-                  style={styles.progressBar}
+              <View style={styles.progressTrack}>
+                <View
+                  style={[
+                    styles.progressFill,
+                    {
+                      width: `${Math.round(progress * 100)}%`,
+                      backgroundColor: stats.overspent ? colors.danger : category.color,
+                    },
+                  ]}
                 />
+              </View>
 
-                <View style={styles.categoryFooterRow}>
-                  <Text style={styles.categoryUsed}>
-                    {limit > 0 ? `${Math.round(progress * 100)}% used` : 'No budget set'}
-                  </Text>
-                  <Button mode="text" compact textColor={colors.primary} onPress={() => openDialog(category)}>
-                    Edit
-                  </Button>
-                </View>
-              </Card.Content>
-            </Card>
+              <Text style={styles.categoryUsed}>
+                {stats.limit > 0 ? `${stats.percentUsed}% used` : 'No budget set'}
+              </Text>
+
+              {alertText ? (
+                <Text
+                  style={[
+                    styles.alertText,
+                    { color: stats.percentUsed >= OVERSPENT_THRESHOLD ? colors.danger : '#B45309' },
+                  ]}
+                >
+                  {alertText}
+                </Text>
+              ) : null}
+
+              <Button
+                mode="contained"
+                compact
+                buttonColor={colors.primary}
+                textColor={colors.onPrimary}
+                style={styles.editButton}
+                contentStyle={styles.editButtonContent}
+                onPress={() => openDialog(category)}
+              >
+                Edit
+              </Button>
+            </View>
           );
         })}
       </ScrollView>
 
       <Portal>
-        <Dialog visible={dialogCategory !== null} onDismiss={() => setDialogCategory(null)}>
+        <Dialog visible={dialogCategory !== null} onDismiss={closeDialog}>
           <Dialog.Title>{dialogCategory?.label} Budget</Dialog.Title>
           <Dialog.Content>
             <TextInput
@@ -194,7 +220,7 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
             />
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setDialogCategory(null)} disabled={isSaving}>
+            <Button onPress={closeDialog} disabled={isSaving}>
               Cancel
             </Button>
             <Button onPress={handleSaveBudget} disabled={!(Number(dialogAmount) > 0) || isSaving}>
@@ -233,28 +259,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 32,
   },
+  bannerCard: {
+    borderRadius: 14,
+    marginBottom: 16,
+    backgroundColor: colors.surface,
+    padding: 16,
+  },
+  bannerText: {
+    fontSize: 13,
+    color: colors.label,
+    lineHeight: 19,
+  },
   errorText: {
     color: colors.danger,
     textAlign: 'center',
     marginBottom: 12,
   },
-  explainerCard: {
-    borderRadius: 14,
-    marginBottom: 16,
-    backgroundColor: colors.surface,
-  },
-  explainerText: {
-    fontSize: 13,
-    color: colors.label,
-    lineHeight: 19,
-  },
-  alertCard: {
-    borderRadius: 12,
-    marginBottom: 12,
-  },
   categoryCard: {
     borderRadius: 16,
     marginBottom: 14,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
   },
   categoryHeaderRow: {
     flexDirection: 'row',
@@ -281,19 +308,32 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginBottom: 10,
   },
-  progressBar: {
+  progressTrack: {
     height: 8,
     borderRadius: 4,
     backgroundColor: colors.surface,
+    overflow: 'hidden',
   },
-  categoryFooterRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 4,
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
   },
   categoryUsed: {
     fontSize: 12,
     color: colors.muted,
+    marginTop: 6,
+  },
+  alertText: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 6,
+  },
+  editButton: {
+    borderRadius: 10,
+    marginTop: 14,
+    alignSelf: 'stretch',
+  },
+  editButtonContent: {
+    paddingVertical: 4,
   },
 });

@@ -10,13 +10,20 @@ import {
   Portal,
   Snackbar,
   Text,
+  TouchableRipple,
 } from 'react-native-paper';
-import type { NewVirtualCard, VirtualCard } from '../types/api';
+import type { NewVirtualCard, TransactionCategory, VirtualCard } from '../types/api';
+import IconBadge from '../components/IconBadge';
+import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
+import type { BudgetCategoryDefinition, BudgetCategoryKey } from '../constants/budgetCategories';
 import { colors } from '../theme/colors';
 import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
 import * as cardService from '../services/cardService';
 import { ApiError } from '../services/api';
 import type { StudentTabScreenProps } from '../navigation/types';
+
+const LOCK_CATEGORIES = BUDGET_CATEGORIES.filter((category) => category.key !== 'general');
+const categoryLookup = new Map(BUDGET_CATEGORIES.map((category) => [category.key, category]));
 
 function formatExpiry(iso: string): string {
   const date = new Date(iso);
@@ -25,13 +32,21 @@ function formatExpiry(iso: string): string {
   return `${month}/${year}`;
 }
 
-export default function CardsScreen(_props: StudentTabScreenProps<'Cards'>) {
+function lockBadgeText(categoryLock: TransactionCategory | null): string {
+  if (!categoryLock) return 'GENERAL USE';
+  const category = categoryLookup.get(categoryLock.toLowerCase() as BudgetCategoryKey);
+  return `${(category?.label ?? categoryLock).toUpperCase()} ONLY`;
+}
+
+export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Cards'>>) {
   const [cards, setCards] = useState<VirtualCard[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
   const [newCard, setNewCard] = useState<NewVirtualCard | null>(null);
+  const [createDialogVisible, setCreateDialogVisible] = useState(false);
+  const [selectedLock, setSelectedLock] = useState<BudgetCategoryDefinition | null>(null);
 
   const loadCards = useCallback(async () => {
     setIsLoading(true);
@@ -48,10 +63,21 @@ export default function CardsScreen(_props: StudentTabScreenProps<'Cards'>) {
 
   useThrottledFocusEffect(loadCards);
 
+  const openCreateDialog = () => {
+    setSelectedLock(null);
+    setCreateDialogVisible(true);
+  };
+
   const handleGenerate = async () => {
     setIsCreating(true);
     try {
-      const created = await cardService.createCard({ expiryDays: 365 });
+      const created = await cardService.createCard({
+        expiryDays: 365,
+        categoryLock: selectedLock
+          ? (selectedLock.key.toUpperCase() as TransactionCategory)
+          : undefined,
+      });
+      setCreateDialogVisible(false);
       setNewCard(created);
       await loadCards();
     } catch (err) {
@@ -113,6 +139,10 @@ export default function CardsScreen(_props: StudentTabScreenProps<'Cards'>) {
 
               <Text style={styles.cardNumber}>{card.cardNumber}</Text>
 
+              <View style={styles.lockBadge}>
+                <Text style={styles.lockBadgeText}>{lockBadgeText(card.categoryLock)}</Text>
+              </View>
+
               <View style={styles.cardBottomRow}>
                 <View>
                   <Text style={styles.fieldLabel}>STATUS</Text>
@@ -121,6 +151,10 @@ export default function CardsScreen(_props: StudentTabScreenProps<'Cards'>) {
                 <View>
                   <Text style={styles.fieldLabel}>EXPIRES</Text>
                   <Text style={styles.fieldValue}>{formatExpiry(card.expiry)}</Text>
+                </View>
+                <View>
+                  <Text style={styles.fieldLabel}>CVV</Text>
+                  <Text style={styles.fieldValue}>{card.cvv}</Text>
                 </View>
               </View>
             </LinearGradient>
@@ -150,20 +184,68 @@ export default function CardsScreen(_props: StudentTabScreenProps<'Cards'>) {
           icon="plus-circle-outline"
           style={styles.generateButton}
           contentStyle={styles.generateButtonContent}
-          onPress={handleGenerate}
-          disabled={isCreating}
+          onPress={openCreateDialog}
         >
-          {isCreating ? <ActivityIndicator size={18} color={colors.onPrimary} /> : 'Create New Card'}
+          Create New Card
         </Button>
       </ScrollView>
 
       <Portal>
+        <Dialog visible={createDialogVisible} onDismiss={() => setCreateDialogVisible(false)}>
+          <Dialog.Title>Category Lock</Dialog.Title>
+          <Dialog.Content>
+            <Text style={styles.lockDialogSubtitle}>
+              Lock this card to one spending category, or leave it unlocked for general use.
+            </Text>
+            <View style={styles.lockGrid}>
+              <TouchableRipple
+                onPress={() => setSelectedLock(null)}
+                style={[styles.lockItem, selectedLock === null && styles.lockItemSelected]}
+                borderless
+              >
+                <View style={styles.lockItemContent}>
+                  <IconBadge icon="lock-open-variant-outline" color={colors.muted} size={36} iconSize={20} />
+                  <Text style={[styles.lockItemLabel, selectedLock === null && styles.lockItemLabelSelected]}>
+                    No Lock
+                  </Text>
+                </View>
+              </TouchableRipple>
+              {LOCK_CATEGORIES.map((category) => {
+                const selected = selectedLock?.key === category.key;
+                return (
+                  <TouchableRipple
+                    key={category.key}
+                    onPress={() => setSelectedLock(category)}
+                    style={[
+                      styles.lockItem,
+                      selected && { borderColor: category.color, backgroundColor: `${category.color}14` },
+                    ]}
+                    borderless
+                  >
+                    <View style={styles.lockItemContent}>
+                      <IconBadge icon={category.icon} color={category.color} size={36} iconSize={20} />
+                      <Text style={[styles.lockItemLabel, selected && { color: category.color }]}>
+                        {category.label}
+                      </Text>
+                    </View>
+                  </TouchableRipple>
+                );
+              })}
+            </View>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setCreateDialogVisible(false)} disabled={isCreating}>
+              Cancel
+            </Button>
+            <Button onPress={handleGenerate} disabled={isCreating}>
+              {isCreating ? <ActivityIndicator size={16} color={colors.primary} /> : 'Create'}
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+
         <Dialog visible={newCard !== null} onDismiss={() => setNewCard(null)}>
           <Dialog.Title>Card Created</Dialog.Title>
           <Dialog.Content>
-            <Text style={styles.dialogWarning}>
-              This is the only time your CVV will be shown. Save it now.
-            </Text>
             <View style={styles.dialogRow}>
               <Text style={styles.dialogLabel}>Card Number</Text>
               <Text style={styles.dialogValue}>{newCard?.cardNumber}</Text>
@@ -175,6 +257,10 @@ export default function CardsScreen(_props: StudentTabScreenProps<'Cards'>) {
             <View style={styles.dialogRow}>
               <Text style={styles.dialogLabel}>Expires</Text>
               <Text style={styles.dialogValue}>{newCard?.expiryFormatted}</Text>
+            </View>
+            <View style={styles.dialogRow}>
+              <Text style={styles.dialogLabel}>Category Lock</Text>
+              <Text style={styles.dialogValue}>{lockBadgeText(newCard?.categoryLock ?? null)}</Text>
             </View>
           </Dialog.Content>
           <Dialog.Actions>
@@ -274,6 +360,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 1,
   },
+  lockBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  lockBadgeText: {
+    color: colors.onPrimary,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
   cardBottomRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -306,10 +405,40 @@ const styles = StyleSheet.create({
   generateButtonContent: {
     paddingVertical: 6,
   },
-  dialogWarning: {
-    color: colors.danger,
+  lockDialogSubtitle: {
     fontSize: 12,
+    color: colors.muted,
+    marginBottom: 14,
+  },
+  lockGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  lockItem: {
+    width: '31%',
     marginBottom: 12,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.inputBackground,
+  },
+  lockItemSelected: {
+    borderColor: colors.muted,
+    backgroundColor: colors.surface,
+  },
+  lockItemContent: {
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+  lockItemLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.muted,
+    marginTop: 6,
+  },
+  lockItemLabelSelected: {
+    color: colors.heading,
   },
   dialogRow: {
     flexDirection: 'row',
