@@ -94,6 +94,7 @@ export default function KYCScreen({ navigation }: Readonly<RootStackScreenProps<
       await kycService.submitDocument({
         documentType,
         fileUri: asset.uri,
+        file: asset.file,
         fileName: asset.name,
         fileType: asset.mimeType ?? 'application/octet-stream',
       });

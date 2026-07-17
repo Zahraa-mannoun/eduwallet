@@ -1,28 +1,44 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import type { ApiResponse } from '@eduwallet/shared';
+import type { AcademicDocument, ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Modal } from '../components/Modal';
-import { formatDate, formatFileSize } from '../lib/format';
+import { formatDate } from '../lib/format';
 import type { PendingKYCRow } from '../types/admin';
 
-type KYCDocRow = {
+type KYCStudentRow = {
   userId: string;
   studentName: string;
   studentEmail: string;
-  documentId: string;
-  documentType: string;
-  fileName: string;
-  fileSize: number | null;
+  studentIdDoc: AcademicDocument | null;
+  enrollmentDoc: AcademicDocument | null;
   submittedAt: string;
 };
 
+function toStudentRow(user: PendingKYCRow): KYCStudentRow {
+  const studentIdDoc = user.documents.find((doc) => doc.documentType === 'STUDENT_ID') ?? null;
+  const enrollmentDoc =
+    user.documents.find((doc) => doc.documentType === 'ENROLLMENT_CERTIFICATE') ?? null;
+  const submittedAt = user.documents.reduce<string>(
+    (latest, doc) => (doc.createdAt > latest ? doc.createdAt : latest),
+    user.createdAt
+  );
+  return {
+    userId: user.id,
+    studentName: user.fullName,
+    studentEmail: user.email,
+    studentIdDoc,
+    enrollmentDoc,
+    submittedAt,
+  };
+}
+
 export function KYC() {
-  const [rows, setRows] = useState<KYCDocRow[]>([]);
+  const [rows, setRows] = useState<KYCStudentRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
-  const [rejectTarget, setRejectTarget] = useState<KYCDocRow | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<KYCStudentRow | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -30,32 +46,7 @@ export function KYC() {
     try {
       const response = await api.get<ApiResponse<PendingKYCRow[]>>('/kyc/pending');
       const users = unwrap(response.data);
-      const flattened: KYCDocRow[] = users.flatMap((user) =>
-        user.documents.length > 0
-          ? user.documents.map((doc) => ({
-              userId: user.id,
-              studentName: user.fullName,
-              studentEmail: user.email,
-              documentId: doc.id,
-              documentType: doc.documentType ?? 'UNKNOWN',
-              fileName: doc.fileName,
-              fileSize: doc.fileSize,
-              submittedAt: doc.createdAt,
-            }))
-          : [
-              {
-                userId: user.id,
-                studentName: user.fullName,
-                studentEmail: user.email,
-                documentId: '',
-                documentType: '—',
-                fileName: '—',
-                fileSize: null,
-                submittedAt: user.createdAt,
-              },
-            ]
-      );
-      setRows(flattened);
+      setRows(users.map(toStudentRow));
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -77,7 +68,7 @@ export function KYC() {
     }
   };
 
-  const approve = async (row: KYCDocRow) => {
+  const approve = async (row: KYCStudentRow) => {
     setBusyUserId(row.userId);
     try {
       await api.post('/kyc/review', { userId: row.userId, decision: 'APPROVED' });
@@ -99,9 +90,7 @@ export function KYC() {
             <tr>
               <th className="px-4 py-3 text-left">Student Name</th>
               <th className="px-4 py-3 text-left">Email</th>
-              <th className="px-4 py-3 text-left">Document Type</th>
-              <th className="px-4 py-3 text-left">File Name</th>
-              <th className="px-4 py-3 text-left">File Size</th>
+              <th className="px-4 py-3 text-left">Documents</th>
               <th className="px-4 py-3 text-left">Submitted</th>
               <th className="px-4 py-3 text-left">Actions</th>
             </tr>
@@ -109,38 +98,52 @@ export function KYC() {
           <tbody className="divide-y divide-slate-100">
             {isLoading && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-slate-400">
+                <td colSpan={5} className="px-4 py-6 text-center text-slate-400">
                   Loading…
                 </td>
               </tr>
             )}
             {!isLoading && rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-slate-400">
+                <td colSpan={5} className="px-4 py-6 text-center text-slate-400">
                   No pending KYC submissions
                 </td>
               </tr>
             )}
             {!isLoading &&
               rows.map((row) => (
-                <tr key={`${row.userId}-${row.documentId}`}>
+                <tr key={row.userId}>
                   <td className="px-4 py-3 font-medium text-slate-900">{row.studentName}</td>
                   <td className="px-4 py-3 text-slate-600">{row.studentEmail}</td>
-                  <td className="px-4 py-3 text-slate-700">{row.documentType}</td>
-                  <td className="px-4 py-3 text-slate-700">{row.fileName}</td>
-                  <td className="px-4 py-3 text-slate-500">{formatFileSize(row.fileSize)}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-2">
+                      {row.studentIdDoc ? (
+                        <button
+                          type="button"
+                          onClick={() => void viewDocument(row.studentIdDoc!.id)}
+                          className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                        >
+                          View Student ID
+                        </button>
+                      ) : (
+                        <span className="text-xs text-slate-400">Student ID not uploaded</span>
+                      )}
+                      {row.enrollmentDoc ? (
+                        <button
+                          type="button"
+                          onClick={() => void viewDocument(row.enrollmentDoc!.id)}
+                          className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                        >
+                          View Enrollment Certificate
+                        </button>
+                      ) : (
+                        <span className="text-xs text-slate-400">Enrollment certificate not uploaded</span>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-slate-500">{formatDate(row.submittedAt)}</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-2">
-                      {row.documentId && (
-                        <button
-                          type="button"
-                          onClick={() => void viewDocument(row.documentId)}
-                          className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                        >
-                          View
-                        </button>
-                      )}
                       <button
                         type="button"
                         disabled={busyUserId === row.userId}
@@ -184,7 +187,7 @@ function RejectModal({
   onClose,
   onDone,
 }: {
-  row: KYCDocRow;
+  row: KYCStudentRow;
   onClose: () => void;
   onDone: () => void;
 }) {
