@@ -4,6 +4,7 @@ import { requireRole } from '../../middleware/requireRole';
 import {
   approveTransactionHandler,
   getLinkedStudentsHandler,
+  getMyPermissionsHandler,
   getPendingApprovalsHandler,
   linkStudentHandler,
   rejectTransactionHandler,
@@ -13,13 +14,18 @@ import {
 
 export default async function parentalRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.addHook('preHandler', authenticate);
-  fastify.addHook('preHandler', requireRole('PARENT'));
 
-  fastify.post('/link', linkStudentHandler);
-  fastify.delete('/unlink/:studentId', unlinkStudentHandler);
-  fastify.put('/settings/:studentId', updateSettingsHandler);
-  fastify.get('/approvals', getPendingApprovalsHandler);
-  fastify.post('/approve', approveTransactionHandler);
-  fastify.post('/reject', rejectTransactionHandler);
-  fastify.get('/students', getLinkedStudentsHandler);
+  fastify.get('/my-permissions', { preHandler: requireRole('STUDENT') }, getMyPermissionsHandler);
+
+  await fastify.register(async (parentScope) => {
+    parentScope.addHook('preHandler', requireRole('PARENT'));
+
+    parentScope.post('/link', linkStudentHandler);
+    parentScope.delete('/unlink/:studentId', unlinkStudentHandler);
+    parentScope.put('/settings/:studentId', updateSettingsHandler);
+    parentScope.get('/approvals', getPendingApprovalsHandler);
+    parentScope.post('/approve', approveTransactionHandler);
+    parentScope.post('/reject', rejectTransactionHandler);
+    parentScope.get('/students', getLinkedStudentsHandler);
+  });
 }

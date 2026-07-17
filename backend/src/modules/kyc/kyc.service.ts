@@ -1,3 +1,6 @@
+import { randomUUID } from 'crypto';
+import { promises as fs } from 'fs';
+import path from 'path';
 import type { AcademicDocument, KYCStatus } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
@@ -6,21 +9,36 @@ import type { SafeUser } from '../auth/auth.types';
 import { createNotification } from '../notifications/notifications.service';
 import type { ReviewKYCInput, SubmitKYCInput } from './kyc.schema';
 
+// backend/src/modules/kyc -> backend (three levels up), so this resolves the same way
+// whether the module runs from src/ (tsx) or dist/ (compiled) — both sit one level under backend.
+const BACKEND_ROOT = path.resolve(__dirname, '..', '..', '..');
+const UPLOADS_ROOT = path.join(BACKEND_ROOT, 'uploads', 'kyc');
+
 export async function submitDocument(
   userId: string,
-  input: SubmitKYCInput
+  input: SubmitKYCInput,
+  fileBuffer: Buffer
 ): Promise<AcademicDocument> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) {
     throw new AppError(404, 'USER_NOT_FOUND', 'User not found');
   }
 
+  const userDir = path.join(UPLOADS_ROOT, userId);
+  await fs.mkdir(userDir, { recursive: true });
+  const storedFileName = `${randomUUID()}${path.extname(input.fileName)}`;
+  const absoluteFilePath = path.join(userDir, storedFileName);
+  await fs.writeFile(absoluteFilePath, fileBuffer);
+  const filePath = path.relative(BACKEND_ROOT, absoluteFilePath);
+
   const [document] = await prisma.$transaction([
     prisma.academicDocument.create({
       data: {
         userId,
         fileName: input.fileName,
-        fileSize: input.fileSize,
+        fileType: input.fileType,
+        fileSize: fileBuffer.length,
+        filePath,
         documentType: input.documentType,
       },
     }),
@@ -46,6 +64,24 @@ export async function submitDocument(
   );
 
   return document;
+}
+
+export async function getDocumentFile(
+  documentId: string
+): Promise<{ document: AcademicDocument; absolutePath: string }> {
+  const document = await prisma.academicDocument.findUnique({ where: { id: documentId } });
+  if (!document?.filePath) {
+    throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
+  }
+
+  const absolutePath = path.join(BACKEND_ROOT, document.filePath);
+  try {
+    await fs.access(absolutePath);
+  } catch {
+    throw new AppError(404, 'DOCUMENT_FILE_MISSING', 'Document file not found on disk');
+  }
+
+  return { document, absolutePath };
 }
 
 export async function getMyDocuments(userId: string): Promise<AcademicDocument[]> {
@@ -97,10 +133,14 @@ export async function reviewKYC(adminUserId: string, input: ReviewKYCInput): Pro
   return toSafeUser(updatedStudent);
 }
 
-export async function getPendingKYC(): Promise<SafeUser[]> {
+export async function getPendingKYC(): Promise<(SafeUser & { documents: AcademicDocument[] })[]> {
   const users = await prisma.user.findMany({
     where: { kycStatus: 'PENDING' },
     orderBy: { createdAt: 'desc' },
+    include: { academicDocuments: { orderBy: { createdAt: 'desc' } } },
   });
-  return users.map(toSafeUser);
+  return users.map(({ academicDocuments, ...user }) => ({
+    ...toSafeUser(user),
+    documents: academicDocuments,
+  }));
 }

@@ -3,6 +3,7 @@ import { Animated, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar, Button, Card, IconButton, Snackbar, Text, TextInput } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import KYCGate from '../components/KYCGate';
 import { colors } from '../theme/colors';
 import type { RootStackScreenProps } from '../navigation/types';
 
@@ -37,6 +38,7 @@ export default function QRPayScreen({ navigation }: RootStackScreenProps<'QRPay'
   };
 
   return (
+    <KYCGate>
     <SafeAreaView style={styles.flex} edges={['top']}>
       <View style={styles.header}>
         <IconButton icon="arrow-left" onPress={() => navigation.goBack()} style={styles.backButton} />
@@ -110,6 +112,7 @@ export default function QRPayScreen({ navigation }: RootStackScreenProps<'QRPay'
         {snackbarMessage ?? ''}
       </Snackbar>
     </SafeAreaView>
+    </KYCGate>
   );
 }
 

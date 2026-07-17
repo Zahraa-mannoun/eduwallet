@@ -18,12 +18,18 @@ export type ParentTabParamList = {
   Profile: undefined;
 };
 
+export type InstitutionTabParamList = {
+  Portal: undefined;
+  Notifications: undefined;
+  Profile: undefined;
+};
+
 export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
   StudentMain: NavigatorScreenParams<StudentTabParamList> | undefined;
   ParentMain: NavigatorScreenParams<ParentTabParamList> | undefined;
-  InstitutionMain: undefined;
+  InstitutionMain: NavigatorScreenParams<InstitutionTabParamList> | undefined;
   SendMoney: undefined;
   ReceiveMoney: undefined;
   QRPay: undefined;
@@ -48,3 +54,9 @@ export type ParentTabScreenProps<Screen extends keyof ParentTabParamList> = Comp
   BottomTabScreenProps<ParentTabParamList, Screen>,
   NativeStackScreenProps<RootStackParamList>
 >;
+
+export type InstitutionTabScreenProps<Screen extends keyof InstitutionTabParamList> =
+  CompositeScreenProps<
+    BottomTabScreenProps<InstitutionTabParamList, Screen>,
+    NativeStackScreenProps<RootStackParamList>
+  >;

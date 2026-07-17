@@ -20,7 +20,8 @@ export const linkStudentSchema = z.object({
 export type LinkStudentInput = z.infer<typeof linkStudentSchema>;
 
 export const updateSettingsSchema = z.object({
-  approvalThreshold: z.number().positive('Approval threshold must be greater than 0'),
+  // 0 means no threshold — general transfers are auto-approved regardless of amount.
+  approvalThreshold: z.number().min(0, 'Approval threshold cannot be negative'),
   categories: z.array(transactionCategoryEnum),
 });
 

@@ -39,6 +39,10 @@ export async function getTransactions(
   return apiRequest('/wallet/transactions', { query: params });
 }
 
+export async function getTransactionById(id: string): Promise<Transaction> {
+  return apiRequest<Transaction>(`/wallet/transactions/${id}`);
+}
+
 export async function lookupWalletByEmail(
   email: string,
   currency?: Currency

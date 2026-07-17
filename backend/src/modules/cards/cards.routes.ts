@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { authenticate } from '../../middleware/authenticate';
+import { requireVerifiedKYC } from '../../middleware/requireVerifiedKYC';
 import {
   createCardHandler,
   deleteCardHandler,
@@ -14,7 +15,7 @@ import {
 const READ_RATE_LIMIT = { max: 60, timeWindow: '1 minute' };
 
 export default async function cardsRoutes(fastify: FastifyInstance): Promise<void> {
-  fastify.post('/', { preHandler: authenticate }, createCardHandler);
+  fastify.post('/', { preHandler: [authenticate, requireVerifiedKYC] }, createCardHandler);
   fastify.get(
     '/',
     { preHandler: authenticate, config: { rateLimit: READ_RATE_LIMIT } },

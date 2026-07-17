@@ -93,8 +93,9 @@ export default function KYCScreen({ navigation }: Readonly<RootStackScreenProps<
     try {
       await kycService.submitDocument({
         documentType,
+        fileUri: asset.uri,
         fileName: asset.name,
-        fileSize: asset.size ?? 1,
+        fileType: asset.mimeType ?? 'application/octet-stream',
       });
       setSnackbarMessage(`${asset.name} submitted for review.`);
       await load();

@@ -20,10 +20,14 @@ export default function NotificationsScreen({ navigation }: RootStackScreenProps
 
   useThrottledFocusEffect(refresh);
 
+  const canGoBack = navigation.canGoBack();
+
   return (
     <SafeAreaView style={styles.flex} edges={['top']}>
       <View style={styles.header}>
-        <IconButton icon="arrow-left" onPress={() => navigation.goBack()} style={styles.backButton} />
+        {canGoBack && (
+          <IconButton icon="arrow-left" onPress={() => navigation.goBack()} style={styles.backButton} />
+        )}
         <Text variant="titleLarge" style={styles.headerTitle}>
           Notifications
         </Text>

@@ -3,7 +3,7 @@ import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from '
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActivityIndicator, Avatar, Badge, Button, Card, IconButton, Text } from 'react-native-paper';
-import type { Transaction } from '../types/api';
+import type { Transaction, TransactionCategory } from '../types/api';
 import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryKey } from '../constants/budgetCategories';
@@ -11,6 +11,8 @@ import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationsContext';
 import { useWallet } from '../context/WalletContext';
 import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
+import * as parentalService from '../services/parentalService';
+import type { MyPermissions } from '../services/parentalService';
 import * as walletService from '../services/walletService';
 import { colors } from '../theme/colors';
 import { getInitials } from '../utils/getInitials';
@@ -44,6 +46,7 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
   const { wallet, transactions, isLoading, error, refresh } = useWallet();
   const [showBalance, setShowBalance] = useState(true);
   const [lockedTransactions, setLockedTransactions] = useState<Transaction[]>([]);
+  const [myPermissions, setMyPermissions] = useState<MyPermissions | null>(null);
   const displayName = user?.fullName || 'Student';
 
   const loadLockedTransactions = useCallback(async () => {
@@ -55,10 +58,20 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
     }
   }, []);
 
+  const loadPermissions = useCallback(async () => {
+    try {
+      const result = await parentalService.getMyPermissions();
+      setMyPermissions(result);
+    } catch {
+      // Spending Permissions is a supplementary view — leave the previous data in place on failure.
+    }
+  }, []);
+
   const refreshDashboard = useCallback(() => {
     void refresh();
     void loadLockedTransactions();
-  }, [refresh, loadLockedTransactions]);
+    void loadPermissions();
+  }, [refresh, loadLockedTransactions, loadPermissions]);
 
   useThrottledFocusEffect(refreshDashboard);
 
@@ -161,6 +174,32 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
         contentContainerStyle={styles.body}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refresh} />}
       >
+        {user?.kycStatus === 'PENDING' && (
+          <View style={[styles.kycBanner, styles.kycBannerPending]}>
+            <IconBadge icon="clock-outline" color="#F59E0B" size={36} iconSize={20} />
+            <Text style={[styles.kycBannerText, styles.kycBannerTextPending]}>
+              Your account is pending verification. We will notify you once approved.
+            </Text>
+          </View>
+        )}
+
+        {user?.kycStatus === 'REJECTED' && (
+          <View style={[styles.kycBanner, styles.kycBannerRejected]}>
+            <IconBadge icon="alert-circle-outline" color={colors.danger} size={36} iconSize={20} />
+            <Text style={[styles.kycBannerText, styles.kycBannerTextRejected]}>
+              Your verification was rejected. Tap here to resubmit your documents.
+            </Text>
+            <Button
+              mode="text"
+              compact
+              textColor={colors.danger}
+              onPress={() => navigation.navigate('KYC')}
+            >
+              Retry
+            </Button>
+          </View>
+        )}
+
         <View style={styles.quickActionsRow}>
           {quickActions.map((action) => (
             <View key={action.key} style={styles.quickAction}>
@@ -202,6 +241,48 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
                   <Text style={styles.breakdownAmount}>${amount.toFixed(2)}</Text>
                 </View>
               ))}
+            </Card.Content>
+          </Card>
+        ) : null}
+
+        {myPermissions ? (
+          <Card style={styles.permissionsCard} mode="elevated">
+            <Card.Content>
+              <Text variant="titleMedium" style={styles.permissionsTitle}>
+                Spending Permissions
+              </Text>
+
+              {BUDGET_CATEGORIES.filter((category) => category.key !== 'general').map(
+                (category) => {
+                  const txCategory = category.key.toUpperCase() as TransactionCategory;
+                  const isAllowed = myPermissions.allowedCategories.includes(txCategory);
+                  return (
+                    <View key={category.key} style={styles.permissionRow}>
+                      <IconBadge
+                        icon={isAllowed ? 'check-circle-outline' : 'close-circle-outline'}
+                        color={isAllowed ? colors.accent : colors.muted}
+                        size={32}
+                      />
+                      <Text
+                        style={[
+                          styles.permissionLabel,
+                          !isAllowed && styles.permissionLabelBlocked,
+                        ]}
+                      >
+                        {category.label}
+                      </Text>
+                    </View>
+                  );
+                }
+              )}
+
+              <View style={styles.permissionsDivider} />
+
+              <Text style={styles.permissionsThreshold}>
+                {Number(myPermissions.approvalThreshold) > 0
+                  ? `Free transfers up to $${Number(myPermissions.approvalThreshold).toFixed(0)} without approval`
+                  : 'No approval limit'}
+              </Text>
             </Card.Content>
           </Card>
         ) : null}
@@ -352,6 +433,34 @@ const styles = StyleSheet.create({
     paddingTop: 24,
     paddingBottom: 32,
   },
+  kycBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 20,
+  },
+  kycBannerPending: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#F59E0B',
+  },
+  kycBannerRejected: {
+    backgroundColor: '#FEE2E2',
+    borderColor: colors.danger,
+  },
+  kycBannerText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 12,
+  },
+  kycBannerTextPending: {
+    color: '#92400E',
+  },
+  kycBannerTextRejected: {
+    color: colors.danger,
+  },
   quickActionsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -399,6 +508,39 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 14,
     color: colors.heading,
+  },
+  permissionsCard: {
+    borderRadius: 16,
+    marginBottom: 20,
+  },
+  permissionsTitle: {
+    fontWeight: '700',
+    color: colors.heading,
+    marginBottom: 8,
+  },
+  permissionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  permissionLabel: {
+    fontWeight: '600',
+    color: colors.heading,
+    fontSize: 14,
+    marginLeft: 12,
+  },
+  permissionLabelBlocked: {
+    color: colors.muted,
+  },
+  permissionsDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: 12,
+  },
+  permissionsThreshold: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.label,
   },
   transactionsCard: {
     borderRadius: 16,

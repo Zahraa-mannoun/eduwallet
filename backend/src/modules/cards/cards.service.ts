@@ -181,6 +181,22 @@ export async function useCard(input: UseCardInput): Promise<{ transaction: Trans
     'CARD_PAYMENT'
   );
 
+  const parentalControl = await prisma.parentalControl.findFirst({
+    where: { studentUserId: wallet.userId },
+  });
+  if (parentalControl) {
+    const student = await prisma.user.findUnique({
+      where: { id: wallet.userId },
+      select: { fullName: true },
+    });
+    await createNotification(
+      parentalControl.parentUserId,
+      'Card Payment by Student',
+      `Your student ${student?.fullName ?? ''} used their virtual card: ${input.amount} ${input.currency} on ${input.category.toLowerCase()}.`,
+      'STUDENT_CARD_PAYMENT'
+    );
+  }
+
   await runAllChecks(transaction);
 
   return { transaction };

@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import QRCode from 'react-native-qrcode-svg';
 import { Button, IconButton, Snackbar, Text, TextInput } from 'react-native-paper';
+import KYCGate from '../components/KYCGate';
 import { useWallet } from '../context/WalletContext';
 import { colors } from '../theme/colors';
 import type { RootStackScreenProps } from '../navigation/types';
@@ -42,6 +43,7 @@ export default function ReceiveMoneyScreen({ navigation }: RootStackScreenProps<
   };
 
   return (
+    <KYCGate>
     <SafeAreaView style={styles.flex} edges={['top']}>
       <View style={styles.header}>
         <IconButton icon="arrow-left" onPress={() => navigation.goBack()} style={styles.backButton} />
@@ -115,6 +117,7 @@ export default function ReceiveMoneyScreen({ navigation }: RootStackScreenProps<
         {snackbarMessage ?? ''}
       </Snackbar>
     </SafeAreaView>
+    </KYCGate>
   );
 }
 

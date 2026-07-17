@@ -11,6 +11,7 @@ import {
 import {
   approveTransaction,
   getLinkedStudents,
+  getMyPermissions,
   getPendingApprovals,
   linkStudent,
   rejectTransaction,
@@ -150,6 +151,16 @@ export async function getLinkedStudentsHandler(request: FastifyRequest, reply: F
     const authUser = requireAuthUser(request);
     const students = await getLinkedStudents(authUser.id);
     return reply.status(200).send(successResponse(students));
+  } catch (error) {
+    return handleParentalError(request, reply, error);
+  }
+}
+
+export async function getMyPermissionsHandler(request: FastifyRequest, reply: FastifyReply) {
+  try {
+    const authUser = requireAuthUser(request);
+    const permissions = await getMyPermissions(authUser.id);
+    return reply.status(200).send(successResponse(permissions));
   } catch (error) {
     return handleParentalError(request, reply, error);
   }

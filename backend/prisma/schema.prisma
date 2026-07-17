@@ -50,7 +50,6 @@ enum DocumentVerificationStatus {
   VERIFIED
 }
 
-
 enum FraudAlertType {
   CIRCULAR
   VELOCITY
@@ -158,10 +157,10 @@ model BudgetCategory {
 }
 
 model ParentalControl {
-  id                String                 @id @default(uuid())
+  id                String                @id @default(uuid())
   parentUserId      String
   studentUserId     String
-  approvalThreshold Decimal                @db.Decimal(12, 2)
+  approvalThreshold Decimal               @db.Decimal(12, 2)
   categories        TransactionCategory[]
 
   parent  User @relation("ParentControls", fields: [parentUserId], references: [id])
@@ -172,17 +171,18 @@ model ParentalControl {
 }
 
 model AcademicDocument {
-  id                 String                      @id @default(uuid())
+  id                 String                     @id @default(uuid())
   userId             String
   fileName           String
   fileType           String?
   fileSize           Int?
+  filePath           String?
   documentType       String?
   documentName       String?
   sha256Hash         String?
   blockchainTxHash   String?
-  verificationStatus DocumentVerificationStatus  @default(STORED)
-  createdAt          DateTime                    @default(now())
+  verificationStatus DocumentVerificationStatus @default(STORED)
+  createdAt          DateTime                   @default(now())
 
   user User @relation(fields: [userId], references: [id])
 
@@ -191,12 +191,13 @@ model AcademicDocument {
 }
 
 model FraudAlert {
-  id            String         @id @default(uuid())
-  transactionId String
-  alertType     FraudAlertType
-  severity      FraudSeverity
-  resolved      Boolean        @default(false)
-  createdAt     DateTime       @default(now())
+  id             String         @id @default(uuid())
+  transactionId  String
+  alertType      FraudAlertType
+  severity       FraudSeverity
+  resolved       Boolean        @default(false)
+  resolutionNote String?
+  createdAt      DateTime       @default(now())
 
   transaction Transaction @relation(fields: [transactionId], references: [id])
 

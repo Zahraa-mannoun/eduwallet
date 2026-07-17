@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { authenticate } from '../../middleware/authenticate';
 import { requireRole } from '../../middleware/requireRole';
 import {
+  getDocumentFileHandler,
   getKYCStatusHandler,
   getMyDocumentsHandler,
   getPendingKYCHandler,
@@ -17,4 +18,9 @@ export default async function kycRoutes(fastify: FastifyInstance): Promise<void>
   fastify.get('/documents', getMyDocumentsHandler);
   fastify.post('/review', { preHandler: requireRole('ADMIN') }, reviewKYCHandler);
   fastify.get('/pending', { preHandler: requireRole('ADMIN') }, getPendingKYCHandler);
+  fastify.get(
+    '/document/:documentId/file',
+    { preHandler: requireRole('ADMIN') },
+    getDocumentFileHandler
+  );
 }

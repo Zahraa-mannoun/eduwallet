@@ -18,9 +18,10 @@ import QRCode from 'react-native-qrcode-svg';
 import type { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { AcademicDocument } from '../types/api';
 import IconBadge from '../components/IconBadge';
+import KYCGate from '../components/KYCGate';
 import { colors } from '../theme/colors';
 import * as blockchainService from '../services/blockchainService';
-import { ApiError } from '../services/api';
+import { API_BASE_URL, ApiError } from '../services/api';
 import type { RootStackScreenProps } from '../navigation/types';
 
 type DocumentType = 'DEGREE' | 'TRANSCRIPT' | 'CERTIFICATE';
@@ -128,6 +129,7 @@ export default function BlockchainVaultScreen({
   };
 
   return (
+    <KYCGate>
     <SafeAreaView style={styles.flex} edges={['top']}>
       <View style={styles.header}>
         <IconButton icon="arrow-left" onPress={() => navigation.goBack()} style={styles.backButton} />
@@ -156,7 +158,9 @@ export default function BlockchainVaultScreen({
           documents.map((document) => {
             const type = (document.documentType ?? 'CERTIFICATE') as DocumentType;
             const isVerified = verifiedIds.has(document.id);
-            const qrValue = document.sha256Hash ? `eduwallet://verify?hash=${document.sha256Hash}` : '';
+            const qrValue = document.sha256Hash
+              ? `${API_BASE_URL}/blockchain/verify/${document.sha256Hash}`
+              : '';
 
             return (
               <Card key={document.id} style={styles.documentCard} mode="elevated">
@@ -273,6 +277,7 @@ export default function BlockchainVaultScreen({
         {snackbarMessage ?? ''}
       </Snackbar>
     </SafeAreaView>
+    </KYCGate>
   );
 }
 

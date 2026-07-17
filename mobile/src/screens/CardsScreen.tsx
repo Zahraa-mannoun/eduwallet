@@ -14,6 +14,7 @@ import {
 } from 'react-native-paper';
 import type { NewVirtualCard, TransactionCategory, VirtualCard } from '../types/api';
 import IconBadge from '../components/IconBadge';
+import KYCGate from '../components/KYCGate';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryDefinition, BudgetCategoryKey } from '../constants/budgetCategories';
 import { colors } from '../theme/colors';
@@ -108,6 +109,7 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
   };
 
   return (
+    <KYCGate>
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.header}>
         <Text variant="headlineSmall" style={styles.headerTitle}>
@@ -277,6 +279,7 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
         {snackbarMessage}
       </Snackbar>
     </SafeAreaView>
+    </KYCGate>
   );
 }
 

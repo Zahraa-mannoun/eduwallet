@@ -192,6 +192,30 @@ export async function rejectTransaction(
   return updatedTransaction;
 }
 
+export type MyPermissions = {
+  allowedCategories: ParentalControl['categories'];
+  approvalThreshold: ParentalControl['approvalThreshold'];
+  parentName: string;
+};
+
+export async function getMyPermissions(studentUserId: string): Promise<MyPermissions | null> {
+  const link = await prisma.parentalControl.findFirst({ where: { studentUserId } });
+  if (!link) {
+    return null;
+  }
+
+  const parent = await prisma.user.findUnique({
+    where: { id: link.parentUserId },
+    select: { fullName: true },
+  });
+
+  return {
+    allowedCategories: link.categories,
+    approvalThreshold: link.approvalThreshold,
+    parentName: parent?.fullName ?? 'Parent',
+  };
+}
+
 export type LinkedStudent = {
   student: Omit<User, 'password'>;
   link: ParentalControl;

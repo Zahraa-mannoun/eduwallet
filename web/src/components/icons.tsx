@@ -1,0 +1,81 @@
+type IconProps = { className?: string };
+
+const base = 'h-5 w-5';
+
+export function IconDashboard({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>
+      <rect x="3" y="3" width="7" height="9" rx="1.5" />
+      <rect x="14" y="3" width="7" height="5" rx="1.5" />
+      <rect x="14" y="12" width="7" height="9" rx="1.5" />
+      <rect x="3" y="16" width="7" height="5" rx="1.5" />
+    </svg>
+  );
+}
+
+export function IconUsers({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>
+      <circle cx="9" cy="8" r="3.2" />
+      <path d="M2.5 20c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5" />
+      <circle cx="17.5" cy="8.5" r="2.5" />
+      <path d="M15.8 13.8c2.9.4 5.2 2.9 5.2 6.2" />
+    </svg>
+  );
+}
+
+export function IconTransactions({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>
+      <path d="M4 7h13l-3-3M20 17H7l3 3" />
+    </svg>
+  );
+}
+
+export function IconLink({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>
+      <path d="M9 15l6-6" />
+      <path d="M11 6.5l1-1a3.5 3.5 0 015 5l-1 1" />
+      <path d="M13 17.5l-1 1a3.5 3.5 0 01-5-5l1-1" />
+    </svg>
+  );
+}
+
+export function IconShield({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>
+      <path d="M12 3l7 3v6c0 4.5-3 7.7-7 9-4-1.3-7-4.5-7-9V6l7-3z" />
+      <path d="M9 12l2 2 4-4" />
+    </svg>
+  );
+}
+
+export function IconAlert({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>
+      <path d="M12 3.5L2.5 20h19L12 3.5z" />
+      <path d="M12 10v4" />
+      <path d="M12 17h.01" />
+    </svg>
+  );
+}
+
+export function IconGraduation({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>
+      <path d="M2 9l10-5 10 5-10 5-10-5z" />
+      <path d="M6 11v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5" />
+    </svg>
+  );
+}
+
+export function IconLogout({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>
+      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+      <path d="M16 17l5-5-5-5" />
+      <path d="M21 12H9" />
+    </svg>
+  );
+}

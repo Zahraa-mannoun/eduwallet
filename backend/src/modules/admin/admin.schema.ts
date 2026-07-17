@@ -28,6 +28,9 @@ export const getAllTransactionsSchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
   status: z.enum(['PENDING', 'AUTO_APPROVED', 'APPROVED', 'REJECTED', 'EMERGENCY']).optional(),
+  category: z
+    .enum(['TUITION', 'BOOKS', 'FOOD', 'TRANSPORT', 'SOFTWARE', 'RENT', 'PERSONAL', 'GENERAL'])
+    .optional(),
   flagged: booleanQueryParam.optional(),
 });
 
@@ -50,3 +53,16 @@ export const getFraudAlertsSchema = z.object({
 });
 
 export type GetFraudAlertsInput = z.infer<typeof getFraudAlertsSchema>;
+
+export const addFundsParamsSchema = z.object({
+  userId: z.string().uuid('userId must be a valid UUID'),
+});
+
+export type AddFundsParams = z.infer<typeof addFundsParamsSchema>;
+
+export const addFundsSchema = z.object({
+  amount: z.number().positive('Amount must be greater than 0'),
+  currency: z.enum(['USD', 'EUR', 'LBP']),
+});
+
+export type AddFundsInput = z.infer<typeof addFundsSchema>;

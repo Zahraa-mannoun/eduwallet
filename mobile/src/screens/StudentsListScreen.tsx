@@ -6,13 +6,18 @@ import {
   Avatar,
   Button,
   Card,
+  Chip,
   Dialog,
+  HelperText,
+  IconButton,
   Portal,
   Snackbar,
   Text,
   TextInput,
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import type { TransactionCategory } from '../types/api';
+import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import { colors } from '../theme/colors';
 import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
 import * as parentalService from '../services/parentalService';
@@ -20,6 +25,62 @@ import type { LinkedStudent } from '../services/parentalService';
 import { ApiError } from '../services/api';
 import { getInitials } from '../utils/getInitials';
 import type { ParentTabScreenProps } from '../navigation/types';
+
+const CATEGORY_EXPLANATION =
+  'Select which categories your student can spend locked funds in. They cannot spend in unselected categories.';
+
+function categoryLabel(category: TransactionCategory): string {
+  return (
+    BUDGET_CATEGORIES.find((definition) => definition.key.toUpperCase() === category)?.label ??
+    category
+  );
+}
+
+function formatPermissionsSummary(link: LinkedStudent['link']): string {
+  const categories =
+    link.categories.length > 0 ? link.categories.map(categoryLabel).join(', ') : 'No categories';
+  const threshold =
+    Number(link.approvalThreshold) > 0
+      ? `Free up to $${Number(link.approvalThreshold).toFixed(0)}`
+      : 'No approval limit';
+  return `${categories} · ${threshold}`;
+}
+
+function toggleInSet<T>(set: Set<T>, value: T): Set<T> {
+  const next = new Set(set);
+  if (next.has(value)) {
+    next.delete(value);
+  } else {
+    next.add(value);
+  }
+  return next;
+}
+
+type CategoryChipsSelectorProps = Readonly<{
+  selected: Set<TransactionCategory>;
+  onToggle: (category: TransactionCategory) => void;
+}>;
+
+function CategoryChipsSelector({ selected, onToggle }: CategoryChipsSelectorProps) {
+  return (
+    <View style={styles.categoryChipsRow}>
+      {BUDGET_CATEGORIES.map((category) => {
+        const txCategory = category.key.toUpperCase() as TransactionCategory;
+        const isSelected = selected.has(txCategory);
+        return (
+          <Chip
+            key={category.key}
+            selected={isSelected}
+            onPress={() => onToggle(txCategory)}
+            style={styles.categoryChoiceChip}
+          >
+            {category.label}
+          </Chip>
+        );
+      })}
+    </View>
+  );
+}
 
 export default function StudentsListScreen({ navigation }: ParentTabScreenProps<'Students'>) {
   const [students, setStudents] = useState<LinkedStudent[]>([]);
@@ -30,7 +91,13 @@ export default function StudentsListScreen({ navigation }: ParentTabScreenProps<
   const [linkDialogVisible, setLinkDialogVisible] = useState(false);
   const [studentEmail, setStudentEmail] = useState('');
   const [approvalThreshold, setApprovalThreshold] = useState('');
+  const [linkCategories, setLinkCategories] = useState<Set<TransactionCategory>>(new Set());
   const [isLinking, setIsLinking] = useState(false);
+
+  const [settingsStudent, setSettingsStudent] = useState<LinkedStudent | null>(null);
+  const [settingsThreshold, setSettingsThreshold] = useState('');
+  const [settingsCategories, setSettingsCategories] = useState<Set<TransactionCategory>>(new Set());
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -47,12 +114,17 @@ export default function StudentsListScreen({ navigation }: ParentTabScreenProps<
 
   useThrottledFocusEffect(load);
 
-  const canLink = studentEmail.trim().length > 0 && Number(approvalThreshold) > 0 && !isLinking;
+  const canLink =
+    studentEmail.trim().length > 0 &&
+    Number(approvalThreshold) > 0 &&
+    linkCategories.size > 0 &&
+    !isLinking;
 
   const closeLinkDialog = () => {
     setLinkDialogVisible(false);
     setStudentEmail('');
     setApprovalThreshold('');
+    setLinkCategories(new Set());
   };
 
   const handleLinkStudent = async () => {
@@ -62,6 +134,7 @@ export default function StudentsListScreen({ navigation }: ParentTabScreenProps<
       await parentalService.linkStudent({
         studentEmail: studentEmail.trim(),
         approvalThreshold: Number(approvalThreshold),
+        categories: [...linkCategories],
       });
       closeLinkDialog();
       setSnackbarMessage('Student linked successfully.');
@@ -70,6 +143,40 @@ export default function StudentsListScreen({ navigation }: ParentTabScreenProps<
       setSnackbarMessage(err instanceof ApiError ? err.message : 'Could not link that student.');
     } finally {
       setIsLinking(false);
+    }
+  };
+
+  const openSettingsDialog = (item: LinkedStudent) => {
+    setSettingsStudent(item);
+    setSettingsThreshold(
+      Number(item.link.approvalThreshold) > 0 ? item.link.approvalThreshold : ''
+    );
+    setSettingsCategories(new Set(item.link.categories));
+  };
+
+  const closeSettingsDialog = () => {
+    setSettingsStudent(null);
+    setSettingsThreshold('');
+    setSettingsCategories(new Set());
+  };
+
+  const canSaveSettings = settingsCategories.size > 0 && !isSavingSettings;
+
+  const handleSaveSettings = async () => {
+    if (!settingsStudent || !canSaveSettings) return;
+    setIsSavingSettings(true);
+    try {
+      await parentalService.updateSettings(settingsStudent.student.id, {
+        approvalThreshold: settingsThreshold.trim() === '' ? 0 : Number(settingsThreshold),
+        categories: [...settingsCategories],
+      });
+      closeSettingsDialog();
+      setSnackbarMessage('Student settings updated.');
+      await load();
+    } catch (err) {
+      setSnackbarMessage(err instanceof ApiError ? err.message : 'Could not update settings.');
+    } finally {
+      setIsSavingSettings(false);
     }
   };
 
@@ -90,29 +197,42 @@ export default function StudentsListScreen({ navigation }: ParentTabScreenProps<
         {isLoading && students.length === 0 ? (
           <ActivityIndicator color={colors.primary} style={styles.loading} />
         ) : students.length > 0 ? (
-          students.map(({ student, wallets }) => (
-            <TouchableOpacity
-              key={student.id}
-              style={styles.studentRow}
-              onPress={() => navigation.navigate('Home')}
-            >
-              <Avatar.Text
-                size={48}
-                label={getInitials(student.fullName)}
-                style={styles.avatar}
-                color={colors.onPrimary}
-              />
-              <View style={styles.studentMiddle}>
-                <Text style={styles.studentName}>{student.fullName}</Text>
-                <Text style={styles.studentUniversity}>{student.email}</Text>
-              </View>
-              <Text style={styles.studentBalance}>
-                {wallets.length > 0
-                  ? `$${Number(wallets[0].balance).toFixed(2)}`
-                  : '—'}
-              </Text>
-            </TouchableOpacity>
-          ))
+          students.map((item) => {
+            const { student, wallets } = item;
+            return (
+              <TouchableOpacity
+                key={student.id}
+                style={styles.studentRow}
+                onPress={() => navigation.navigate('Home')}
+              >
+                <Avatar.Text
+                  size={48}
+                  label={getInitials(student.fullName)}
+                  style={styles.avatar}
+                  color={colors.onPrimary}
+                />
+                <View style={styles.studentMiddle}>
+                  <Text style={styles.studentName}>{student.fullName}</Text>
+                  <Text style={styles.studentUniversity}>{student.email}</Text>
+                  <Text style={styles.studentPermissions} numberOfLines={1}>
+                    {formatPermissionsSummary(item.link)}
+                  </Text>
+                </View>
+                <View style={styles.studentRight}>
+                  <Text style={styles.studentBalance}>
+                    {wallets.length > 0 ? `$${Number(wallets[0].balance).toFixed(2)}` : '—'}
+                  </Text>
+                  <IconButton
+                    icon="cog-outline"
+                    size={18}
+                    iconColor={colors.onPrimary}
+                    style={styles.settingsButton}
+                    onPress={() => openSettingsDialog(item)}
+                  />
+                </View>
+              </TouchableOpacity>
+            );
+          })
         ) : (
           <Card style={styles.emptyCard} mode="elevated">
             <Card.Content style={styles.emptyState}>
@@ -153,7 +273,15 @@ export default function StudentsListScreen({ navigation }: ParentTabScreenProps<
               keyboardType="decimal-pad"
               outlineColor={colors.border}
               activeOutlineColor={colors.primary}
+              style={styles.dialogInput}
             />
+
+            <Text style={styles.fieldLabel}>Allowed Spending Categories</Text>
+            <CategoryChipsSelector
+              selected={linkCategories}
+              onToggle={(category) => setLinkCategories((prev) => toggleInSet(prev, category))}
+            />
+            <Text style={styles.categoryExplanation}>{CATEGORY_EXPLANATION}</Text>
 
             <View style={styles.thresholdInfoBox}>
               <Text style={styles.thresholdInfoTitle}>What is Approval Threshold?</Text>
@@ -174,6 +302,43 @@ export default function StudentsListScreen({ navigation }: ParentTabScreenProps<
             </Button>
             <Button onPress={handleLinkStudent} disabled={!canLink}>
               {isLinking ? <ActivityIndicator size={16} color={colors.primary} /> : 'Link'}
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        <Dialog visible={settingsStudent !== null} onDismiss={closeSettingsDialog}>
+          <Dialog.Title>
+            {settingsStudent ? `${settingsStudent.student.fullName}'s Settings` : 'Student Settings'}
+          </Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              mode="outlined"
+              label="Approval threshold ($)"
+              value={settingsThreshold}
+              onChangeText={(text: string) => setSettingsThreshold(text.replace(/[^0-9.]/g, ''))}
+              keyboardType="decimal-pad"
+              outlineColor={colors.border}
+              activeOutlineColor={colors.primary}
+              style={styles.dialogInputTight}
+            />
+            <HelperText type="info" visible style={styles.thresholdHelperText}>
+              Leave empty for no approval limit. Only applies to general unlocked transfers.
+              Education-locked funds are automatically approved when spent correctly.
+            </HelperText>
+
+            <Text style={styles.fieldLabel}>Allowed Spending Categories</Text>
+            <CategoryChipsSelector
+              selected={settingsCategories}
+              onToggle={(category) => setSettingsCategories((prev) => toggleInSet(prev, category))}
+            />
+            <Text style={styles.categoryExplanation}>{CATEGORY_EXPLANATION}</Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={closeSettingsDialog} disabled={isSavingSettings}>
+              Cancel
+            </Button>
+            <Button onPress={handleSaveSettings} disabled={!canSaveSettings}>
+              {isSavingSettings ? <ActivityIndicator size={16} color={colors.primary} /> : 'Save'}
             </Button>
           </Dialog.Actions>
         </Dialog>
@@ -240,10 +405,22 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.8)',
     marginTop: 2,
   },
+  studentPermissions: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.6)',
+    marginTop: 3,
+  },
+  studentRight: {
+    alignItems: 'flex-end',
+  },
   studentBalance: {
     fontWeight: '700',
     color: colors.onPrimary,
     fontSize: 15,
+  },
+  settingsButton: {
+    margin: 0,
+    marginTop: 2,
   },
   emptyCard: {
     borderRadius: 16,
@@ -280,6 +457,34 @@ const styles = StyleSheet.create({
   },
   dialogInput: {
     marginBottom: 12,
+  },
+  dialogInputTight: {
+    marginBottom: 0,
+  },
+  thresholdHelperText: {
+    marginBottom: 12,
+    paddingHorizontal: 0,
+  },
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.label,
+    marginBottom: 8,
+  },
+  categoryChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  categoryChoiceChip: {
+    marginRight: 4,
+    marginBottom: 4,
+  },
+  categoryExplanation: {
+    fontSize: 12,
+    color: colors.muted,
+    lineHeight: 17,
+    marginTop: 8,
   },
   thresholdInfoBox: {
     backgroundColor: colors.surface,

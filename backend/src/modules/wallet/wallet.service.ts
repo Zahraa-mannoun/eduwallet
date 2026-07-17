@@ -114,7 +114,8 @@ export async function transfer(
       );
     }
 
-    requiresApproval = isGeneral && input.amount > Number(parentalControl.approvalThreshold);
+    const threshold = Number(parentalControl.approvalThreshold);
+    requiresApproval = isGeneral && threshold > 0 && input.amount > threshold;
   }
 
   let transaction: Transaction;
@@ -183,6 +184,19 @@ export async function transfer(
       `You received ${input.amount} ${input.currency} for ${input.category.toLowerCase()}.`,
       'TRANSFER_RECEIVED'
     );
+
+    if (parentalControl) {
+      const student = await prisma.user.findUnique({
+        where: { id: fromUserId },
+        select: { fullName: true },
+      });
+      await createNotification(
+        parentalControl.parentUserId,
+        'Student Spending',
+        `Your student ${student?.fullName ?? ''} spent ${input.amount} ${input.currency} on ${input.category.toLowerCase()}.`,
+        'STUDENT_SPENDING'
+      );
+    }
   }
 
   await runAllChecks(transaction);

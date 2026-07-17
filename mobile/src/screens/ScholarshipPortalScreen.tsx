@@ -1,29 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, TextInput as NativeTextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ActivityIndicator, Avatar, Button, Card, Checkbox, Chip, IconButton, Snackbar, Text } from 'react-native-paper';
+import { ActivityIndicator, Avatar, Button, Card, Checkbox, Chip, Snackbar, Text } from 'react-native-paper';
 import type { Transaction, TransactionCategory, User } from '../types/api';
 import CategorySelectorGrid from '../components/CategorySelectorGrid';
 import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryDefinition, BudgetCategoryKey } from '../constants/budgetCategories';
-import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme/colors';
 import { getInitials } from '../utils/getInitials';
 import * as scholarshipService from '../services/scholarshipService';
 import * as walletService from '../services/walletService';
 import { ApiError } from '../services/api';
-import type { RootStackScreenProps } from '../navigation/types';
 
 const categoryLookup = new Map(BUDGET_CATEGORIES.map((category) => [category.key, category]));
 
 const formatDate = (isoDate: string) =>
   new Date(isoDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 
-export default function ScholarshipPortalScreen({
-  navigation,
-}: Readonly<RootStackScreenProps<'InstitutionMain'>>) {
-  const { logout } = useAuth();
+export default function ScholarshipPortalScreen() {
   const [students, setStudents] = useState<User[]>([]);
   const [disbursements, setDisbursements] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -58,11 +53,6 @@ export default function ScholarshipPortalScreen({
   useEffect(() => {
     void load();
   }, [load]);
-
-  const handleLogout = () => {
-    logout();
-    navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
-  };
 
   const toggleStudent = (id: string) => {
     setSelectedIds((prev) => {
@@ -126,7 +116,6 @@ export default function ScholarshipPortalScreen({
         <Text variant="headlineSmall" style={styles.headerTitle}>
           Scholarship Portal
         </Text>
-        <IconButton icon="logout" iconColor={colors.danger} onPress={handleLogout} />
       </View>
 
       <ScrollView

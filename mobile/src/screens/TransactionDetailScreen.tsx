@@ -1,19 +1,52 @@
+import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, Share, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, Chip, IconButton, Text } from 'react-native-paper';
+import { ActivityIndicator, Button, Chip, IconButton, Text } from 'react-native-paper';
+import type { Transaction } from '../types/api';
 import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
-import { MOCK_TRANSACTIONS, TRANSACTION_STATUS_META } from '../constants/mockTransactions';
+import type { BudgetCategoryKey } from '../constants/budgetCategories';
+import { TRANSACTION_STATUS_META } from '../constants/mockTransactions';
+import { useWallet } from '../context/WalletContext';
 import { colors } from '../theme/colors';
+import * as walletService from '../services/walletService';
+import { ApiError } from '../services/api';
 import type { RootStackScreenProps } from '../navigation/types';
 
 const categoryLookup = new Map(BUDGET_CATEGORIES.map((category) => [category.key, category]));
+
+function transactionTitle(transaction: Transaction): string {
+  if (transaction.note) return transaction.note;
+  if (!transaction.fromWalletId) return 'Wallet Top-up';
+  const category = categoryLookup.get(transaction.category.toLowerCase() as BudgetCategoryKey);
+  return category?.label ?? 'Transfer';
+}
 
 export default function TransactionDetailScreen({
   navigation,
   route,
 }: RootStackScreenProps<'TransactionDetail'>) {
-  const transaction = MOCK_TRANSACTIONS.find((tx) => tx.id === route.params.transactionId);
+  const { wallet } = useWallet();
+  const [transaction, setTransaction] = useState<Transaction | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await walletService.getTransactionById(route.params.transactionId);
+      setTransaction(result);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to load this transaction.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [route.params.transactionId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const header = (
     <View style={styles.header}>
@@ -24,21 +57,31 @@ export default function TransactionDetailScreen({
     </View>
   );
 
-  if (!transaction) {
+  if (isLoading && !transaction) {
+    return (
+      <SafeAreaView style={styles.flex} edges={['top']}>
+        {header}
+        <ActivityIndicator color={colors.primary} style={styles.loading} />
+      </SafeAreaView>
+    );
+  }
+
+  if (error || !transaction) {
     return (
       <SafeAreaView style={styles.flex} edges={['top']}>
         {header}
         <View style={styles.notFound}>
-          <Text style={styles.notFoundText}>Transaction not found.</Text>
+          <Text style={styles.notFoundText}>{error ?? 'Transaction not found.'}</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  const category = categoryLookup.get(transaction.category);
+  const category = categoryLookup.get(transaction.category.toLowerCase() as BudgetCategoryKey);
   const statusMeta = TRANSACTION_STATUS_META[transaction.status];
-  const isReceived = transaction.type === 'RECEIVED';
-  const dateLabel = new Date(transaction.date).toLocaleString([], {
+  const isReceived = wallet !== null && transaction.toWalletId === wallet.id;
+  const amount = Number(transaction.amount);
+  const dateLabel = new Date(transaction.createdAt).toLocaleString([], {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
@@ -50,7 +93,7 @@ export default function TransactionDetailScreen({
   const handleShare = async () => {
     try {
       await Share.share({
-        message: `EduWallet receipt\n${transaction.id}\n${isReceived ? 'Received' : 'Sent'} $${transaction.amount.toFixed(2)} ${isReceived ? 'from' : 'to'} ${transaction.counterparty}\nCategory: ${category?.label ?? 'Other'}\nStatus: ${statusMeta.label}\nDate: ${dateLabel}`,
+        message: `EduWallet receipt\n${transaction.id}\n${isReceived ? 'Received' : 'Sent'} $${amount.toFixed(2)}\nCategory: ${category?.label ?? 'Other'}\nStatus: ${statusMeta.label}\nDate: ${dateLabel}`,
       });
     } catch {
       // Sharing unsupported on this platform — no-op.
@@ -70,11 +113,9 @@ export default function TransactionDetailScreen({
             iconSize={36}
           />
           <Text style={[styles.amount, { color: isReceived ? colors.accent : colors.heading }]}>
-            {isReceived ? '+' : '-'}${transaction.amount.toFixed(2)}
+            {isReceived ? '+' : '-'}${amount.toFixed(2)}
           </Text>
-          <Text style={styles.counterparty}>
-            {isReceived ? 'From' : 'To'} {transaction.counterparty}
-          </Text>
+          <Text style={styles.counterparty}>{transactionTitle(transaction)}</Text>
           <Chip
             compact
             style={[styles.statusChip, { backgroundColor: `${statusMeta.color}1F` }]}
@@ -87,7 +128,7 @@ export default function TransactionDetailScreen({
         <View style={styles.receiptCard}>
           <View style={styles.receiptRow}>
             <Text style={styles.receiptLabel}>Transaction ID</Text>
-            <Text style={styles.receiptValue}>{transaction.id}</Text>
+            <Text style={styles.receiptValue}>{transaction.id.slice(0, 8).toUpperCase()}</Text>
           </View>
           <View style={styles.receiptRow}>
             <Text style={styles.receiptLabel}>Type</Text>
@@ -147,13 +188,18 @@ const styles = StyleSheet.create({
     color: colors.heading,
     marginLeft: 4,
   },
+  loading: {
+    marginTop: 40,
+  },
   notFound: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 24,
   },
   notFoundText: {
     color: colors.muted,
+    textAlign: 'center',
   },
   content: {
     paddingHorizontal: 20,

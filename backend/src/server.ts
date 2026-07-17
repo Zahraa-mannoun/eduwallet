@@ -23,7 +23,9 @@ import { errorResponse } from './utils/apiResponse';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-me';
-const CORS_ORIGIN = process.env.CORS_ORIGIN ?? true;
+const CORS_ORIGIN = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map((origin) => origin.trim())
+  : true;
 
 const app = Fastify({ logger: true });
 

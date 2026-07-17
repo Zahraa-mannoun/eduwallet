@@ -3,6 +3,8 @@ import { AppError } from '../../utils/AppError';
 import { errorResponse, successResponse } from '../../utils/apiResponse';
 import { getPendingKYC } from '../kyc/kyc.service';
 import {
+  addFundsParamsSchema,
+  addFundsSchema,
   fraudAlertIdParamsSchema,
   getAllTransactionsSchema,
   getFraudAlertsSchema,
@@ -12,9 +14,11 @@ import {
   userIdParamsSchema,
 } from './admin.schema';
 import {
+  addFunds,
   getAllTransactions,
   getAuditLog,
   getFraudAlerts,
+  getRelationships,
   getSystemStats,
   getUserById,
   getUsers,
@@ -203,6 +207,43 @@ export async function getAuditLogHandler(request: FastifyRequest, reply: Fastify
   try {
     const log = await getAuditLog();
     return reply.status(200).send(successResponse(log));
+  } catch (error) {
+    return handleAdminError(request, reply, error);
+  }
+}
+
+export async function addFundsHandler(request: FastifyRequest, reply: FastifyReply) {
+  const paramsParsed = addFundsParamsSchema.safeParse(request.params);
+  if (!paramsParsed.success) {
+    return reply
+      .status(400)
+      .send(
+        errorResponse(paramsParsed.error.issues[0]?.message ?? 'Invalid input', 'VALIDATION_ERROR')
+      );
+  }
+
+  const bodyParsed = addFundsSchema.safeParse(request.body);
+  if (!bodyParsed.success) {
+    return reply
+      .status(400)
+      .send(
+        errorResponse(bodyParsed.error.issues[0]?.message ?? 'Invalid input', 'VALIDATION_ERROR')
+      );
+  }
+
+  try {
+    const authUser = requireAuthUser(request);
+    const wallet = await addFunds(authUser.id, paramsParsed.data.userId, bodyParsed.data);
+    return reply.status(200).send(successResponse(wallet));
+  } catch (error) {
+    return handleAdminError(request, reply, error);
+  }
+}
+
+export async function getRelationshipsHandler(request: FastifyRequest, reply: FastifyReply) {
+  try {
+    const relationships = await getRelationships();
+    return reply.status(200).send(successResponse(relationships));
   } catch (error) {
     return handleAdminError(request, reply, error);
   }

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { authenticate } from '../../middleware/authenticate';
+import { requireVerifiedKYC } from '../../middleware/requireVerifiedKYC';
 import {
   getDocumentByIdHandler,
   getMyDocumentsHandler,
@@ -9,7 +10,7 @@ import {
 } from './blockchain.controller';
 
 export default async function blockchainRoutes(fastify: FastifyInstance): Promise<void> {
-  fastify.post('/upload', { preHandler: authenticate }, uploadDocumentHandler);
+  fastify.post('/upload', { preHandler: [authenticate, requireVerifiedKYC] }, uploadDocumentHandler);
   fastify.get('/documents', { preHandler: authenticate }, getMyDocumentsHandler);
   fastify.get('/documents/:id', { preHandler: authenticate }, getDocumentByIdHandler);
 

@@ -13,9 +13,9 @@ import KYCScreen from '../screens/KYCScreen';
 import BlockchainVaultScreen from '../screens/BlockchainVaultScreen';
 import AIAssistantScreen from '../screens/AIAssistantScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
-import ScholarshipPortalScreen from '../screens/ScholarshipPortalScreen';
 import StudentMainNavigator from './StudentMainNavigator';
 import ParentMainNavigator from './ParentMainNavigator';
+import InstitutionMainNavigator from './InstitutionMainNavigator';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme/colors';
 import type { RootStackParamList } from './types';
@@ -49,7 +49,7 @@ export default function AppNavigator() {
             <Stack.Screen name="ParentMain" component={ParentMainNavigator} />
           )}
           {user.userType === 'INSTITUTION' && (
-            <Stack.Screen name="InstitutionMain" component={ScholarshipPortalScreen} />
+            <Stack.Screen name="InstitutionMain" component={InstitutionMainNavigator} />
           )}
           <Stack.Screen name="SendMoney" component={SendMoneyScreen} />
           <Stack.Screen name="ReceiveMoney" component={ReceiveMoneyScreen} />

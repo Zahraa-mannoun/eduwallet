@@ -24,6 +24,21 @@ export async function linkStudent(input: LinkStudentInput): Promise<ParentalCont
   });
 }
 
+export type UpdateSettingsInput = {
+  approvalThreshold: number;
+  categories: TransactionCategory[];
+};
+
+export async function updateSettings(
+  studentId: string,
+  input: UpdateSettingsInput
+): Promise<ParentalControl> {
+  return apiRequest<ParentalControl>(`/parental/settings/${studentId}`, {
+    method: 'PUT',
+    body: input,
+  });
+}
+
 export async function getPendingApprovals(): Promise<Transaction[]> {
   return apiRequest<Transaction[]>('/parental/approvals');
 }
@@ -40,4 +55,14 @@ export async function rejectTransaction(
     method: 'POST',
     body: { transactionId, reason },
   });
+}
+
+export type MyPermissions = {
+  allowedCategories: TransactionCategory[];
+  approvalThreshold: string;
+  parentName: string;
+};
+
+export async function getMyPermissions(): Promise<MyPermissions | null> {
+  return apiRequest<MyPermissions | null>('/parental/my-permissions');
 }
