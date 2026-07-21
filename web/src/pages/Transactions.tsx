@@ -132,7 +132,15 @@ export function Transactions() {
             {!isLoading &&
               transactions.map((tx) => (
                 <tr key={tx.id}>
-                  <td className="px-4 py-3 text-slate-700">{tx.fromWallet?.user.fullName ?? '—'}</td>
+                  <td className="px-4 py-3 text-slate-700">
+                    {tx.fromWallet ? (
+                      tx.fromWallet.user.fullName
+                    ) : tx.note === 'Admin added funds' ? (
+                      <Badge tone="purple">Admin</Badge>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-slate-700">{tx.toWallet?.user.fullName ?? '—'}</td>
                   <td className="px-4 py-3 font-medium text-slate-900">
                     {formatMoney(tx.amount, tx.currency)}

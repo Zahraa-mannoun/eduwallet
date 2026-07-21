@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
-import type { AcademicDocument, ApiResponse } from '@eduwallet/shared';
+import type { AcademicDocument, ApiResponse, KYCStatus } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
+import { Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
+import { getKycDisplayStatus } from '../lib/kycDisplayStatus';
 import { formatDate } from '../lib/format';
 import type { PendingKYCRow } from '../types/admin';
 
@@ -10,10 +12,22 @@ type KYCStudentRow = {
   userId: string;
   studentName: string;
   studentEmail: string;
+  kycStatus: KYCStatus;
   studentIdDoc: AcademicDocument | null;
   enrollmentDoc: AcademicDocument | null;
+  hasDocuments: boolean;
   submittedAt: string;
 };
+
+type FilterTab = 'ALL' | 'SUBMITTED' | 'NOT_SUBMITTED' | 'VERIFIED' | 'REJECTED';
+
+const FILTER_TABS: { value: FilterTab; label: string }[] = [
+  { value: 'ALL', label: 'All Students' },
+  { value: 'SUBMITTED', label: 'Submitted' },
+  { value: 'NOT_SUBMITTED', label: 'Not Submitted' },
+  { value: 'VERIFIED', label: 'Verified' },
+  { value: 'REJECTED', label: 'Rejected' },
+];
 
 function toStudentRow(user: PendingKYCRow): KYCStudentRow {
   const studentIdDoc = user.documents.find((doc) => doc.documentType === 'STUDENT_ID') ?? null;
@@ -27,14 +41,77 @@ function toStudentRow(user: PendingKYCRow): KYCStudentRow {
     userId: user.id,
     studentName: user.fullName,
     studentEmail: user.email,
+    kycStatus: user.kycStatus,
     studentIdDoc,
     enrollmentDoc,
+    hasDocuments: user.documents.length > 0,
     submittedAt,
   };
 }
 
+type KYCActionState = {
+  approveDisabled: boolean;
+  rejectDisabled: boolean;
+  approveTooltip?: string;
+  rejectTooltip?: string;
+  helperText?: string;
+};
+
+const NOT_SUBMITTED_TOOLTIP = 'Student has not submitted documents yet';
+
+function getKycActionState(row: KYCStudentRow): KYCActionState {
+  if (row.kycStatus === 'VERIFIED') {
+    const tooltip = 'This student has already been verified — the decision cannot be changed';
+    return {
+      approveDisabled: true,
+      rejectDisabled: true,
+      approveTooltip: tooltip,
+      rejectTooltip: tooltip,
+      helperText: 'KYC approved',
+    };
+  }
+  if (row.kycStatus === 'REJECTED') {
+    const tooltip = 'This student has already been rejected — the decision cannot be changed';
+    return {
+      approveDisabled: true,
+      rejectDisabled: true,
+      approveTooltip: tooltip,
+      rejectTooltip: tooltip,
+      helperText: 'KYC rejected',
+    };
+  }
+  if (!row.hasDocuments) {
+    return {
+      approveDisabled: true,
+      rejectDisabled: true,
+      approveTooltip: NOT_SUBMITTED_TOOLTIP,
+      rejectTooltip: NOT_SUBMITTED_TOOLTIP,
+      helperText: 'No documents uploaded yet',
+    };
+  }
+  return { approveDisabled: false, rejectDisabled: false };
+}
+
+function matchesFilter(row: KYCStudentRow, filter: FilterTab): boolean {
+  switch (filter) {
+    case 'ALL':
+      return true;
+    case 'SUBMITTED':
+      return row.hasDocuments && row.kycStatus === 'PENDING';
+    case 'NOT_SUBMITTED':
+      return !row.hasDocuments;
+    case 'VERIFIED':
+      return row.kycStatus === 'VERIFIED';
+    case 'REJECTED':
+      return row.kycStatus === 'REJECTED';
+    default:
+      return true;
+  }
+}
+
 export function KYC() {
   const [rows, setRows] = useState<KYCStudentRow[]>([]);
+  const [filter, setFilter] = useState<FilterTab>('ALL');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
@@ -57,6 +134,8 @@ export function KYC() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const visibleRows = useMemo(() => rows.filter((row) => matchesFilter(row, filter)), [rows, filter]);
 
   const viewDocument = async (documentId: string) => {
     try {
@@ -82,6 +161,23 @@ export function KYC() {
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap gap-1">
+        {FILTER_TABS.map((tab) => (
+          <button
+            key={tab.value}
+            type="button"
+            onClick={() => setFilter(tab.value)}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+              filter === tab.value
+                ? 'bg-primary text-white'
+                : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -90,6 +186,7 @@ export function KYC() {
             <tr>
               <th className="px-4 py-3 text-left">Student Name</th>
               <th className="px-4 py-3 text-left">Email</th>
+              <th className="px-4 py-3 text-left">KYC Status</th>
               <th className="px-4 py-3 text-left">Documents</th>
               <th className="px-4 py-3 text-left">Submitted</th>
               <th className="px-4 py-3 text-left">Actions</th>
@@ -98,69 +195,93 @@ export function KYC() {
           <tbody className="divide-y divide-slate-100">
             {isLoading && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-slate-400">
+                <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
                   Loading…
                 </td>
               </tr>
             )}
-            {!isLoading && rows.length === 0 && (
+            {!isLoading && visibleRows.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-slate-400">
-                  No pending KYC submissions
+                <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
+                  No students match this filter
                 </td>
               </tr>
             )}
             {!isLoading &&
-              rows.map((row) => (
+              visibleRows.map((row) => (
                 <tr key={row.userId}>
                   <td className="px-4 py-3 font-medium text-slate-900">{row.studentName}</td>
                   <td className="px-4 py-3 text-slate-600">{row.studentEmail}</td>
                   <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      {row.studentIdDoc ? (
-                        <button
-                          type="button"
-                          onClick={() => void viewDocument(row.studentIdDoc!.id)}
-                          className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                        >
-                          View Student ID
-                        </button>
-                      ) : (
-                        <span className="text-xs text-slate-400">Student ID not uploaded</span>
-                      )}
-                      {row.enrollmentDoc ? (
-                        <button
-                          type="button"
-                          onClick={() => void viewDocument(row.enrollmentDoc!.id)}
-                          className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                        >
-                          View Enrollment Certificate
-                        </button>
-                      ) : (
-                        <span className="text-xs text-slate-400">Enrollment certificate not uploaded</span>
-                      )}
-                    </div>
+                    {(() => {
+                      const status = getKycDisplayStatus(row.kycStatus, row.hasDocuments);
+                      return <Badge tone={status.tone}>{status.label}</Badge>;
+                    })()}
+                  </td>
+                  <td className="px-4 py-3">
+                    {row.hasDocuments ? (
+                      <div className="flex flex-wrap gap-2">
+                        {row.studentIdDoc ? (
+                          <button
+                            type="button"
+                            onClick={() => void viewDocument(row.studentIdDoc!.id)}
+                            className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                          >
+                            View Student ID
+                          </button>
+                        ) : (
+                          <span className="text-xs text-slate-400">Student ID not uploaded</span>
+                        )}
+                        {row.enrollmentDoc ? (
+                          <button
+                            type="button"
+                            onClick={() => void viewDocument(row.enrollmentDoc!.id)}
+                            className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                          >
+                            View Enrollment Certificate
+                          </button>
+                        ) : (
+                          <span className="text-xs text-slate-400">
+                            Enrollment certificate not uploaded
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-400">No documents uploaded yet</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-slate-500">{formatDate(row.submittedAt)}</td>
                   <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={busyUserId === row.userId}
-                        onClick={() => void approve(row)}
-                        className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
-                      >
-                        Approve
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busyUserId === row.userId}
-                        onClick={() => setRejectTarget(row)}
-                        className="rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
-                      >
-                        Reject
-                      </button>
-                    </div>
+                    {(() => {
+                      const actionState = getKycActionState(row);
+                      return (
+                        <div>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              disabled={busyUserId === row.userId || actionState.approveDisabled}
+                              onClick={() => void approve(row)}
+                              title={actionState.approveTooltip}
+                              className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-emerald-50"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busyUserId === row.userId || actionState.rejectDisabled}
+                              onClick={() => setRejectTarget(row)}
+                              title={actionState.rejectTooltip}
+                              className="rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-red-50"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                          {actionState.helperText && (
+                            <p className="mt-1 text-xs text-slate-400">{actionState.helperText}</p>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
                 </tr>
               ))}

@@ -8,23 +8,41 @@ import type { BulkDisburseInput } from './scholarship.schema';
 
 export async function getStudents(): Promise<SafeUser[]> {
   const students = await prisma.user.findMany({
-    where: { userType: 'STUDENT', suspended: false },
+    where: { userType: 'STUDENT', kycStatus: 'VERIFIED', suspended: false },
     orderBy: { fullName: 'asc' },
   });
   return students.map(toSafeUser);
 }
 
+export type SkippedDisbursement = {
+  studentId: string;
+  reason: 'STUDENT_NOT_VERIFIED';
+};
+
 export async function bulkDisburse(
   institutionUserId: string,
   input: BulkDisburseInput
-): Promise<{ transactions: Transaction[]; totalDisbursed: number }> {
+): Promise<{
+  transactions: Transaction[];
+  totalDisbursed: number;
+  skipped: SkippedDisbursement[];
+}> {
   const uniqueStudentIds = [...new Set(input.studentIds)];
 
-  const students = await prisma.user.findMany({
+  const allStudents = await prisma.user.findMany({
     where: { id: { in: uniqueStudentIds }, userType: 'STUDENT' },
   });
-  if (students.length !== uniqueStudentIds.length) {
+  if (allStudents.length !== uniqueStudentIds.length) {
     throw new AppError(400, 'INVALID_STUDENT', 'One or more selected students were not found');
+  }
+
+  const students = allStudents.filter((student) => student.kycStatus === 'VERIFIED');
+  const skipped: SkippedDisbursement[] = allStudents
+    .filter((student) => student.kycStatus !== 'VERIFIED')
+    .map((student) => ({ studentId: student.id, reason: 'STUDENT_NOT_VERIFIED' }));
+
+  if (students.length === 0) {
+    return { transactions: [], totalDisbursed: 0, skipped };
   }
 
   const institutionWallet = await prisma.wallet.findFirst({
@@ -88,5 +106,5 @@ export async function bulkDisburse(
     )
   );
 
-  return { transactions, totalDisbursed };
+  return { transactions, totalDisbursed, skipped };
 }

@@ -57,8 +57,8 @@ export async function submitDocument(
       createNotification(
         admin.id,
         'New KYC Submission',
-        `New KYC submission from ${user.fullName}.`,
-        'KYC_SUBMITTED'
+        `New KYC submission from ${user.fullName}. Please review their documents.`,
+        'KYC_SUBMISSION'
       )
     )
   );
@@ -135,7 +135,7 @@ export async function reviewKYC(adminUserId: string, input: ReviewKYCInput): Pro
 
 export async function getPendingKYC(): Promise<(SafeUser & { documents: AcademicDocument[] })[]> {
   const users = await prisma.user.findMany({
-    where: { kycStatus: 'PENDING' },
+    where: { userType: 'STUDENT' },
     orderBy: { createdAt: 'desc' },
     include: { academicDocuments: { orderBy: { createdAt: 'desc' } } },
   });

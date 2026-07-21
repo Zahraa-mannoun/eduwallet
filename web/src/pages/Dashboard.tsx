@@ -66,13 +66,27 @@ export function Dashboard() {
     count,
   }));
 
+  const pluralize = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`;
+  const adminCount = stats.users.byType.ADMIN ?? 0;
+  const usersSubtitle = [
+    pluralize(stats.users.studentCount, 'student'),
+    pluralize(stats.users.parentCount, 'parent'),
+    pluralize(stats.users.institutionCount, 'institution'),
+    pluralize(adminCount, 'admin'),
+  ].join(', ');
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Total Users" value={stats.users.total} />
+        <StatCard label="Total Users" value={stats.users.total} subtitle={usersSubtitle} />
         <StatCard label="Total Transactions" value={stats.transactions.total} />
         <StatCard label="Active Fraud Alerts" value={stats.fraudAlerts.active} accent="red" />
-        <StatCard label="Pending KYC" value={stats.kyc.pending} accent="yellow" />
+        <StatCard
+          label="Pending KYC"
+          value={stats.kyc.pending}
+          subtitle="Students awaiting review"
+          accent="yellow"
+        />
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">

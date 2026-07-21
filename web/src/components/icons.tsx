@@ -79,3 +79,30 @@ export function IconLogout({ className = base }: IconProps) {
     </svg>
   );
 }
+
+export function IconBuilding({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>
+      <rect x="4" y="3" width="16" height="18" rx="1" />
+      <path d="M8 7h1M12 7h1M16 7h1M8 11h1M12 11h1M16 11h1M8 15h1M12 15h1M16 15h1" />
+      <path d="M10 21v-4h4v4" />
+    </svg>
+  );
+}
+
+export function IconBell({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>
+      <path d="M6 9a6 6 0 1112 0c0 4.5 1.5 6 2 6.5H4c.5-.5 2-2 2-6.5z" />
+      <path d="M10 19.5a2 2 0 004 0" />
+    </svg>
+  );
+}
+
+export function IconChevronDown({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}

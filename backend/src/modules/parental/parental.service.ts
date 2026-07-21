@@ -31,6 +31,13 @@ export async function linkStudent(
   if (student.userType !== 'STUDENT') {
     throw new AppError(400, 'INVALID_STUDENT', 'This account is not a student account');
   }
+  if (student.kycStatus !== 'VERIFIED') {
+    throw new AppError(
+      400,
+      'STUDENT_NOT_VERIFIED',
+      'Student must complete university verification before being linked to a parent account.'
+    );
+  }
 
   const existing = await prisma.parentalControl.findUnique({
     where: { parentUserId_studentUserId: { parentUserId, studentUserId: student.id } },

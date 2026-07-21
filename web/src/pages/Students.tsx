@@ -1,26 +1,23 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import type { ApiResponse, Currency, UserType } from '@eduwallet/shared';
+import type { ApiResponse, KYCStatus } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
-import { Modal } from '../components/Modal';
-import { roleTone, kycTone } from '../lib/badgeTones';
+import { getKycDisplayStatus } from '../lib/kycDisplayStatus';
 import { formatDate } from '../lib/format';
-import { CURRENCIES } from '../types/admin';
 import type { AdminUser } from '../types/admin';
 
-const ROLE_FILTERS: Array<UserType | 'ALL'> = ['ALL', 'STUDENT', 'PARENT', 'INSTITUTION'];
+const KYC_FILTERS: Array<KYCStatus | 'ALL'> = ['ALL', 'VERIFIED', 'PENDING', 'REJECTED'];
 
-export function Users() {
+export function Students() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState<UserType | 'ALL'>('ALL');
+  const [kycFilter, setKycFilter] = useState<KYCStatus | 'ALL'>('ALL');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
-  const [fundsUser, setFundsUser] = useState<AdminUser | null>(null);
 
   const limit = 20;
 
@@ -34,7 +31,8 @@ export function Users() {
         params: {
           page,
           limit,
-          ...(roleFilter !== 'ALL' ? { userType: roleFilter } : {}),
+          userType: 'STUDENT',
+          ...(kycFilter !== 'ALL' ? { kycStatus: kycFilter } : {}),
           ...(search.trim() ? { search: search.trim() } : {}),
         },
       });
@@ -46,7 +44,7 @@ export function Users() {
     } finally {
       setIsLoading(false);
     }
-  }, [page, roleFilter, search]);
+  }, [page, kycFilter, search]);
 
   useEffect(() => {
     void loadUsers();
@@ -100,21 +98,21 @@ export function Users() {
         </form>
 
         <div className="flex gap-1">
-          {ROLE_FILTERS.map((role) => (
+          {KYC_FILTERS.map((status) => (
             <button
-              key={role}
+              key={status}
               type="button"
               onClick={() => {
-                setRoleFilter(role);
+                setKycFilter(status);
                 setPage(1);
               }}
               className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-                roleFilter === role
+                kycFilter === status
                   ? 'bg-primary text-white'
                   : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
               }`}
             >
-              {role}
+              {status}
             </button>
           ))}
         </div>
@@ -128,7 +126,6 @@ export function Users() {
             <tr>
               <th className="px-4 py-3 text-left">Name</th>
               <th className="px-4 py-3 text-left">Email</th>
-              <th className="px-4 py-3 text-left">Role</th>
               <th className="px-4 py-3 text-left">KYC Status</th>
               <th className="px-4 py-3 text-left">Joined</th>
               <th className="px-4 py-3 text-left">Actions</th>
@@ -137,15 +134,15 @@ export function Users() {
           <tbody className="divide-y divide-slate-100">
             {isLoading && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
+                <td colSpan={5} className="px-4 py-6 text-center text-slate-400">
                   Loading…
                 </td>
               </tr>
             )}
             {!isLoading && users.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
-                  No users found
+                <td colSpan={5} className="px-4 py-6 text-center text-slate-400">
+                  No students found
                 </td>
               </tr>
             )}
@@ -160,30 +157,21 @@ export function Users() {
                   </td>
                   <td className="px-4 py-3 text-slate-600">{user.email}</td>
                   <td className="px-4 py-3">
-                    <Badge tone={roleTone[user.userType] ?? 'gray'}>{user.userType}</Badge>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge tone={kycTone[user.kycStatus] ?? 'gray'}>{user.kycStatus}</Badge>
+                    {(() => {
+                      const status = getKycDisplayStatus(user.kycStatus, user.hasDocuments);
+                      return <Badge tone={status.tone}>{status.label}</Badge>;
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-slate-500">{formatDate(user.createdAt)}</td>
                   <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={busyUserId === user.id}
-                        onClick={() => void toggleSuspend(user)}
-                        className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                      >
-                        {user.suspended ? 'Unsuspend' : 'Suspend'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setFundsUser(user)}
-                        className="rounded-md border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary-100"
-                      >
-                        Add Funds
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      disabled={busyUserId === user.id}
+                      onClick={() => void toggleSuspend(user)}
+                      className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      {user.suspended ? 'Unsuspend' : 'Suspend'}
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -193,7 +181,7 @@ export function Users() {
 
       <div className="flex items-center justify-between text-sm text-slate-500">
         <span>
-          Page {page} of {totalPages} ({total} users)
+          Page {page} of {totalPages} ({total} students)
         </span>
         <div className="flex gap-2">
           <button
@@ -214,110 +202,6 @@ export function Users() {
           </button>
         </div>
       </div>
-
-      {fundsUser && (
-        <AddFundsModal
-          user={fundsUser}
-          onClose={() => setFundsUser(null)}
-          onDone={() => {
-            setFundsUser(null);
-            void loadUsers();
-          }}
-        />
-      )}
     </div>
-  );
-}
-
-function AddFundsModal({
-  user,
-  onClose,
-  onDone,
-}: {
-  user: AdminUser;
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const [amount, setAmount] = useState('');
-  const [currency, setCurrency] = useState(user.wallets[0]?.currency ?? 'USD');
-  const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleSubmit = async (event: FormEvent) => {
-    event.preventDefault();
-    const numericAmount = Number(amount);
-    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-      setError('Enter a valid amount greater than 0');
-      return;
-    }
-    setIsSubmitting(true);
-    setError(null);
-    try {
-      await api.patch(`/admin/users/${user.id}/add-funds`, { amount: numericAmount, currency });
-      onDone();
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  return (
-    <Modal title={`Add Funds — ${user.fullName}`} onClose={onClose}>
-      <form className="space-y-4" onSubmit={handleSubmit}>
-        <div>
-          <label htmlFor="amount" className="mb-1 block text-sm font-medium text-slate-700">
-            Amount
-          </label>
-          <input
-            id="amount"
-            type="number"
-            min="0.01"
-            step="0.01"
-            required
-            value={amount}
-            onChange={(event) => setAmount(event.target.value)}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="currency" className="mb-1 block text-sm font-medium text-slate-700">
-            Currency
-          </label>
-          <select
-            id="currency"
-            value={currency}
-            onChange={(event) => setCurrency(event.target.value as Currency)}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          >
-            {CURRENCIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-60"
-          >
-            {isSubmitting ? 'Adding…' : 'Add Funds'}
-          </button>
-        </div>
-      </form>
-    </Modal>
   );
 }

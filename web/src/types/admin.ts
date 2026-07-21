@@ -29,10 +29,21 @@ export type FraudAlertRow = FraudAlert & {
   transaction: TransactionRow;
 };
 
-export type AdminUser = User & { wallets: Wallet[] };
+export type AdminUser = User & {
+  wallets: Wallet[];
+  linkedStudentsCount?: number;
+  disbursementsCount?: number;
+  hasDocuments?: boolean;
+};
 
 export type SystemStats = {
-  users: { total: number; byType: Record<string, number> };
+  users: {
+    total: number;
+    byType: Record<string, number>;
+    studentCount: number;
+    parentCount: number;
+    institutionCount: number;
+  };
   transactions: { total: number; byStatus: Record<string, number>; totalVolume: number };
   fraudAlerts: { active: number };
   kyc: { pending: number };

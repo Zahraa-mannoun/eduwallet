@@ -40,7 +40,12 @@ async function logAdminAction(
 }
 
 export async function getUsers(filters: GetUsersInput): Promise<{
-  users: (SafeUser & { wallets: Wallet[] })[];
+  users: (SafeUser & {
+    wallets: Wallet[];
+    linkedStudentsCount?: number;
+    disbursementsCount?: number;
+    hasDocuments?: boolean;
+  })[];
   total: number;
   page: number;
   limit: number;
@@ -69,9 +74,66 @@ export async function getUsers(filters: GetUsersInput): Promise<{
     prisma.user.count({ where }),
   ]);
 
+  const userIds = usersWithWallets.map((user) => user.id);
+
+  let linkedStudentsCountByParent = new Map<string, number>();
+  if (filters.userType === 'PARENT' && userIds.length > 0) {
+    const grouped = await prisma.parentalControl.groupBy({
+      by: ['parentUserId'],
+      where: { parentUserId: { in: userIds } },
+      _count: true,
+    });
+    linkedStudentsCountByParent = new Map(grouped.map((row) => [row.parentUserId, row._count]));
+  }
+
+  let disbursementsCountByInstitution = new Map<string, number>();
+  if (filters.userType === 'INSTITUTION' && userIds.length > 0) {
+    const wallets = await prisma.wallet.findMany({
+      where: { userId: { in: userIds } },
+      select: { id: true, userId: true },
+    });
+    const walletToUser = new Map(wallets.map((wallet) => [wallet.id, wallet.userId]));
+    const grouped = await prisma.transaction.groupBy({
+      by: ['fromWalletId'],
+      where: { fromWalletId: { in: wallets.map((wallet) => wallet.id) } },
+      _count: true,
+    });
+    for (const row of grouped) {
+      if (!row.fromWalletId) continue;
+      const userId = walletToUser.get(row.fromWalletId);
+      if (!userId) continue;
+      disbursementsCountByInstitution.set(
+        userId,
+        (disbursementsCountByInstitution.get(userId) ?? 0) + row._count
+      );
+    }
+  }
+
+  let studentIdsWithDocuments = new Set<string>();
+  if (filters.userType === 'STUDENT' && userIds.length > 0) {
+    const documentOwners = await prisma.academicDocument.findMany({
+      where: { userId: { in: userIds } },
+      select: { userId: true },
+      distinct: ['userId'],
+    });
+    studentIdsWithDocuments = new Set(documentOwners.map((doc) => doc.userId));
+  }
+
   const users = usersWithWallets.map((userWithWallets) => {
     const { wallets, ...user } = userWithWallets;
-    return { ...toSafeUser(user), wallets };
+    return {
+      ...toSafeUser(user),
+      wallets,
+      ...(filters.userType === 'PARENT'
+        ? { linkedStudentsCount: linkedStudentsCountByParent.get(user.id) ?? 0 }
+        : {}),
+      ...(filters.userType === 'INSTITUTION'
+        ? { disbursementsCount: disbursementsCountByInstitution.get(user.id) ?? 0 }
+        : {}),
+      ...(filters.userType === 'STUDENT'
+        ? { hasDocuments: studentIdsWithDocuments.has(user.id) }
+        : {}),
+    };
   });
 
   return { users, total, page: filters.page, limit: filters.limit };
@@ -301,7 +363,13 @@ export async function resolveFraudAlert(
 }
 
 export type SystemStats = {
-  users: { total: number; byType: Record<string, number> };
+  users: {
+    total: number;
+    byType: Record<string, number>;
+    studentCount: number;
+    parentCount: number;
+    institutionCount: number;
+  };
   transactions: { total: number; byStatus: Record<string, number>; totalVolume: number };
   fraudAlerts: { active: number };
   kyc: { pending: number };
@@ -323,15 +391,22 @@ export async function getSystemStats(): Promise<SystemStats> {
 
   const [activeFraudAlerts, pendingKYC, walletsByCurrency, totalWallets] = await Promise.all([
     prisma.fraudAlert.count({ where: { resolved: false } }),
-    prisma.user.count({ where: { kycStatus: 'PENDING' } }),
+    prisma.user.count({
+      where: { userType: 'STUDENT', kycStatus: 'PENDING', academicDocuments: { some: {} } },
+    }),
     prisma.wallet.groupBy({ by: ['currency'], _sum: { balance: true } }),
     prisma.wallet.count(),
   ]);
 
+  const byType = Object.fromEntries(usersByType.map((row) => [row.userType, row._count]));
+
   return {
     users: {
       total: totalUsers,
-      byType: Object.fromEntries(usersByType.map((row) => [row.userType, row._count])),
+      byType,
+      studentCount: byType.STUDENT ?? 0,
+      parentCount: byType.PARENT ?? 0,
+      institutionCount: byType.INSTITUTION ?? 0,
     },
     transactions: {
       total: totalTransactions,

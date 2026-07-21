@@ -20,7 +20,7 @@ export const NOTIFICATION_META: Record<string, NotificationMeta> = {
   APPROVAL_NEEDED: { icon: 'clock-alert-outline', color: '#F59E0B' },
   TRANSACTION_APPROVED: { icon: 'check-circle-outline', color: '#3DDC97' },
   TRANSACTION_REJECTED: { icon: 'close-circle-outline', color: '#DC2626' },
-  KYC_SUBMITTED: { icon: 'file-upload-outline', color: '#2E5FAC' },
+  KYC_SUBMISSION: { icon: 'file-upload-outline', color: '#2E5FAC' },
   KYC_APPROVED: { icon: 'shield-check-outline', color: '#3DDC97' },
   KYC_REJECTED: { icon: 'shield-alert-outline', color: '#DC2626' },
   ACCOUNT_SUSPENDED: { icon: 'alert-circle-outline', color: '#DC2626' },
