@@ -94,6 +94,7 @@ model Wallet {
   user             User             @relation(fields: [userId], references: [id])
   virtualCards     VirtualCard[]
   budgetCategories BudgetCategory[]
+  lockedFunds      LockedFund[]
 
   outgoingTransactions Transaction[] @relation("FromWallet")
   incomingTransactions Transaction[] @relation("ToWallet")
@@ -101,6 +102,20 @@ model Wallet {
   @@unique([userId, currency])
   @@index([userId])
   @@map("wallets")
+}
+
+model LockedFund {
+  id        String              @id @default(uuid())
+  walletId  String
+  category  TransactionCategory
+  amount    Decimal             @default(0) @db.Decimal(12, 2)
+  createdAt DateTime            @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id])
+
+  @@unique([walletId, category])
+  @@index([walletId])
+  @@map("locked_funds")
 }
 
 model Transaction {

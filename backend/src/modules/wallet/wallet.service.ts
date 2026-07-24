@@ -1,4 +1,4 @@
-import type { Currency, Transaction, UserType, Wallet } from '@prisma/client';
+import type { Currency, LockedFund, Transaction, UserType, Wallet } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
 import { updateSpent } from '../budget/budget.service';
@@ -11,10 +11,11 @@ import type {
   TransferInput,
 } from './wallet.schema';
 
-export async function getWallet(userId: string): Promise<Wallet> {
+export async function getWallet(userId: string): Promise<Wallet & { lockedFunds: LockedFund[] }> {
   const wallet = await prisma.wallet.findFirst({
     where: { userId },
     orderBy: { createdAt: 'asc' },
+    include: { lockedFunds: true },
   });
 
   if (!wallet) {
@@ -65,9 +66,20 @@ export async function transfer(
     throw new AppError(404, 'WALLET_NOT_FOUND', `You do not have a ${input.currency} wallet`);
   }
 
-  const toWallet = await prisma.wallet.findUnique({ where: { id: input.toWalletId } });
+  const toWallet = await prisma.wallet.findUnique({
+    where: { id: input.toWalletId },
+    include: { user: { select: { userType: true, fullName: true } } },
+  });
   if (!toWallet) {
     throw new AppError(404, 'RECIPIENT_WALLET_NOT_FOUND', 'Recipient wallet not found');
+  }
+
+  const fromUser = await prisma.user.findUnique({
+    where: { id: fromUserId },
+    select: { userType: true, fullName: true },
+  });
+  if (!fromUser) {
+    throw new AppError(404, 'USER_NOT_FOUND', 'Sender account not found');
   }
 
   if (toWallet.id === fromWallet.id) {
@@ -148,7 +160,23 @@ export async function transfer(
       'APPROVAL_NEEDED'
     );
   } else {
+    const isLockedCategory = input.category !== 'GENERAL';
+
     transaction = await prisma.$transaction(async (tx) => {
+      if (isLockedCategory && fromUser.userType === 'STUDENT') {
+        const lockedFundDebit = await tx.lockedFund.updateMany({
+          where: { walletId: fromWallet.id, category: input.category, amount: { gte: input.amount } },
+          data: { amount: { decrement: input.amount } },
+        });
+        if (lockedFundDebit.count === 0) {
+          throw new AppError(
+            400,
+            'INSUFFICIENT_LOCKED_FUNDS',
+            `Insufficient locked funds for ${input.category.toLowerCase()}`
+          );
+        }
+      }
+
       const debited = await tx.wallet.updateMany({
         where: { id: fromWallet.id, balance: { gte: input.amount } },
         data: { balance: { decrement: input.amount } },
@@ -162,6 +190,14 @@ export async function transfer(
         where: { id: toWallet.id },
         data: { balance: { increment: input.amount } },
       });
+
+      if (isLockedCategory && toWallet.user.userType === 'STUDENT') {
+        await tx.lockedFund.upsert({
+          where: { walletId_category: { walletId: toWallet.id, category: input.category } },
+          create: { walletId: toWallet.id, category: input.category, amount: input.amount },
+          update: { amount: { increment: input.amount } },
+        });
+      }
 
       return tx.transaction.create({
         data: {
@@ -186,14 +222,10 @@ export async function transfer(
     );
 
     if (parentalControl) {
-      const student = await prisma.user.findUnique({
-        where: { id: fromUserId },
-        select: { fullName: true },
-      });
       await createNotification(
         parentalControl.parentUserId,
         'Student Spending',
-        `Your student ${student?.fullName ?? ''} spent ${input.amount} ${input.currency} on ${input.category.toLowerCase()}.`,
+        `Your student ${fromUser.fullName} spent ${input.amount} ${input.currency} on ${input.category.toLowerCase()}.`,
         'STUDENT_SPENDING'
       );
     }

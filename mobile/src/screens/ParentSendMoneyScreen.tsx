@@ -88,6 +88,14 @@ export default function ParentSendMoneyScreen(_props: Readonly<ParentTabScreenPr
   const parsedAmount = Number(amount);
   const canSend = Boolean(selectedStudent) && parsedAmount > 0 && Boolean(category) && !isSending;
 
+  const availableCategories = selectedStudent
+    ? LOCK_CATEGORIES.filter(
+        (cat) =>
+          cat.key === 'general' ||
+          selectedStudent.link.categories.includes(cat.key.toUpperCase() as TransactionCategory)
+      )
+    : LOCK_CATEGORIES;
+
   const handleSend = async () => {
     if (!selectedStudent || !category || !wallet) return;
     const studentWallet = selectedStudent.wallets.find((w) => w.currency === wallet.currency);
@@ -207,7 +215,10 @@ export default function ParentSendMoneyScreen(_props: Readonly<ParentTabScreenPr
                     <TouchableOpacity
                       key={student.id}
                       style={[styles.studentRow, selected && styles.studentRowSelected]}
-                      onPress={() => setSelectedStudent(linkedStudent)}
+                      onPress={() => {
+                        setSelectedStudent(linkedStudent);
+                        setCategory(null);
+                      }}
                     >
                       <Avatar.Text
                         size={40}
@@ -243,8 +254,15 @@ export default function ParentSendMoneyScreen(_props: Readonly<ParentTabScreenPr
             </View>
 
             <Text style={styles.sectionLabel}>Education Lock</Text>
+            {selectedStudent && availableCategories.length === 1 ? (
+              <Text style={styles.emptyText}>
+                Your parental settings for {selectedStudent.student.fullName} don't allow any
+                locked categories yet — you can still send General funds, or add categories from
+                the Students tab.
+              </Text>
+            ) : null}
             <View style={styles.categoryGrid}>
-              {LOCK_CATEGORIES.map((cat) => {
+              {availableCategories.map((cat) => {
                 const selected = category?.key === cat.key;
                 return (
                   <TouchableRipple

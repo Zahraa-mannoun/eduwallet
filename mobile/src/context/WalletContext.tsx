@@ -1,12 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { Transaction, Wallet } from '../types/api';
+import type { LockedFund, Transaction, Wallet } from '../types/api';
 import * as walletService from '../services/walletService';
 import { ApiError } from '../services/api';
 import { useAuth } from './AuthContext';
 
 type WalletContextValue = {
   wallet: Wallet | null;
+  lockedFunds: LockedFund[];
   transactions: Transaction[];
   isLoading: boolean;
   error: string | null;
@@ -50,7 +51,14 @@ export function WalletProvider({ children }: Readonly<{ children: ReactNode }>) 
   }, [isAuthenticated, refresh]);
 
   const value = useMemo(
-    () => ({ wallet, transactions, isLoading, error, refresh }),
+    () => ({
+      wallet,
+      lockedFunds: wallet?.lockedFunds ?? [],
+      transactions,
+      isLoading,
+      error,
+      refresh,
+    }),
     [wallet, transactions, isLoading, error, refresh]
   );
 

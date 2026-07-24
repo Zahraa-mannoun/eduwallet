@@ -93,6 +93,7 @@ export default function StudentsListScreen({ navigation }: ParentTabScreenProps<
   const [approvalThreshold, setApprovalThreshold] = useState('');
   const [linkCategories, setLinkCategories] = useState<Set<TransactionCategory>>(new Set());
   const [isLinking, setIsLinking] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
 
   const [settingsStudent, setSettingsStudent] = useState<LinkedStudent | null>(null);
   const [settingsThreshold, setSettingsThreshold] = useState('');
@@ -114,33 +115,36 @@ export default function StudentsListScreen({ navigation }: ParentTabScreenProps<
 
   useThrottledFocusEffect(load);
 
-  const canLink =
-    studentEmail.trim().length > 0 &&
-    Number(approvalThreshold) > 0 &&
-    linkCategories.size > 0 &&
-    !isLinking;
+  const canLink = studentEmail.trim().length > 0 && linkCategories.size > 0 && !isLinking;
 
   const closeLinkDialog = () => {
     setLinkDialogVisible(false);
     setStudentEmail('');
     setApprovalThreshold('');
     setLinkCategories(new Set());
+    setLinkError(null);
+  };
+
+  const openLinkDialog = () => {
+    setLinkError(null);
+    setLinkDialogVisible(true);
   };
 
   const handleLinkStudent = async () => {
     if (!canLink) return;
     setIsLinking(true);
+    setLinkError(null);
     try {
       await parentalService.linkStudent({
         studentEmail: studentEmail.trim(),
-        approvalThreshold: Number(approvalThreshold),
+        approvalThreshold: approvalThreshold.trim() === '' ? 0 : Number(approvalThreshold),
         categories: [...linkCategories],
       });
       closeLinkDialog();
       setSnackbarMessage('Student linked successfully.');
       await load();
     } catch (err) {
-      setSnackbarMessage(err instanceof ApiError ? err.message : 'Could not link that student.');
+      setLinkError(err instanceof ApiError ? err.message : 'Could not link that student.');
     } finally {
       setIsLinking(false);
     }
@@ -244,7 +248,7 @@ export default function StudentsListScreen({ navigation }: ParentTabScreenProps<
           </Card>
         )}
 
-        <TouchableOpacity style={styles.addRow} onPress={() => setLinkDialogVisible(true)}>
+        <TouchableOpacity style={styles.addRow} onPress={openLinkDialog}>
           <MaterialCommunityIcons name="plus-circle-outline" size={22} color={colors.primary} />
           <Text style={styles.addRowText}>Link Another Student</Text>
         </TouchableOpacity>
@@ -254,6 +258,12 @@ export default function StudentsListScreen({ navigation }: ParentTabScreenProps<
         <Dialog visible={linkDialogVisible} onDismiss={closeLinkDialog}>
           <Dialog.Title>Link a Student</Dialog.Title>
           <Dialog.Content>
+            {linkError ? (
+              <View style={styles.errorBanner}>
+                <MaterialCommunityIcons name="alert-circle" size={18} color={colors.danger} />
+                <Text style={styles.errorBannerText}>{linkError}</Text>
+              </View>
+            ) : null}
             <TextInput
               mode="outlined"
               label="Student email"
@@ -275,6 +285,9 @@ export default function StudentsListScreen({ navigation }: ParentTabScreenProps<
               activeOutlineColor={colors.primary}
               style={styles.dialogInput}
             />
+            <HelperText type="info" visible style={styles.thresholdHelperText}>
+              Leave empty for no approval limit. Only applies to general unlocked transfers.
+            </HelperText>
 
             <Text style={styles.fieldLabel}>Allowed Spending Categories</Text>
             <CategoryChipsSelector
@@ -457,6 +470,21 @@ const styles = StyleSheet.create({
   },
   dialogInput: {
     marginBottom: 12,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: `${colors.danger}1F`,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 14,
+    gap: 8,
+  },
+  errorBannerText: {
+    flex: 1,
+    color: colors.danger,
+    fontSize: 13,
+    lineHeight: 18,
   },
   dialogInputTight: {
     marginBottom: 0,

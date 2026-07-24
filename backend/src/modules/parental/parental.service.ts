@@ -1,4 +1,4 @@
-import type { ParentalControl, Transaction, User, Wallet } from '@prisma/client';
+import type { ParentalControl, Transaction, TransactionCategory, User, Wallet } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
 import { isUniqueConstraintError } from '../../utils/prismaErrors';
@@ -6,6 +6,14 @@ import { updateSpent } from '../budget/budget.service';
 import { createNotification } from '../notifications/notifications.service';
 import { runAllChecks } from '../wallet/fraud.service';
 import type { LinkStudentInput, UpdateSettingsInput } from './parental.schema';
+
+function formatCategoriesList(categories: TransactionCategory[]): string {
+  return categories.length > 0 ? categories.map((category) => category.toLowerCase()).join(', ') : 'none';
+}
+
+function formatThreshold(threshold: number | string): string {
+  return Number(threshold) > 0 ? `$${Number(threshold)}` : 'No limit';
+}
 
 async function assertLinked(
   parentUserId: string,
@@ -46,8 +54,9 @@ export async function linkStudent(
     throw new AppError(409, 'ALREADY_LINKED', 'You are already linked to this student');
   }
 
+  let link: ParentalControl;
   try {
-    return await prisma.parentalControl.create({
+    link = await prisma.parentalControl.create({
       data: {
         parentUserId,
         studentUserId: student.id,
@@ -61,6 +70,20 @@ export async function linkStudent(
     }
     throw error;
   }
+
+  const parent = await prisma.user.findUnique({
+    where: { id: parentUserId },
+    select: { fullName: true },
+  });
+
+  await createNotification(
+    student.id,
+    'Parent Account Linked',
+    `${parent?.fullName ?? 'Your parent'} has linked to your account. Allowed categories: ${formatCategoriesList(input.categories)}. Approval threshold: ${formatThreshold(input.approvalThreshold)}.`,
+    'PARENT_LINKED'
+  );
+
+  return link;
 }
 
 export async function unlinkStudent(parentUserId: string, studentUserId: string): Promise<void> {
@@ -76,13 +99,22 @@ export async function updateSettings(
   settings: UpdateSettingsInput
 ): Promise<ParentalControl> {
   await assertLinked(parentUserId, studentUserId);
-  return prisma.parentalControl.update({
+  const updated = await prisma.parentalControl.update({
     where: { parentUserId_studentUserId: { parentUserId, studentUserId } },
     data: {
       approvalThreshold: settings.approvalThreshold,
       categories: settings.categories,
     },
   });
+
+  await createNotification(
+    studentUserId,
+    'Spending Permissions Updated',
+    `Your parent updated your spending permissions. Allowed categories: ${formatCategoriesList(settings.categories)}. Threshold: ${formatThreshold(settings.approvalThreshold)}.`,
+    'PERMISSIONS_UPDATED'
+  );
+
+  return updated;
 }
 
 export async function getPendingApprovals(parentUserId: string): Promise<Transaction[]> {

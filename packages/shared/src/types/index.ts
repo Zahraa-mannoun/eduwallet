@@ -36,12 +36,21 @@ export type User = {
   createdAt: string;
 };
 
+export type LockedFund = {
+  id: string;
+  walletId: string;
+  category: TransactionCategory;
+  amount: string;
+  createdAt: string;
+};
+
 export type Wallet = {
   id: string;
   userId: string;
   balance: string;
   currency: Currency;
   createdAt: string;
+  lockedFunds: LockedFund[];
 };
 
 export type Transaction = {

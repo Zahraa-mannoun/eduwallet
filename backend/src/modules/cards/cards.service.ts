@@ -151,6 +151,20 @@ export async function useCard(input: UseCardInput): Promise<{ transaction: Trans
       throw new AppError(403, 'CARD_UNAVAILABLE', 'This card is frozen or has already been used');
     }
 
+    if (card.categoryLock && card.categoryLock !== 'GENERAL') {
+      const lockedFundDebit = await tx.lockedFund.updateMany({
+        where: { walletId: wallet.id, category: card.categoryLock, amount: { gte: input.amount } },
+        data: { amount: { decrement: input.amount } },
+      });
+      if (lockedFundDebit.count === 0) {
+        throw new AppError(
+          400,
+          'INSUFFICIENT_LOCKED_FUNDS',
+          `Insufficient locked funds for ${card.categoryLock.toLowerCase()}`
+        );
+      }
+    }
+
     const debited = await tx.wallet.updateMany({
       where: { id: wallet.id, balance: { gte: input.amount } },
       data: { balance: { decrement: input.amount } },

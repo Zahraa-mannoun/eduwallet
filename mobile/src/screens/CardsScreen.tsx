@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Clipboard from 'expo-clipboard';
 import {
   ActivityIndicator,
   Button,
@@ -108,6 +109,11 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
     }
   };
 
+  const handleCopy = async (value: string, label: string) => {
+    await Clipboard.setStringAsync(value);
+    setSnackbarMessage(`${label} copied!`);
+  };
+
   return (
     <KYCGate>
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -139,7 +145,16 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
                 <View style={styles.chip} />
               </View>
 
-              <Text style={styles.cardNumber}>{card.cardNumber}</Text>
+              <View style={styles.cardNumberRow}>
+                <Text style={styles.cardNumber}>{card.cardNumber}</Text>
+                <IconButton
+                  icon="content-copy"
+                  size={16}
+                  iconColor={colors.onPrimary}
+                  style={styles.copyIconButton}
+                  onPress={() => handleCopy(card.cardNumber, 'Card number')}
+                />
+              </View>
 
               <View style={styles.lockBadge}>
                 <Text style={styles.lockBadgeText}>{lockBadgeText(card.categoryLock)}</Text>
@@ -156,7 +171,16 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
                 </View>
                 <View>
                   <Text style={styles.fieldLabel}>CVV</Text>
-                  <Text style={styles.fieldValue}>{card.cvv}</Text>
+                  <View style={styles.cvvRow}>
+                    <Text style={styles.fieldValue}>{card.cvv}</Text>
+                    <IconButton
+                      icon="content-copy"
+                      size={14}
+                      iconColor={colors.onPrimary}
+                      style={styles.copyIconButtonSmall}
+                      onPress={() => handleCopy(card.cvv, 'CVV')}
+                    />
+                  </View>
                 </View>
               </View>
             </LinearGradient>
@@ -250,11 +274,29 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
           <Dialog.Content>
             <View style={styles.dialogRow}>
               <Text style={styles.dialogLabel}>Card Number</Text>
-              <Text style={styles.dialogValue}>{newCard?.cardNumber}</Text>
+              <View style={styles.dialogValueRow}>
+                <Text style={styles.dialogValue}>{newCard?.cardNumber}</Text>
+                <IconButton
+                  icon="content-copy"
+                  size={16}
+                  iconColor={colors.primary}
+                  style={styles.copyIconButtonDialog}
+                  onPress={() => newCard && handleCopy(newCard.cardNumber, 'Card number')}
+                />
+              </View>
             </View>
             <View style={styles.dialogRow}>
               <Text style={styles.dialogLabel}>CVV</Text>
-              <Text style={styles.dialogValue}>{newCard?.cvv}</Text>
+              <View style={styles.dialogValueRow}>
+                <Text style={styles.dialogValue}>{newCard?.cvv}</Text>
+                <IconButton
+                  icon="content-copy"
+                  size={16}
+                  iconColor={colors.primary}
+                  style={styles.copyIconButtonDialog}
+                  onPress={() => newCard && handleCopy(newCard.cvv, 'CVV')}
+                />
+              </View>
             </View>
             <View style={styles.dialogRow}>
               <Text style={styles.dialogLabel}>Expires</Text>
@@ -357,11 +399,37 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: 'rgba(255,255,255,0.85)',
   },
+  cardNumberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   cardNumber: {
     color: colors.onPrimary,
     fontSize: 18,
     fontWeight: '600',
     letterSpacing: 1,
+  },
+  copyIconButton: {
+    margin: 0,
+    marginLeft: 2,
+  },
+  copyIconButtonSmall: {
+    margin: 0,
+    marginLeft: -4,
+    width: 20,
+    height: 20,
+  },
+  copyIconButtonDialog: {
+    margin: 0,
+    marginLeft: 4,
+  },
+  cvvRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  dialogValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   lockBadge: {
     alignSelf: 'flex-start',

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,14 +6,13 @@ import { ActivityIndicator, Avatar, Badge, Button, Card, IconButton, Text } from
 import type { Transaction, TransactionCategory } from '../types/api';
 import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
-import type { BudgetCategoryKey } from '../constants/budgetCategories';
+import type { BudgetCategoryDefinition, BudgetCategoryKey } from '../constants/budgetCategories';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationsContext';
 import { useWallet } from '../context/WalletContext';
 import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
 import * as parentalService from '../services/parentalService';
 import type { MyPermissions } from '../services/parentalService';
-import * as walletService from '../services/walletService';
 import { colors } from '../theme/colors';
 import { getInitials } from '../utils/getInitials';
 import type { StudentTabScreenProps } from '../navigation/types';
@@ -43,20 +42,10 @@ type QuickAction = {
 export default function DashboardScreen({ navigation }: Readonly<StudentTabScreenProps<'Home'>>) {
   const { user } = useAuth();
   const { unreadCount } = useNotifications();
-  const { wallet, transactions, isLoading, error, refresh } = useWallet();
+  const { wallet, lockedFunds, transactions, isLoading, error, refresh } = useWallet();
   const [showBalance, setShowBalance] = useState(true);
-  const [lockedTransactions, setLockedTransactions] = useState<Transaction[]>([]);
   const [myPermissions, setMyPermissions] = useState<MyPermissions | null>(null);
   const displayName = user?.fullName || 'Student';
-
-  const loadLockedTransactions = useCallback(async () => {
-    try {
-      const result = await walletService.getTransactions({ limit: 100, status: 'AUTO_APPROVED' });
-      setLockedTransactions(result.transactions);
-    } catch {
-      // Balance Breakdown is a supplementary view — leave the previous data in place on failure.
-    }
-  }, []);
 
   const loadPermissions = useCallback(async () => {
     try {
@@ -69,33 +58,21 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
 
   const refreshDashboard = useCallback(() => {
     void refresh();
-    void loadLockedTransactions();
     void loadPermissions();
-  }, [refresh, loadLockedTransactions, loadPermissions]);
+  }, [refresh, loadPermissions]);
 
   useThrottledFocusEffect(refreshDashboard);
 
-  const lockedByCategory = useMemo(() => {
-    const totals = new Map<BudgetCategoryKey, number>();
-    if (!wallet) return totals;
-
-    for (const tx of lockedTransactions) {
-      if (tx.category === 'GENERAL') continue;
-      const key = tx.category.toLowerCase() as BudgetCategoryKey;
-      const amount = Number(tx.amount);
-      let delta = 0;
-      if (tx.toWalletId === wallet.id) delta += amount;
-      if (tx.fromWalletId === wallet.id) delta -= amount;
-      if (delta === 0) continue;
-      totals.set(key, (totals.get(key) ?? 0) + delta);
-    }
-    return totals;
-  }, [lockedTransactions, wallet]);
-
-  const lockedCategoryRows = BUDGET_CATEGORIES.map((category) => ({
-    category,
-    amount: lockedByCategory.get(category.key) ?? 0,
-  })).filter((row) => row.amount > 0);
+  const lockedCategoryRows = lockedFunds
+    .filter((fund) => fund.category !== 'GENERAL' && Number(fund.amount) > 0)
+    .map((fund) => ({
+      category: categoryLookup.get(fund.category.toLowerCase() as BudgetCategoryKey),
+      amount: Number(fund.amount),
+    }))
+    .filter(
+      (row): row is { category: BudgetCategoryDefinition; amount: number } =>
+        row.category !== undefined
+    );
 
   const totalLocked = lockedCategoryRows.reduce((sum, row) => sum + row.amount, 0);
   const freeToUse = wallet ? Math.max(0, Number(wallet.balance) - totalLocked) : 0;

@@ -2,11 +2,12 @@ import { useCallback, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActivityIndicator, Avatar, Card, Chip, IconButton, SegmentedButtons, Text } from 'react-native-paper';
-import type { Transaction } from '../types/api';
+import type { Transaction, TransactionStatus } from '../types/api';
 import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryKey } from '../constants/budgetCategories';
 import { TRANSACTION_STATUS_META } from '../constants/mockTransactions';
+import { useAuth } from '../context/AuthContext';
 import { useWallet } from '../context/WalletContext';
 import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
 import { colors } from '../theme/colors';
@@ -22,6 +23,15 @@ const FILTERS: { value: FilterValue; label: string }[] = [
   { value: 'RECEIVED', label: 'Received' },
   { value: 'PENDING', label: 'Pending' },
 ];
+
+// Parent-facing history reframes statuses around approval, not the raw state machine —
+// a parent cares whether money moved or is waiting on them, not "auto" vs "manual" approval.
+const PARENT_STATUS_LABELS: Partial<Record<TransactionStatus, string>> = {
+  AUTO_APPROVED: 'Completed',
+  APPROVED: 'Completed',
+  PENDING: 'Pending Approval',
+  REJECTED: 'Rejected',
+};
 
 const categoryLookup = new Map(BUDGET_CATEGORIES.map((category) => [category.key, category]));
 
@@ -44,10 +54,14 @@ export default function TransactionHistoryScreen({
   navigation,
 }: Readonly<RootStackScreenProps<'TransactionHistory'>>) {
   const { wallet } = useWallet();
+  const { user } = useAuth();
+  const isParent = user?.userType === 'PARENT';
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterValue>('ALL');
+
+  const filters = isParent ? FILTERS.filter((item) => item.value !== 'PENDING') : FILTERS;
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -79,6 +93,9 @@ export default function TransactionHistoryScreen({
   const renderRow = (transaction: Transaction) => {
     const category = categoryLookup.get(transaction.category.toLowerCase() as BudgetCategoryKey);
     const statusMeta = TRANSACTION_STATUS_META[transaction.status];
+    const statusLabel = isParent
+      ? (PARENT_STATUS_LABELS[transaction.status] ?? statusMeta.label)
+      : statusMeta.label;
     const isReceived = wallet !== null && transaction.toWalletId === wallet.id;
 
     return (
@@ -109,7 +126,7 @@ export default function TransactionHistoryScreen({
             style={[styles.statusChip, { backgroundColor: `${statusMeta.color}1F` }]}
             textStyle={{ color: statusMeta.color, fontSize: 11, fontWeight: '700' }}
           >
-            {statusMeta.label}
+            {statusLabel}
           </Chip>
         </View>
       </TouchableOpacity>
@@ -154,7 +171,7 @@ export default function TransactionHistoryScreen({
         <SegmentedButtons
           value={filter}
           onValueChange={(value) => setFilter(value as FilterValue)}
-          buttons={FILTERS.map((item) => ({ value: item.value, label: item.label }))}
+          buttons={filters.map((item) => ({ value: item.value, label: item.label }))}
         />
       </View>
 

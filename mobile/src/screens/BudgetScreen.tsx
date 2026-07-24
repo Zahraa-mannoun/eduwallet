@@ -15,6 +15,7 @@ import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryDefinition, BudgetCategoryKey } from '../constants/budgetCategories';
 import { colors } from '../theme/colors';
+import { useWallet } from '../context/WalletContext';
 import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
 import * as budgetService from '../services/budgetService';
 import { ApiError } from '../services/api';
@@ -56,6 +57,7 @@ function statsFor(budget: BudgetCategory | undefined): CategoryStats {
 }
 
 export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Budget'>>) {
+  const { lockedFunds } = useWallet();
   const [budgets, setBudgets] = useState<BudgetCategory[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +83,11 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
 
   const budgetFor = (category: BudgetCategoryDefinition): BudgetCategory | undefined =>
     budgets.find((entry) => entry.category === category.key.toUpperCase());
+
+  const lockedFundFor = (category: BudgetCategoryDefinition): number => {
+    const fund = lockedFunds.find((entry) => entry.category === category.key.toUpperCase());
+    return fund ? Number(fund.amount) : 0;
+  };
 
   const openDialog = (category: BudgetCategoryDefinition) => {
     const existing = budgetFor(category);
@@ -134,10 +141,10 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        {BUDGET_CATEGORIES.map((category, index) => {
-          console.log(`[BudgetScreen] rendering category card ${index + 1}/${BUDGET_CATEGORIES.length}: ${category.key}`);
+        {BUDGET_CATEGORIES.map((category) => {
           const stats = statsFor(budgetFor(category));
           const progress = stats.limit > 0 ? Math.min(stats.spent / stats.limit, 1) : 0;
+          const locked = lockedFundFor(category);
 
           let alertText: string | null = null;
           if (stats.limit > 0 && stats.percentUsed >= OVERSPENT_THRESHOLD) {
@@ -145,6 +152,8 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
           } else if (stats.limit > 0 && stats.percentUsed >= APPROACHING_THRESHOLD) {
             alertText = `${stats.percentUsed}% of this budget used`;
           }
+
+          const exceedsLockedFunds = stats.limit > 0 && locked > 0 && stats.limit > locked;
 
           return (
             <View key={category.key} style={styles.categoryCard}>
@@ -155,9 +164,14 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
                     {category.label}
                   </Text>
                 </View>
-                <Text style={styles.categoryAmount}>
-                  ${stats.spent.toFixed(0)} / ${stats.limit.toFixed(0)}
-                </Text>
+                <View style={styles.categoryAmountColumn}>
+                  <Text style={styles.categoryAmount}>
+                    ${stats.spent.toFixed(0)} / ${stats.limit.toFixed(0)}
+                  </Text>
+                  {locked > 0 ? (
+                    <Text style={styles.lockedText}>🔒 ${locked.toFixed(0)} locked</Text>
+                  ) : null}
+                </View>
               </View>
 
               <Text style={styles.categoryDescription}>{CATEGORY_DESCRIPTIONS[category.key]}</Text>
@@ -186,6 +200,13 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
                   ]}
                 >
                   {alertText}
+                </Text>
+              ) : null}
+
+              {exceedsLockedFunds ? (
+                <Text style={styles.lockedWarningText}>
+                  Your budget limit exceeds your available locked funds for this category. Actual
+                  spending is limited by your wallet balance.
                 </Text>
               ) : null}
 
@@ -298,10 +319,25 @@ const styles = StyleSheet.create({
     color: colors.heading,
     marginLeft: 12,
   },
+  categoryAmountColumn: {
+    alignItems: 'flex-end',
+  },
   categoryAmount: {
     fontSize: 13,
     fontWeight: '600',
     color: colors.muted,
+  },
+  lockedText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primary,
+    marginTop: 2,
+  },
+  lockedWarningText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#B45309',
+    marginTop: 6,
   },
   categoryDescription: {
     fontSize: 12,
