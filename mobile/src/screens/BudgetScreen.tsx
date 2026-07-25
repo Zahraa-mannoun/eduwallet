@@ -97,10 +97,22 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
 
   const closeDialog = () => setDialogCategory(null);
 
+  const dialogLockedAmount = dialogCategory ? lockedFundFor(dialogCategory) : 0;
+
+  const handleDialogAmountChange = (text: string) => {
+    const cleaned = text.replace(/[^0-9.]/g, '');
+    if (dialogLockedAmount > 0 && Number(cleaned) > dialogLockedAmount) {
+      setDialogAmount(String(dialogLockedAmount));
+      return;
+    }
+    setDialogAmount(cleaned);
+  };
+
   const handleSaveBudget = async () => {
     if (!dialogCategory) return;
     const limit = Number(dialogAmount);
     if (!(limit > 0)) return;
+    if (dialogLockedAmount > 0 && limit > dialogLockedAmount) return;
 
     setIsSaving(true);
     try {
@@ -234,11 +246,16 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
               mode="outlined"
               label="Monthly limit"
               value={dialogAmount}
-              onChangeText={(text: string) => setDialogAmount(text.replace(/[^0-9.]/g, ''))}
+              onChangeText={handleDialogAmountChange}
               keyboardType="decimal-pad"
               outlineColor={colors.border}
               activeOutlineColor={colors.primary}
             />
+            {dialogLockedAmount > 0 ? (
+              <Text style={styles.dialogHelperText}>
+                Capped at ${dialogLockedAmount.toFixed(0)} — your locked funds for this category.
+              </Text>
+            ) : null}
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={closeDialog} disabled={isSaving}>
@@ -371,5 +388,10 @@ const styles = StyleSheet.create({
   },
   editButtonContent: {
     paddingVertical: 4,
+  },
+  dialogHelperText: {
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 8,
   },
 });

@@ -1,7 +1,12 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { AppError } from '../../utils/AppError';
 import { errorResponse, successResponse } from '../../utils/apiResponse';
-import { cardIdParamsSchema, createCardSchema, useCardSchema } from './cards.schema';
+import {
+  cardIdParamsSchema,
+  createCardSchema,
+  updateCardAutoRenewSchema,
+  useCardSchema,
+} from './cards.schema';
 import {
   createCard,
   deleteCard,
@@ -9,6 +14,7 @@ import {
   freezeCard,
   getCardById,
   getCards,
+  setCardAutoRenewPreference,
   useCard,
 } from './cards.service';
 
@@ -90,6 +96,23 @@ export async function freezeCardHandler(request: FastifyRequest, reply: FastifyR
     const authUser = requireAuthUser(request);
     const card = await freezeCard(authUser.id, parsed.data.id);
     return reply.status(200).send(successResponse(card));
+  } catch (error) {
+    return handleCardError(request, reply, error);
+  }
+}
+
+export async function updateCardAutoRenewHandler(request: FastifyRequest, reply: FastifyReply) {
+  const parsed = updateCardAutoRenewSchema.safeParse(request.body);
+  if (!parsed.success) {
+    return reply
+      .status(400)
+      .send(errorResponse(parsed.error.issues[0]?.message ?? 'Invalid input', 'VALIDATION_ERROR'));
+  }
+
+  try {
+    const authUser = requireAuthUser(request);
+    const result = await setCardAutoRenewPreference(authUser.id, parsed.data.cardAutoRenew);
+    return reply.status(200).send(successResponse(result));
   } catch (error) {
     return handleCardError(request, reply, error);
   }

@@ -6,7 +6,9 @@ import { createNotification } from '../notifications/notifications.service';
 const CIRCULAR_WINDOW_MS = 60 * 60 * 1000;
 const VELOCITY_WINDOW_MS = 10 * 60 * 1000;
 const VELOCITY_THRESHOLD = 5;
-const DUPLICATE_WINDOW_MS = 5 * 60 * 1000;
+// Duplicate detection only exists to catch an accidental double-tap on the send button,
+// not two separate legitimate payments of the same amount — keep the window tight.
+const DUPLICATE_WINDOW_MS = 30 * 1000;
 const UNUSUAL_AMOUNT_MULTIPLIER = 3;
 const UNUSUAL_AMOUNT_HISTORY_SIZE = 50;
 
@@ -61,8 +63,13 @@ export async function checkDuplicate(
   return duplicate !== null;
 }
 
+// Only flags an amount as unusual when it's both a 3x+ outlier against the sender's own
+// history AND going to a receiver that history doesn't already show as normal for them —
+// a parent who always sends $50 to the same student sending $500 to that same student is
+// a habit, not fraud; $500 to a receiver they've never paid before is the actual signal.
 export async function checkUnusualAmount(
   walletId: string,
+  toWalletId: string | null,
   amount: number,
   excludeTransactionId: string
 ): Promise<boolean> {
@@ -71,7 +78,7 @@ export async function checkUnusualAmount(
       id: { not: excludeTransactionId },
       fromWalletId: walletId,
     },
-    select: { amount: true },
+    select: { amount: true, toWalletId: true },
     orderBy: { createdAt: 'desc' },
     take: UNUSUAL_AMOUNT_HISTORY_SIZE,
   });
@@ -82,11 +89,41 @@ export async function checkUnusualAmount(
 
   const average =
     history.reduce((sum, transaction) => sum + Number(transaction.amount), 0) / history.length;
+  const isUnusualAmount = average > 0 && amount > average * UNUSUAL_AMOUNT_MULTIPLIER;
+  if (!isUnusualAmount) {
+    return false;
+  }
 
-  return average > 0 && amount > average * UNUSUAL_AMOUNT_MULTIPLIER;
+  const isKnownReceiver = toWalletId !== null && history.some((entry) => entry.toWalletId === toWalletId);
+  return !isKnownReceiver;
+}
+
+async function isParentToStudentTransfer(transaction: Transaction): Promise<boolean> {
+  if (!transaction.fromWalletId || !transaction.toWalletId) {
+    return false;
+  }
+
+  const [fromWallet, toWallet] = await Promise.all([
+    prisma.wallet.findUnique({
+      where: { id: transaction.fromWalletId },
+      select: { user: { select: { userType: true } } },
+    }),
+    prisma.wallet.findUnique({
+      where: { id: transaction.toWalletId },
+      select: { user: { select: { userType: true } } },
+    }),
+  ]);
+
+  return fromWallet?.user.userType === 'PARENT' && toWallet?.user.userType === 'STUDENT';
 }
 
 export async function runAllChecks(transaction: Transaction): Promise<void> {
+  // Parents funding their own student is expected, routine activity — it shouldn't ever
+  // be run through fraud detection, which exists to catch suspicious peer/self spending.
+  if (await isParentToStudentTransfer(transaction)) {
+    return;
+  }
+
   const amount = Number(transaction.amount);
   const alerts: { alertType: FraudAlertType; severity: FraudSeverity }[] = [];
 
@@ -111,7 +148,7 @@ export async function runAllChecks(transaction: Transaction): Promise<void> {
 
   if (
     transaction.fromWalletId &&
-    (await checkUnusualAmount(transaction.fromWalletId, amount, transaction.id))
+    (await checkUnusualAmount(transaction.fromWalletId, transaction.toWalletId, amount, transaction.id))
   ) {
     alerts.push({ alertType: FraudAlertType.UNUSUAL_AMOUNT, severity: FraudSeverity.LOW });
   }

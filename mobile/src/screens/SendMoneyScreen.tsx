@@ -18,20 +18,15 @@ import {
   Text,
   TextInput,
 } from 'react-native-paper';
-import type { TransactionCategory, UserType } from '../types/api';
-import CategorySelectorGrid from '../components/CategorySelectorGrid';
+import type { UserType } from '../types/api';
 import IconBadge from '../components/IconBadge';
 import KYCGate from '../components/KYCGate';
-import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
-import type { BudgetCategoryDefinition } from '../constants/budgetCategories';
 import { useWallet } from '../context/WalletContext';
 import * as walletService from '../services/walletService';
 import { ApiError } from '../services/api';
 import { colors } from '../theme/colors';
 import { getInitials } from '../utils/getInitials';
 import type { RootStackScreenProps } from '../navigation/types';
-
-const DEFAULT_CATEGORY = BUDGET_CATEGORIES.find((category) => category.key === 'general') ?? null;
 
 type ResolvedRecipient = {
   walletId: string;
@@ -57,7 +52,6 @@ export default function SendMoneyScreen({ navigation }: RootStackScreenProps<'Se
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
-  const [category, setCategory] = useState<BudgetCategoryDefinition | null>(DEFAULT_CATEGORY);
   const [sendError, setSendError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [transaction, setTransaction] = useState<SentTransaction | null>(null);
@@ -72,6 +66,11 @@ export default function SendMoneyScreen({ navigation }: RootStackScreenProps<'Se
     setLookupError(null);
     try {
       const result = await walletService.lookupWalletByEmail(email, wallet.currency);
+      if (result.userType !== 'STUDENT') {
+        setLookupError('You can only send money to other students.');
+        setRecipient(null);
+        return;
+      }
       setRecipient({
         walletId: result.walletId,
         fullName: result.fullName,
@@ -95,7 +94,7 @@ export default function SendMoneyScreen({ navigation }: RootStackScreenProps<'Se
         toWalletId: recipient.walletId,
         amount: parsedAmount,
         currency: wallet.currency,
-        category: category ? (category.key.toUpperCase() as TransactionCategory) : 'GENERAL',
+        category: 'GENERAL',
         note: note.trim() || undefined,
       });
       setTransaction({
@@ -120,7 +119,6 @@ export default function SendMoneyScreen({ navigation }: RootStackScreenProps<'Se
     setRecipientEmail('');
     setAmount('');
     setNote('');
-    setCategory(DEFAULT_CATEGORY);
     setSendError(null);
     setLookupError(null);
   };
@@ -274,12 +272,6 @@ export default function SendMoneyScreen({ navigation }: RootStackScreenProps<'Se
             multiline
           />
 
-          <Text style={styles.categoryLabel}>Spending Category (optional)</Text>
-          <CategorySelectorGrid value={category} onChange={setCategory} />
-          <Text style={styles.categoryNote}>
-            Select a category to track which budget this payment belongs to.
-          </Text>
-
           <HelperText type="error" visible={Boolean(sendError)}>
             {sendError}
           </HelperText>
@@ -370,19 +362,6 @@ const styles = StyleSheet.create({
   noteInput: {
     backgroundColor: colors.inputBackground,
     marginBottom: 4,
-  },
-  categoryLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.label,
-    marginBottom: 10,
-  },
-  categoryNote: {
-    fontSize: 12,
-    color: colors.muted,
-    textAlign: 'center',
-    marginTop: 4,
-    marginBottom: 12,
   },
   sendButton: {
     borderRadius: 10,

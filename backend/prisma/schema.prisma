@@ -71,6 +71,9 @@ model User {
   userType  UserType
   kycStatus KYCStatus @default(PENDING)
   suspended Boolean   @default(false)
+  // Global card-payment setting (Profile > Account Settings > Card Settings), read at
+  // card-use time in cards.service.ts — not a per-card field.
+  cardAutoRenew Boolean @default(false)
   createdAt DateTime  @default(now())
 
   wallets           Wallet[]
@@ -127,6 +130,9 @@ model Transaction {
   category     TransactionCategory @default(GENERAL)
   status       TransactionStatus   @default(PENDING)
   note         String?
+  // Set for card payments to external merchants (e.g. "EduMart"), which have no toWalletId
+  // since the merchant isn't a EduWallet user — toWallet stays the source of truth for P2P/parent transfers.
+  receiverName String?
   createdAt    DateTime            @default(now())
 
   fromWallet Wallet? @relation("FromWallet", fields: [fromWalletId], references: [id])

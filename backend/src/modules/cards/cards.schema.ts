@@ -19,6 +19,12 @@ export const createCardSchema = z.object({
 
 export type CreateCardInput = z.infer<typeof createCardSchema>;
 
+export const updateCardAutoRenewSchema = z.object({
+  cardAutoRenew: z.boolean(),
+});
+
+export type UpdateCardAutoRenewInput = z.infer<typeof updateCardAutoRenewSchema>;
+
 export const useCardSchema = z.object({
   cardNumber: z.string().regex(/^\d{4}-\d{4}-\d{4}-\d{4}$/, 'Invalid card number format'),
   cvv: z.string().regex(/^\d{3}$/, 'Invalid CVV format'),

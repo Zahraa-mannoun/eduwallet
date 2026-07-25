@@ -33,6 +33,7 @@ export type User = {
   userType: UserType;
   kycStatus: KYCStatus;
   suspended: boolean;
+  cardAutoRenew: boolean;
   createdAt: string;
 };
 
@@ -62,6 +63,7 @@ export type Transaction = {
   category: TransactionCategory;
   status: TransactionStatus;
   note: string | null;
+  receiverName: string | null;
   createdAt: string;
 };
 

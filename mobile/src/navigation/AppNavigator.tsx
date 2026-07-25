@@ -13,6 +13,7 @@ import KYCScreen from '../screens/KYCScreen';
 import BlockchainVaultScreen from '../screens/BlockchainVaultScreen';
 import AIAssistantScreen from '../screens/AIAssistantScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
+import AccountSettingsScreen from '../screens/AccountSettingsScreen';
 import StudentMainNavigator from './StudentMainNavigator';
 import ParentMainNavigator from './ParentMainNavigator';
 import InstitutionMainNavigator from './InstitutionMainNavigator';
@@ -61,6 +62,7 @@ export default function AppNavigator() {
           <Stack.Screen name="BlockchainVault" component={BlockchainVaultScreen} />
           <Stack.Screen name="AIAssistant" component={AIAssistantScreen} />
           <Stack.Screen name="Notifications" component={NotificationsScreen} />
+          <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
         </>
       )}
     </Stack.Navigator>

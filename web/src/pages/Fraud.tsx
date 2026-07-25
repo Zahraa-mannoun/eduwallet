@@ -104,7 +104,7 @@ export function Fraud() {
                     {alert.transaction.fromWallet?.user.fullName ?? '—'}
                   </td>
                   <td className="px-4 py-3 text-slate-700">
-                    {alert.transaction.toWallet?.user.fullName ?? '—'}
+                    {alert.transaction.toWallet?.user.fullName ?? alert.transaction.receiverName ?? '—'}
                   </td>
                   <td className="px-4 py-3 text-slate-500">{formatDateTime(alert.createdAt)}</td>
                   <td className="px-4 py-3">

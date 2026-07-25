@@ -22,6 +22,7 @@ type AuthContextValue = {
   }) => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
+  refreshUser: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -106,6 +107,15 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
 
   const clearError = () => setError(null);
 
+  const refreshUser = async () => {
+    try {
+      const me = await authService.getMe();
+      setUser(me);
+    } catch {
+      // Best-effort refresh (e.g. after updating a profile setting) — leave stale state on failure.
+    }
+  };
+
   const value = useMemo(
     () => ({
       user,
@@ -116,6 +126,7 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
       register,
       logout,
       clearError,
+      refreshUser,
     }),
     [user, isLoading, error]
   );

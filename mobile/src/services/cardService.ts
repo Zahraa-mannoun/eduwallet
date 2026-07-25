@@ -23,6 +23,15 @@ export async function freezeCard(id: string): Promise<VirtualCard> {
   return apiRequest<VirtualCard>(`/cards/${id}/freeze`, { method: 'PATCH' });
 }
 
+// Global setting (Profile > Account Settings > Card Settings) — applies to every card,
+// read fresh by the backend at card-use time, not stored per card.
+export async function updateCardAutoRenew(cardAutoRenew: boolean): Promise<{ cardAutoRenew: boolean }> {
+  return apiRequest<{ cardAutoRenew: boolean }>('/cards/settings/auto-renew', {
+    method: 'PATCH',
+    body: { cardAutoRenew },
+  });
+}
+
 export async function deleteCard(id: string): Promise<{ message: string }> {
   return apiRequest(`/cards/${id}`, { method: 'DELETE' });
 }

@@ -11,9 +11,11 @@ import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationsContext';
 import { useWallet } from '../context/WalletContext';
 import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
+import * as kycService from '../services/kycService';
 import * as parentalService from '../services/parentalService';
 import type { MyPermissions } from '../services/parentalService';
 import { colors } from '../theme/colors';
+import { getEffectiveKYCStatus } from '../utils/kycStatus';
 import { getInitials } from '../utils/getInitials';
 import type { StudentTabScreenProps } from '../navigation/types';
 
@@ -45,6 +47,7 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
   const { wallet, lockedFunds, transactions, isLoading, error, refresh } = useWallet();
   const [showBalance, setShowBalance] = useState(true);
   const [myPermissions, setMyPermissions] = useState<MyPermissions | null>(null);
+  const [hasKycDocuments, setHasKycDocuments] = useState(false);
   const displayName = user?.fullName || 'Student';
 
   const loadPermissions = useCallback(async () => {
@@ -56,10 +59,20 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
     }
   }, []);
 
+  const loadKycDocuments = useCallback(async () => {
+    try {
+      const result = await kycService.getMyDocuments();
+      setHasKycDocuments(result.length > 0);
+    } catch {
+      // Verification banner falls back to treating the student as unverified on failure.
+    }
+  }, []);
+
   const refreshDashboard = useCallback(() => {
     void refresh();
     void loadPermissions();
-  }, [refresh, loadPermissions]);
+    void loadKycDocuments();
+  }, [refresh, loadPermissions, loadKycDocuments]);
 
   useThrottledFocusEffect(refreshDashboard);
 
@@ -73,6 +86,8 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
       (row): row is { category: BudgetCategoryDefinition; amount: number } =>
         row.category !== undefined
     );
+
+  const effectiveKycStatus = user ? getEffectiveKYCStatus(user.kycStatus, hasKycDocuments) : 'UNVERIFIED';
 
   const totalLocked = lockedCategoryRows.reduce((sum, row) => sum + row.amount, 0);
   const freeToUse = wallet ? Math.max(0, Number(wallet.balance) - totalLocked) : 0;
@@ -151,12 +166,29 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
         contentContainerStyle={styles.body}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refresh} />}
       >
-        {user?.kycStatus === 'PENDING' && (
+        {effectiveKycStatus === 'PENDING' && (
           <View style={[styles.kycBanner, styles.kycBannerPending]}>
             <IconBadge icon="clock-outline" color="#F59E0B" size={36} iconSize={20} />
             <Text style={[styles.kycBannerText, styles.kycBannerTextPending]}>
               Your account is pending verification. We will notify you once approved.
             </Text>
+          </View>
+        )}
+
+        {effectiveKycStatus === 'UNVERIFIED' && (
+          <View style={[styles.kycBanner, styles.kycBannerPending]}>
+            <IconBadge icon="card-account-details-outline" color="#F59E0B" size={36} iconSize={20} />
+            <Text style={[styles.kycBannerText, styles.kycBannerTextPending]}>
+              Complete your verification to unlock the full wallet experience.
+            </Text>
+            <Button
+              mode="text"
+              compact
+              textColor="#92400E"
+              onPress={() => navigation.navigate('KYC')}
+            >
+              Start
+            </Button>
           </View>
         )}
 

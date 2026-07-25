@@ -66,3 +66,18 @@ export type MyPermissions = {
 export async function getMyPermissions(): Promise<MyPermissions | null> {
   return apiRequest<MyPermissions | null>('/parental/my-permissions');
 }
+
+export type StudentCategoryBreakdown = {
+  category: TransactionCategory;
+  locked: number;
+  spent: number;
+};
+
+export type StudentSpendingBreakdown = {
+  allowedCategories: TransactionCategory[];
+  categories: StudentCategoryBreakdown[];
+};
+
+export async function getStudentBreakdown(studentId: string): Promise<StudentSpendingBreakdown> {
+  return apiRequest<StudentSpendingBreakdown>(`/parental/students/${studentId}/breakdown`);
+}

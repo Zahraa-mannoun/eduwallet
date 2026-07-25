@@ -90,21 +90,6 @@ export async function transfer(
     throw new AppError(400, 'CURRENCY_MISMATCH', 'Recipient wallet currency does not match');
   }
 
-  const lockedCards = await prisma.virtualCard.findMany({
-    where: { walletId: fromWallet.id, categoryLock: { not: null } },
-    select: { categoryLock: true },
-  });
-  if (lockedCards.length > 0) {
-    const allowedCategories = new Set(lockedCards.map((card) => card.categoryLock));
-    if (!allowedCategories.has(input.category)) {
-      throw new AppError(
-        403,
-        'CATEGORY_LOCKED',
-        `Your wallet is locked to spending in: ${[...allowedCategories].join(', ')}`
-      );
-    }
-  }
-
   const parentalControl = await prisma.parentalControl.findFirst({
     where: { studentUserId: fromUserId },
   });

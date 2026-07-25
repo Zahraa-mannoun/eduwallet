@@ -10,6 +10,9 @@ import { runAllChecks } from '../wallet/fraud.service';
 import type { CreateCardInput, UseCardInput } from './cards.schema';
 
 const MAX_CARD_NUMBER_GENERATION_ATTEMPTS = 5;
+// Auto-renewed and manually-replaced cards aren't re-issued through the create-card form,
+// so there's no expiryDays input to carry over — reuse the same default the form itself uses.
+const RENEWAL_EXPIRY_DAYS = 365;
 
 export function generateCardNumber(): string {
   let digits = '';
@@ -54,20 +57,23 @@ async function getOwnedCard(userId: string, cardId: string): Promise<VirtualCard
   return card;
 }
 
-export async function createCard(userId: string, input: CreateCardInput): Promise<VirtualCard> {
-  const wallet = await getWallet(userId);
-  const expiry = generateExpiry(input.expiryDays);
+type IssueCardOptions = {
+  merchantLock?: string | null;
+  categoryLock: VirtualCard['categoryLock'] | undefined;
+  expiry: Date;
+};
 
+async function issueCard(walletId: string, options: IssueCardOptions): Promise<VirtualCard> {
   for (let attempt = 0; attempt < MAX_CARD_NUMBER_GENERATION_ATTEMPTS; attempt++) {
     try {
       return await prisma.virtualCard.create({
         data: {
-          walletId: wallet.id,
+          walletId,
           cardNumber: generateCardNumber(),
           cvv: generateCVV(),
-          expiry,
-          merchantLock: input.merchantLock,
-          categoryLock: input.categoryLock,
+          expiry: options.expiry,
+          merchantLock: options.merchantLock,
+          categoryLock: options.categoryLock,
         },
       });
     } catch (error) {
@@ -79,6 +85,15 @@ export async function createCard(userId: string, input: CreateCardInput): Promis
   }
 
   throw new AppError(500, 'CARD_GENERATION_FAILED', 'Could not generate a unique card number');
+}
+
+export async function createCard(userId: string, input: CreateCardInput): Promise<VirtualCard> {
+  const wallet = await getWallet(userId);
+  return issueCard(wallet.id, {
+    merchantLock: input.merchantLock,
+    categoryLock: input.categoryLock,
+    expiry: generateExpiry(input.expiryDays),
+  });
 }
 
 export async function getCards(userId: string): Promise<VirtualCard[]> {
@@ -97,10 +112,34 @@ export async function getCardById(userId: string, cardId: string): Promise<Virtu
 
 export async function freezeCard(userId: string, cardId: string): Promise<VirtualCard> {
   const card = await getOwnedCard(userId, cardId);
+
+  // A used card can never be charged again (useCard rejects `used: true` outright), so
+  // "unfreezing" one is meaningless — instead it's the manual equivalent of auto-renew:
+  // issue a fresh replacement with the same lock, mirroring the auto-renew card swap.
+  if (card.used && card.frozen) {
+    return issueCard(card.walletId, {
+      merchantLock: card.merchantLock,
+      categoryLock: card.categoryLock,
+      expiry: generateExpiry(RENEWAL_EXPIRY_DAYS),
+    });
+  }
+
   return prisma.virtualCard.update({
     where: { id: card.id },
     data: { frozen: !card.frozen },
   });
+}
+
+export async function setCardAutoRenewPreference(
+  userId: string,
+  cardAutoRenew: boolean
+): Promise<{ cardAutoRenew: boolean }> {
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: { cardAutoRenew },
+    select: { cardAutoRenew: true },
+  });
+  return user;
 }
 
 export async function deleteCard(userId: string, cardId: string): Promise<void> {
@@ -134,7 +173,10 @@ export async function useCard(input: UseCardInput): Promise<{ transaction: Trans
     );
   }
 
-  const wallet = await prisma.wallet.findUnique({ where: { id: card.walletId } });
+  const wallet = await prisma.wallet.findUnique({
+    where: { id: card.walletId },
+    include: { user: { select: { cardAutoRenew: true } } },
+  });
   if (!wallet) {
     throw new AppError(404, 'WALLET_NOT_FOUND', 'Card wallet not found');
   }
@@ -142,10 +184,16 @@ export async function useCard(input: UseCardInput): Promise<{ transaction: Trans
     throw new AppError(400, 'CURRENCY_MISMATCH', 'Card wallet currency does not match');
   }
 
+  // Read fresh from the student's current settings rather than the card itself — auto-renew
+  // is a global preference (Profile > Account Settings), not stored per card.
+  const autoRenew = wallet.user.cardAutoRenew;
+
   const transaction = await prisma.$transaction(async (tx) => {
+    // Auto-renew cards stay unfrozen after use (a replacement is issued right below instead);
+    // otherwise the spent card freezes so the student has to explicitly renew it.
     const claimed = await tx.virtualCard.updateMany({
       where: { id: card.id, used: false, frozen: false },
-      data: { used: true },
+      data: { used: true, frozen: !autoRenew },
     });
     if (claimed.count === 0) {
       throw new AppError(403, 'CARD_UNAVAILABLE', 'This card is frozen or has already been used');
@@ -182,6 +230,7 @@ export async function useCard(input: UseCardInput): Promise<{ transaction: Trans
         category: input.category,
         status: 'AUTO_APPROVED',
         note: `Card payment at ${input.merchantName}`,
+        receiverName: input.merchantName,
       },
     });
   });
@@ -194,6 +243,20 @@ export async function useCard(input: UseCardInput): Promise<{ transaction: Trans
     `Your card was charged ${input.amount} ${input.currency} at ${input.merchantName}.`,
     'CARD_PAYMENT'
   );
+
+  if (autoRenew) {
+    await issueCard(card.walletId, {
+      merchantLock: card.merchantLock,
+      categoryLock: card.categoryLock,
+      expiry: generateExpiry(RENEWAL_EXPIRY_DAYS),
+    });
+    await createNotification(
+      wallet.userId,
+      'Card Auto-Renewed',
+      `A new ${card.categoryLock ? card.categoryLock.toLowerCase() : 'general'} card was issued to replace the one you just used.`,
+      'CARD_AUTO_RENEWED'
+    );
+  }
 
   const parentalControl = await prisma.parentalControl.findFirst({
     where: { studentUserId: wallet.userId },

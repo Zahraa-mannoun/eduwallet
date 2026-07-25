@@ -40,6 +40,7 @@ export type RootStackParamList = {
   BlockchainVault: undefined;
   AIAssistant: undefined;
   Notifications: undefined;
+  AccountSettings: undefined;
 };
 
 export type RootStackScreenProps<Screen extends keyof RootStackParamList> =

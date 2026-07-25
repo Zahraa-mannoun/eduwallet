@@ -1,13 +1,16 @@
+import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar, Button, Chip, Divider, List, Text } from 'react-native-paper';
 import type { NavigationProp } from '@react-navigation/native';
-import type { KYCStatus } from '../types/api';
 import { USER_TYPES } from '../constants/userTypes';
 import { useAuth } from '../context/AuthContext';
+import * as kycService from '../services/kycService';
 import { colors } from '../theme/colors';
 import { getInitials } from '../utils/getInitials';
+import { getEffectiveKYCStatus } from '../utils/kycStatus';
+import type { EffectiveKYCStatus } from '../utils/kycStatus';
 import type { RootStackParamList } from '../navigation/types';
 
 type ListIconRenderProps = Readonly<{ color: string; style?: StyleProp<ViewStyle> }>;
@@ -32,14 +35,14 @@ const renderRightWithBadge = (badge?: { label: string; color: string }) => (prop
   </View>
 );
 
-const PROFILE_MENU_ITEMS = [
-  { title: 'Account Settings', icon: 'account-cog-outline' },
+const STATIC_PROFILE_MENU_ITEMS = [
   { title: 'Security & 2FA', icon: 'shield-check-outline' },
   { title: 'Notifications', icon: 'bell-outline' },
   { title: 'Help & Support', icon: 'help-circle-outline' },
 ] as const;
 
-const KYC_BADGES: Record<KYCStatus, { label: string; color: string }> = {
+const KYC_BADGES: Record<EffectiveKYCStatus, { label: string; color: string }> = {
+  UNVERIFIED: { label: 'Not submitted', color: colors.muted },
   PENDING: { label: 'Pending', color: '#F59E0B' },
   VERIFIED: { label: 'Verified', color: '#3DDC97' },
   REJECTED: { label: 'Rejected', color: '#DC2626' },
@@ -53,7 +56,24 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
   const { user, logout } = useAuth();
   const displayName = user?.fullName || 'there';
   const typeDefinition = USER_TYPES.find((type) => type.key === user?.userType) ?? USER_TYPES[0];
-  const kycBadge = user ? KYC_BADGES[user.kycStatus] : undefined;
+  const [hasKycDocuments, setHasKycDocuments] = useState(false);
+
+  const loadKycDocuments = useCallback(async () => {
+    if (user?.userType !== 'STUDENT') return;
+    try {
+      const result = await kycService.getMyDocuments();
+      setHasKycDocuments(result.length > 0);
+    } catch {
+      // Verification badge falls back to treating the student as unverified on failure.
+    }
+  }, [user?.userType]);
+
+  useEffect(() => {
+    void loadKycDocuments();
+  }, [loadKycDocuments]);
+
+  const effectiveKycStatus = user ? getEffectiveKYCStatus(user.kycStatus, hasKycDocuments) : 'UNVERIFIED';
+  const kycBadge = user ? KYC_BADGES[effectiveKycStatus] : undefined;
 
   const handleLogout = async () => {
     await logout();
@@ -86,6 +106,15 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
           },
         ]
       : []),
+  ] as const;
+
+  const PROFILE_MENU_ITEMS = [
+    {
+      title: 'Account Settings',
+      icon: 'account-cog-outline',
+      onPress: () => navigation.navigate('AccountSettings'),
+    },
+    ...STATIC_PROFILE_MENU_ITEMS,
   ] as const;
 
   return (
@@ -131,6 +160,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
             <View key={item.title}>
               <List.Item
                 title={item.title}
+                onPress={'onPress' in item ? item.onPress : undefined}
                 left={renderLeftIcon(item.icon)}
                 right={renderChevron}
               />

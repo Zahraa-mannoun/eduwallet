@@ -32,9 +32,7 @@ import { colors } from '../theme/colors';
 import { getInitials } from '../utils/getInitials';
 import type { ParentTabScreenProps } from '../navigation/types';
 
-// Personal spending doesn't fit "education-locked funds" — a parent locking a
-// transfer only ever restricts it to an academic category, or leaves it unrestricted (General).
-const LOCK_CATEGORIES = BUDGET_CATEGORIES.filter((category) => category.key !== 'personal');
+const LOCK_CATEGORIES = BUDGET_CATEGORIES;
 
 const CATEGORY_EXPLANATIONS: Partial<Record<BudgetCategoryKey, string>> = {
   tuition: 'Student can only use these funds for tuition payments.',
@@ -43,6 +41,7 @@ const CATEGORY_EXPLANATIONS: Partial<Record<BudgetCategoryKey, string>> = {
   transport: 'Student can only use these funds for transportation.',
   software: 'Student can only use these funds for software and tech tools.',
   rent: 'Student can only use these funds for rent and housing.',
+  personal: 'Student can only use these funds for personal spending.',
   general: 'No restriction — the student can spend this money anywhere.',
 };
 

@@ -1,4 +1,11 @@
-import type { ParentalControl, Transaction, TransactionCategory, User, Wallet } from '@prisma/client';
+import type {
+  LockedFund,
+  ParentalControl,
+  Transaction,
+  TransactionCategory,
+  User,
+  Wallet,
+} from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
 import { isUniqueConstraintError } from '../../utils/prismaErrors';
@@ -258,7 +265,7 @@ export async function getMyPermissions(studentUserId: string): Promise<MyPermiss
 export type LinkedStudent = {
   student: Omit<User, 'password'>;
   link: ParentalControl;
-  wallets: Wallet[];
+  wallets: (Wallet & { lockedFunds: LockedFund[] })[];
 };
 
 export async function getLinkedStudents(parentUserId: string): Promise<LinkedStudent[]> {
@@ -270,10 +277,65 @@ export async function getLinkedStudents(parentUserId: string): Promise<LinkedStu
       if (!student) {
         throw new AppError(404, 'STUDENT_NOT_FOUND', 'Linked student no longer exists');
       }
-      const wallets = await prisma.wallet.findMany({ where: { userId: link.studentUserId } });
+      const wallets = await prisma.wallet.findMany({
+        where: { userId: link.studentUserId },
+        include: { lockedFunds: true },
+      });
       const { password: _password, ...safeStudent } = student;
 
       return { student: safeStudent, link, wallets };
     })
   );
+}
+
+export type StudentCategoryBreakdown = {
+  category: TransactionCategory;
+  locked: number;
+  spent: number;
+};
+
+// Spent = the student's own completed spending in that category, all-time. Combined with
+// the category's currently-locked balance, this gives parents a sense of how far a category's
+// locked funds have been drawn down, without needing a separate "total ever locked" column.
+export async function getStudentSpendingBreakdown(
+  parentUserId: string,
+  studentUserId: string
+): Promise<{ allowedCategories: TransactionCategory[]; categories: StudentCategoryBreakdown[] }> {
+  const link = await assertLinked(parentUserId, studentUserId);
+
+  const wallet = await prisma.wallet.findFirst({
+    where: { userId: studentUserId },
+    orderBy: { createdAt: 'asc' },
+    include: { lockedFunds: true },
+  });
+  if (!wallet) {
+    throw new AppError(404, 'WALLET_NOT_FOUND', 'This student has no wallet');
+  }
+
+  const spentByCategory = await prisma.transaction.groupBy({
+    by: ['category'],
+    where: {
+      fromWalletId: wallet.id,
+      category: { not: 'GENERAL' },
+      status: { in: ['AUTO_APPROVED', 'APPROVED'] },
+    },
+    _sum: { amount: true },
+  });
+  const spentLookup = new Map(
+    spentByCategory.map((entry) => [entry.category, Number(entry._sum.amount ?? 0)])
+  );
+
+  const categoryKeys = new Set<TransactionCategory>([
+    ...link.categories,
+    ...wallet.lockedFunds.map((fund) => fund.category),
+  ]);
+  categoryKeys.delete('GENERAL');
+
+  const categories: StudentCategoryBreakdown[] = [...categoryKeys].map((category) => ({
+    category,
+    locked: Number(wallet.lockedFunds.find((fund) => fund.category === category)?.amount ?? 0),
+    spent: spentLookup.get(category) ?? 0,
+  }));
+
+  return { allowedCategories: link.categories, categories };
 }

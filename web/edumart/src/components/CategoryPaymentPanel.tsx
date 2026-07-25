@@ -46,8 +46,7 @@ export function CategoryPaymentPanel({ category, amount, index, onSuccess }: Cat
   if (status === 'success' && transaction) {
     return (
       <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center">
-        <img src="/images/payment-success.jpeg" alt="Payment approved" className="mx-auto h-32 w-44 rounded-lg object-cover" />
-        <h3 className="mt-4 text-lg font-bold text-emerald-700">Payment Approved!</h3>
+        <h3 className="text-lg font-bold text-emerald-700">Payment Approved!</h3>
         <dl className="mx-auto mt-3 max-w-xs space-y-1 text-left text-sm text-emerald-900">
           <div className="flex justify-between">
             <dt className="text-emerald-600">Category</dt>
@@ -124,8 +123,7 @@ export function CategoryPaymentPanel({ category, amount, index, onSuccess }: Cat
 
         {status === 'failed' && error && (
           <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-center">
-            <img src="/images/payment-failed.jpeg" alt="Payment failed" className="mx-auto h-20 w-28 rounded-lg object-cover" />
-            <p className="mt-2 text-sm font-semibold text-red-700">Payment Failed</p>
+            <p className="text-sm font-semibold text-red-700">Payment Failed</p>
             <p className="text-xs text-red-600">{error}</p>
           </div>
         )}

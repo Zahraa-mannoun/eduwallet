@@ -141,7 +141,9 @@ export function Transactions() {
                       '—'
                     )}
                   </td>
-                  <td className="px-4 py-3 text-slate-700">{tx.toWallet?.user.fullName ?? '—'}</td>
+                  <td className="px-4 py-3 text-slate-700">
+                    {tx.toWallet?.user.fullName ?? tx.receiverName ?? '—'}
+                  </td>
                   <td className="px-4 py-3 font-medium text-slate-900">
                     {formatMoney(tx.amount, tx.currency)}
                   </td>

@@ -17,6 +17,7 @@ export const NOTIFICATION_META: Record<string, NotificationMeta> = {
   CARD_PAYMENT: { icon: 'credit-card-outline', color: '#3DDC97' },
   STUDENT_SPENDING: { icon: 'cash-minus', color: '#2E5FAC' },
   STUDENT_CARD_PAYMENT: { icon: 'credit-card-outline', color: '#2E5FAC' },
+  CARD_AUTO_RENEWED: { icon: 'credit-card-refresh-outline', color: '#3DDC97' },
   APPROVAL_NEEDED: { icon: 'clock-alert-outline', color: '#F59E0B' },
   TRANSACTION_APPROVED: { icon: 'check-circle-outline', color: '#3DDC97' },
   TRANSACTION_REJECTED: { icon: 'close-circle-outline', color: '#DC2626' },

@@ -6,6 +6,7 @@ import {
   getLinkedStudentsHandler,
   getMyPermissionsHandler,
   getPendingApprovalsHandler,
+  getStudentBreakdownHandler,
   linkStudentHandler,
   rejectTransactionHandler,
   unlinkStudentHandler,
@@ -27,5 +28,6 @@ export default async function parentalRoutes(fastify: FastifyInstance): Promise<
     parentScope.post('/approve', approveTransactionHandler);
     parentScope.post('/reject', rejectTransactionHandler);
     parentScope.get('/students', getLinkedStudentsHandler);
+    parentScope.get('/students/:studentId/breakdown', getStudentBreakdownHandler);
   });
 }

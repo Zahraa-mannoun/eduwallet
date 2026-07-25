@@ -21,6 +21,7 @@ import type { BudgetCategoryDefinition, BudgetCategoryKey } from '../constants/b
 import { colors } from '../theme/colors';
 import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
 import * as cardService from '../services/cardService';
+import * as parentalService from '../services/parentalService';
 import { ApiError } from '../services/api';
 import type { StudentTabScreenProps } from '../navigation/types';
 
@@ -49,6 +50,7 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
   const [newCard, setNewCard] = useState<NewVirtualCard | null>(null);
   const [createDialogVisible, setCreateDialogVisible] = useState(false);
   const [selectedLock, setSelectedLock] = useState<BudgetCategoryDefinition | null>(null);
+  const [allowedCategories, setAllowedCategories] = useState<TransactionCategory[] | null>(null);
 
   const loadCards = useCallback(async () => {
     setIsLoading(true);
@@ -63,7 +65,29 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
     }
   }, []);
 
-  useThrottledFocusEffect(loadCards);
+  const loadAllowedCategories = useCallback(async () => {
+    try {
+      const permissions = await parentalService.getMyPermissions();
+      setAllowedCategories(permissions?.allowedCategories ?? null);
+    } catch {
+      // Category-lock options fall back to the full list on failure.
+    }
+  }, []);
+
+  const refreshCards = useCallback(() => {
+    void loadCards();
+    void loadAllowedCategories();
+  }, [loadCards, loadAllowedCategories]);
+
+  useThrottledFocusEffect(refreshCards);
+
+  // A student with no parent linked has nothing restricting them, so every category
+  // stays selectable — the filter only kicks in once parent settings actually exist.
+  const availableLockCategories = allowedCategories
+    ? LOCK_CATEGORIES.filter((category) =>
+        allowedCategories.includes(category.key.toUpperCase() as TransactionCategory)
+      )
+    : LOCK_CATEGORIES;
 
   const openCreateDialog = () => {
     setSelectedLock(null);
@@ -91,9 +115,12 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
 
   const handleToggleFreeze = async (card: VirtualCard) => {
     try {
+      const wasUsedAndFrozen = card.used && card.frozen;
       await cardService.freezeCard(card.id);
       await loadCards();
-      setSnackbarMessage(card.frozen ? 'Card unfrozen.' : 'Card frozen.');
+      setSnackbarMessage(
+        wasUsedAndFrozen ? 'New card issued.' : card.frozen ? 'Card unfrozen.' : 'Card frozen.'
+      );
     } catch (err) {
       setSnackbarMessage(err instanceof ApiError ? err.message : 'Could not update the card.');
     }
@@ -193,7 +220,7 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
                 onPress={() => handleToggleFreeze(card)}
                 style={styles.cardActionButton}
               >
-                {card.frozen ? 'Unfreeze' : 'Freeze'}
+                {card.used && card.frozen ? 'Get New Card' : card.frozen ? 'Unfreeze' : 'Freeze'}
               </Button>
               <IconButton icon="delete-outline" iconColor={colors.danger} onPress={() => handleDelete(card)} />
             </View>
@@ -236,7 +263,7 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
                   </Text>
                 </View>
               </TouchableRipple>
-              {LOCK_CATEGORIES.map((category) => {
+              {availableLockCategories.map((category) => {
                 const selected = selectedLock?.key === category.key;
                 return (
                   <TouchableRipple

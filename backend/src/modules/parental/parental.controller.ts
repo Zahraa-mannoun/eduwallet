@@ -13,6 +13,7 @@ import {
   getLinkedStudents,
   getMyPermissions,
   getPendingApprovals,
+  getStudentSpendingBreakdown,
   linkStudent,
   rejectTransaction,
   unlinkStudent,
@@ -93,6 +94,23 @@ export async function updateSettingsHandler(request: FastifyRequest, reply: Fast
     const authUser = requireAuthUser(request);
     const link = await updateSettings(authUser.id, paramsParsed.data.studentId, bodyParsed.data);
     return reply.status(200).send(successResponse(link));
+  } catch (error) {
+    return handleParentalError(request, reply, error);
+  }
+}
+
+export async function getStudentBreakdownHandler(request: FastifyRequest, reply: FastifyReply) {
+  const parsed = studentIdParamsSchema.safeParse(request.params);
+  if (!parsed.success) {
+    return reply
+      .status(400)
+      .send(errorResponse(parsed.error.issues[0]?.message ?? 'Invalid input', 'VALIDATION_ERROR'));
+  }
+
+  try {
+    const authUser = requireAuthUser(request);
+    const breakdown = await getStudentSpendingBreakdown(authUser.id, parsed.data.studentId);
+    return reply.status(200).send(successResponse(breakdown));
   } catch (error) {
     return handleParentalError(request, reply, error);
   }

@@ -7,6 +7,7 @@ import {
   freezeCardHandler,
   getCardByIdHandler,
   getCardsHandler,
+  updateCardAutoRenewHandler,
   useCardHandler,
 } from './cards.controller';
 
@@ -27,6 +28,7 @@ export default async function cardsRoutes(fastify: FastifyInstance): Promise<voi
     getCardByIdHandler
   );
   fastify.patch('/:id/freeze', { preHandler: authenticate }, freezeCardHandler);
+  fastify.patch('/settings/auto-renew', { preHandler: authenticate }, updateCardAutoRenewHandler);
   fastify.delete('/:id', { preHandler: authenticate }, deleteCardHandler);
 
   // Called by demo merchant websites — intentionally not gated by `authenticate`.
