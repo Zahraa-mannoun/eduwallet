@@ -21,3 +21,15 @@ export const refreshSchema = z.object({
 });
 
 export type RefreshInput = z.infer<typeof refreshSchema>;
+
+export const updateAdminCredentialsSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'Current password is required'),
+    newEmail: z.string().trim().toLowerCase().email('Invalid email address').optional(),
+    newPassword: z.string().min(8, 'Password must be at least 8 characters').optional(),
+  })
+  .refine((data) => data.newEmail !== undefined || data.newPassword !== undefined, {
+    message: 'Provide a new email and/or a new password',
+  });
+
+export type UpdateAdminCredentialsInput = z.infer<typeof updateAdminCredentialsSchema>;

@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/database';
 import { redis } from '../../config/redis';
 import { AppError } from '../../utils/AppError';
-import type { LoginInput, RegisterInput } from './auth.schema';
+import type { LoginInput, RegisterInput, UpdateAdminCredentialsInput } from './auth.schema';
 import { toSafeUser } from './auth.types';
 import type { AccessTokenPayload, RefreshTokenPayload, SafeUser } from './auth.types';
 
@@ -175,4 +175,39 @@ export async function getCurrentUser(userId: string): Promise<SafeUser> {
     throw new AppError(404, 'USER_NOT_FOUND', 'User not found');
   }
   return toSafeUser(user);
+}
+
+export async function updateAdminCredentials(
+  userId: string,
+  input: UpdateAdminCredentialsInput
+): Promise<SafeUser> {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw new AppError(404, 'USER_NOT_FOUND', 'User not found');
+  }
+
+  const passwordMatches = await bcrypt.compare(input.currentPassword, user.password);
+  if (!passwordMatches) {
+    throw new AppError(401, 'INVALID_CREDENTIALS', 'Current password is incorrect');
+  }
+
+  if (input.newEmail && input.newEmail !== user.email) {
+    const existing = await prisma.user.findUnique({ where: { email: input.newEmail } });
+    if (existing) {
+      throw new AppError(409, 'EMAIL_ALREADY_EXISTS', 'An account with this email already exists');
+    }
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: {
+      ...(input.newEmail ? { email: input.newEmail } : {}),
+      ...(input.newPassword ? { password: await bcrypt.hash(input.newPassword, SALT_ROUNDS) } : {}),
+    },
+  });
+
+  // Changing credentials invalidates any other session running on the old ones.
+  await redis.del(refreshTokenKey(userId));
+
+  return toSafeUser(updated);
 }

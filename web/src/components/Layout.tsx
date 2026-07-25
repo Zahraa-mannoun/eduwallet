@@ -11,6 +11,7 @@ import {
   IconGraduation,
   IconLink,
   IconLogout,
+  IconSettings,
   IconShield,
   IconTransactions,
   IconUsers,
@@ -30,6 +31,7 @@ const trailingNavItems = [
   { to: '/kyc', label: 'KYC Review', icon: IconShield },
   { to: '/fraud', label: 'Fraud Alerts', icon: IconAlert },
   { to: '/scholarships', label: 'Scholarships', icon: IconGraduation },
+  { to: '/settings', label: 'Settings', icon: IconSettings },
 ];
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>

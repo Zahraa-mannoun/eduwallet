@@ -1,13 +1,14 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { AppError } from '../../utils/AppError';
 import { errorResponse, successResponse } from '../../utils/apiResponse';
-import { loginSchema, refreshSchema, registerSchema } from './auth.schema';
+import { loginSchema, refreshSchema, registerSchema, updateAdminCredentialsSchema } from './auth.schema';
 import {
   getCurrentUser,
   loginUser,
   logoutUser,
   refreshAccessToken,
   registerUser,
+  updateAdminCredentials,
 } from './auth.service';
 
 function handleAuthError(request: FastifyRequest, reply: FastifyReply, error: unknown) {
@@ -89,6 +90,25 @@ export async function meHandler(request: FastifyRequest, reply: FastifyReply) {
       throw new AppError(401, 'UNAUTHORIZED', 'Missing authentication');
     }
     const user = await getCurrentUser(request.authUser.id);
+    return reply.status(200).send(successResponse(user));
+  } catch (error) {
+    return handleAuthError(request, reply, error);
+  }
+}
+
+export async function updateAdminCredentialsHandler(request: FastifyRequest, reply: FastifyReply) {
+  const parsed = updateAdminCredentialsSchema.safeParse(request.body);
+  if (!parsed.success) {
+    return reply
+      .status(400)
+      .send(errorResponse(parsed.error.issues[0]?.message ?? 'Invalid input', 'VALIDATION_ERROR'));
+  }
+
+  try {
+    if (!request.authUser) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Missing authentication');
+    }
+    const user = await updateAdminCredentials(request.authUser.id, parsed.data);
     return reply.status(200).send(successResponse(user));
   } catch (error) {
     return handleAuthError(request, reply, error);

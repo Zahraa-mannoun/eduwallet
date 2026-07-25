@@ -13,6 +13,7 @@ import { Relationships } from './pages/Relationships';
 import { KYC } from './pages/KYC';
 import { Fraud } from './pages/Fraud';
 import { Scholarships } from './pages/Scholarships';
+import { Settings } from './pages/Settings';
 
 function ProtectedPage({ children }: { children: ReactNode }) {
   return (
@@ -97,6 +98,14 @@ export function App() {
           element={
             <ProtectedPage>
               <Scholarships />
+            </ProtectedPage>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <ProtectedPage>
+              <Settings />
             </ProtectedPage>
           }
         />
