@@ -10,6 +10,7 @@ import {
   IconButton,
   Portal,
   Snackbar,
+  Switch,
   Text,
   TouchableRipple,
 } from 'react-native-paper';
@@ -51,6 +52,7 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
   const [createDialogVisible, setCreateDialogVisible] = useState(false);
   const [selectedLock, setSelectedLock] = useState<BudgetCategoryDefinition | null>(null);
   const [allowedCategories, setAllowedCategories] = useState<TransactionCategory[] | null>(null);
+  const [showUsedCards, setShowUsedCards] = useState(false);
 
   const loadCards = useCallback(async () => {
     setIsLoading(true);
@@ -80,6 +82,9 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
   }, [loadCards, loadAllowedCategories]);
 
   useThrottledFocusEffect(refreshCards);
+
+  const hasUsedCards = cards.some((card) => card.used);
+  const visibleCards = showUsedCards ? cards : cards.filter((card) => !card.used);
 
   // A student with no parent linked has nothing restricting them, so every category
   // stays selectable — the filter only kicks in once parent settings actually exist.
@@ -156,7 +161,14 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
       >
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        {cards.map((card) => (
+        {hasUsedCards ? (
+          <View style={styles.toggleRow}>
+            <Text style={styles.toggleLabel}>Show used cards</Text>
+            <Switch value={showUsedCards} onValueChange={setShowUsedCards} color={colors.primary} />
+          </View>
+        ) : null}
+
+        {visibleCards.map((card) => (
           <View key={card.id} style={styles.cardWrapper}>
             <LinearGradient
               colors={[colors.gradientStart, colors.gradientEnd]}
@@ -227,8 +239,12 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
           </View>
         ))}
 
-        {cards.length === 0 && !isLoading ? (
-          <Text style={styles.emptyText}>You don&apos;t have any virtual cards yet.</Text>
+        {visibleCards.length === 0 && !isLoading ? (
+          <Text style={styles.emptyText}>
+            {cards.length === 0
+              ? "You don't have any virtual cards yet."
+              : 'No active cards. Toggle "Show used cards" to see history.'}
+          </Text>
         ) : null}
 
         <Button
@@ -379,6 +395,17 @@ const styles = StyleSheet.create({
     color: colors.muted,
     textAlign: 'center',
     paddingVertical: 24,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  toggleLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.muted,
   },
   cardWrapper: {
     marginBottom: 20,

@@ -4,6 +4,8 @@ import type { AcademicDocument, ApiResponse, KYCStatus } from '@eduwallet/shared
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
+import { RefreshButton } from '../components/RefreshButton';
+import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { getKycDisplayStatus } from '../lib/kycDisplayStatus';
 import { formatDate } from '../lib/format';
 import type { PendingKYCRow } from '../types/admin';
@@ -135,6 +137,8 @@ export function KYC() {
     void load();
   }, [load]);
 
+  useVisibilityRefetch(load);
+
   const visibleRows = useMemo(() => rows.filter((row) => matchesFilter(row, filter)), [rows, filter]);
 
   const viewDocument = async (documentId: string) => {
@@ -161,21 +165,25 @@ export function KYC() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-1">
-        {FILTER_TABS.map((tab) => (
-          <button
-            key={tab.value}
-            type="button"
-            onClick={() => setFilter(tab.value)}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-              filter === tab.value
-                ? 'bg-primary text-white'
-                : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-1">
+          {FILTER_TABS.map((tab) => (
+            <button
+              key={tab.value}
+              type="button"
+              onClick={() => setFilter(tab.value)}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+                filter === tab.value
+                  ? 'bg-primary text-white'
+                  : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <RefreshButton onClick={() => void load()} isLoading={isLoading} />
       </div>
 
       {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

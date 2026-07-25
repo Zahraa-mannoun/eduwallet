@@ -4,6 +4,8 @@ import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
+import { RefreshButton } from '../components/RefreshButton';
+import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { severityTone } from '../lib/badgeTones';
 import { formatDateTime, formatMoney } from '../lib/format';
 import type { FraudAlertRow } from '../types/admin';
@@ -34,27 +36,33 @@ export function Fraud() {
     void load();
   }, [load]);
 
+  useVisibilityRefetch(load);
+
   return (
     <div className="space-y-4">
-      <div className="flex gap-1">
-        <button
-          type="button"
-          onClick={() => setShowAll(false)}
-          className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-            !showAll ? 'bg-primary text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-          }`}
-        >
-          Unresolved only
-        </button>
-        <button
-          type="button"
-          onClick={() => setShowAll(true)}
-          className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-            showAll ? 'bg-primary text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-          }`}
-        >
-          All
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex gap-1">
+          <button
+            type="button"
+            onClick={() => setShowAll(false)}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+              !showAll ? 'bg-primary text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            Unresolved only
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowAll(true)}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+              showAll ? 'bg-primary text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            All
+          </button>
+        </div>
+
+        <RefreshButton onClick={() => void load()} isLoading={isLoading} />
       </div>
 
       {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

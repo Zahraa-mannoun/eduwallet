@@ -22,6 +22,7 @@ import type { UserType } from '../types/api';
 import IconBadge from '../components/IconBadge';
 import KYCGate from '../components/KYCGate';
 import { useWallet } from '../context/WalletContext';
+import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
 import * as walletService from '../services/walletService';
 import { ApiError } from '../services/api';
 import { colors } from '../theme/colors';
@@ -55,6 +56,8 @@ export default function SendMoneyScreen({ navigation }: RootStackScreenProps<'Se
   const [sendError, setSendError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [transaction, setTransaction] = useState<SentTransaction | null>(null);
+
+  useThrottledFocusEffect(refresh);
 
   const parsedAmount = Number(amount);
   const canSend = Boolean(recipient) && parsedAmount > 0 && !isSending;

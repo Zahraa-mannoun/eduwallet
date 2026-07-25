@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import type { ApiResponse, TransactionCategory, TransactionStatus } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
+import { RefreshButton } from '../components/RefreshButton';
+import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { categoryTone, transactionStatusTone } from '../lib/badgeTones';
 import { formatDateTime, formatMoney } from '../lib/format';
 import { TRANSACTION_CATEGORIES, TRANSACTION_STATUSES } from '../types/admin';
@@ -48,55 +50,61 @@ export function Transactions() {
     void load();
   }, [load]);
 
+  useVisibilityRefetch(load);
+
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <select
-          value={status}
-          onChange={(event) => {
-            setStatus(event.target.value as TransactionStatus | 'ALL');
-            setPage(1);
-          }}
-          className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-        >
-          <option value="ALL">All statuses</option>
-          {TRANSACTION_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={category}
-          onChange={(event) => {
-            setCategory(event.target.value as TransactionCategory | 'ALL');
-            setPage(1);
-          }}
-          className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-        >
-          <option value="ALL">All categories</option>
-          {TRANSACTION_CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-
-        <label className="flex items-center gap-2 text-sm text-slate-600">
-          <input
-            type="checkbox"
-            checked={flaggedOnly}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={status}
             onChange={(event) => {
-              setFlaggedOnly(event.target.checked);
+              setStatus(event.target.value as TransactionStatus | 'ALL');
               setPage(1);
             }}
-            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-          />
-          Flagged only
-        </label>
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          >
+            <option value="ALL">All statuses</option>
+            {TRANSACTION_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={category}
+            onChange={(event) => {
+              setCategory(event.target.value as TransactionCategory | 'ALL');
+              setPage(1);
+            }}
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          >
+            <option value="ALL">All categories</option>
+            {TRANSACTION_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            <input
+              type="checkbox"
+              checked={flaggedOnly}
+              onChange={(event) => {
+                setFlaggedOnly(event.target.checked);
+                setPage(1);
+              }}
+              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+            />
+            Flagged only
+          </label>
+        </div>
+
+        <RefreshButton onClick={() => void load()} isLoading={isLoading} />
       </div>
 
       {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

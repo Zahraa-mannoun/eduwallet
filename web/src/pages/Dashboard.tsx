@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -12,6 +12,8 @@ import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { StatCard } from '../components/StatCard';
 import { Badge } from '../components/Badge';
+import { RefreshButton } from '../components/RefreshButton';
+import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { transactionStatusTone, severityTone } from '../lib/badgeTones';
 import { formatDate, formatMoney } from '../lib/format';
 import type { FraudAlertRow, SystemStats, TransactionRow } from '../types/admin';
@@ -23,37 +25,40 @@ export function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    async function load() {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const [statsRes, txRes, alertsRes] = await Promise.all([
-          api.get<ApiResponse<SystemStats>>('/admin/stats'),
-          api.get<ApiResponse<{ transactions: TransactionRow[] }>>('/admin/transactions', {
-            params: { limit: 10 },
-          }),
-          api.get<ApiResponse<FraudAlertRow[]>>('/admin/fraud-alerts', {
-            params: { resolved: 'false' },
-          }),
-        ]);
-        setStats(unwrap(statsRes.data));
-        setTransactions(unwrap(txRes.data).transactions);
-        setAlerts(unwrap(alertsRes.data).slice(0, 5));
-      } catch (err) {
-        setError(getErrorMessage(err));
-      } finally {
-        setIsLoading(false);
-      }
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const [statsRes, txRes, alertsRes] = await Promise.all([
+        api.get<ApiResponse<SystemStats>>('/admin/stats'),
+        api.get<ApiResponse<{ transactions: TransactionRow[] }>>('/admin/transactions', {
+          params: { limit: 10 },
+        }),
+        api.get<ApiResponse<FraudAlertRow[]>>('/admin/fraud-alerts', {
+          params: { resolved: 'false' },
+        }),
+      ]);
+      setStats(unwrap(statsRes.data));
+      setTransactions(unwrap(txRes.data).transactions);
+      setAlerts(unwrap(alertsRes.data).slice(0, 5));
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setIsLoading(false);
     }
-    void load();
   }, []);
 
-  if (isLoading) {
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useVisibilityRefetch(load);
+
+  if (isLoading && !stats) {
     return <p className="text-sm text-slate-500">Loading dashboard…</p>;
   }
 
-  if (error) {
+  if (error && !stats) {
     return <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>;
   }
 
@@ -77,6 +82,13 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-semibold text-slate-900">Overview</h1>
+        <RefreshButton onClick={() => void load()} isLoading={isLoading} />
+      </div>
+
+      {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total Users" value={stats.users.total} subtitle={usersSubtitle} />
         <StatCard label="Total Transactions" value={stats.transactions.total} />

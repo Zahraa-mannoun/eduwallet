@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   ActivityIndicator,
   Button,
@@ -16,7 +17,6 @@ import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryDefinition, BudgetCategoryKey } from '../constants/budgetCategories';
 import { colors } from '../theme/colors';
 import { useWallet } from '../context/WalletContext';
-import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
 import * as budgetService from '../services/budgetService';
 import { ApiError } from '../services/api';
 import type { StudentTabScreenProps } from '../navigation/types';
@@ -79,7 +79,14 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
     }
   }, []);
 
-  useThrottledFocusEffect(load);
+  // Unlike other screens, this deliberately skips the 30s-throttled focus hook: budget
+  // progress must reflect a card payment made moments ago (e.g. at EduMart) the instant
+  // the student comes back to this tab, not up to 30s later.
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load])
+  );
 
   const budgetFor = (category: BudgetCategoryDefinition): BudgetCategory | undefined =>
     budgets.find((entry) => entry.category === category.key.toUpperCase());
