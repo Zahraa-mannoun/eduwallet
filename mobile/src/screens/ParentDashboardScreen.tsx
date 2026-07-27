@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   ActivityIndicator,
   Avatar,
@@ -18,7 +19,6 @@ import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryKey } from '../constants/budgetCategories';
 import { TRANSACTION_STATUS_META } from '../constants/mockTransactions';
 import { useWallet } from '../context/WalletContext';
-import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
 import { colors } from '../theme/colors';
 import { getInitials } from '../utils/getInitials';
 import * as parentalService from '../services/parentalService';
@@ -71,7 +71,13 @@ export default function ParentDashboardScreen({
     void refreshParentWallet();
   }, [load, refreshParentWallet]);
 
-  useThrottledFocusEffect(refreshDashboard);
+  // Unthrottled: the parent's home tab must reflect a just-approved transfer or a student's
+  // card payment the instant the parent returns here, not up to 30s later.
+  useFocusEffect(
+    useCallback(() => {
+      refreshDashboard();
+    }, [refreshDashboard])
+  );
 
   const walletToStudentName = useMemo(() => {
     const map = new Map<string, string>();
@@ -80,12 +86,6 @@ export default function ParentDashboardScreen({
     });
     return map;
   }, [students]);
-
-  const totalBalance = useMemo(
-    () =>
-      students.reduce((sum, { wallets }) => sum + wallets.reduce((s, w) => s + Number(w.balance), 0), 0),
-    [students]
-  );
 
   const pendingPreview = approvals.slice(0, PENDING_PREVIEW_COUNT);
 
@@ -138,48 +138,62 @@ export default function ParentDashboardScreen({
           <Text style={styles.walletNote}>Contact admin to add funds to your wallet</Text>
         </LinearGradient>
 
-        <TouchableOpacity
-          activeOpacity={0.85}
-          disabled={students.length === 0}
-          onPress={() => students[0] && openBreakdown(students[0])}
-        >
-        <LinearGradient
-          colors={[colors.gradientStart, colors.gradientEnd]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.studentCard}
-        >
-          <View style={styles.studentRow}>
-            <Avatar.Text
-              size={48}
-              label={getInitials(students[0]?.student.fullName ?? 'S')}
-              style={styles.studentAvatar}
-              color={colors.primary}
-            />
-            <View style={styles.studentInfo}>
-              <Text style={styles.studentName}>
-                {students.length > 1
-                  ? `${students.length} linked students`
-                  : students[0]?.student.fullName ?? 'No students linked'}
+        <Text style={styles.sectionLabel}>Linked Students</Text>
+        {isLoading && students.length === 0 ? (
+          <ActivityIndicator color={colors.primary} style={styles.studentsLoading} />
+        ) : students.length > 0 ? (
+          students.map((linkedStudent) => {
+            const { student, wallets } = linkedStudent;
+            const balance = wallets.length > 0 ? Number(wallets[0].balance) : 0;
+            return (
+              <TouchableOpacity
+                key={student.id}
+                activeOpacity={0.85}
+                onPress={() => openBreakdown(linkedStudent)}
+              >
+                <LinearGradient
+                  colors={[colors.gradientStart, colors.gradientEnd]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.studentCard}
+                >
+                  <View style={styles.studentRow}>
+                    <Avatar.Text
+                      size={48}
+                      label={getInitials(student.fullName)}
+                      style={styles.studentAvatar}
+                      color={colors.primary}
+                    />
+                    <View style={styles.studentInfo}>
+                      <Text style={styles.studentName}>{student.fullName}</Text>
+                      <Text style={styles.studentUniversity}>{student.email}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.balanceLabel}>Wallet Balance</Text>
+                  <Text style={styles.balanceValue}>${balance.toFixed(2)}</Text>
+                  <Text style={styles.studentCardHint}>Tap for spending details</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            );
+          })
+        ) : (
+          <Card style={styles.emptyCard} mode="elevated">
+            <Card.Content style={styles.emptyState}>
+              <Avatar.Icon
+                icon="account-group-outline"
+                size={48}
+                style={styles.emptyIcon}
+                color={colors.primary}
+              />
+              <Text style={styles.emptyTitle}>No students linked</Text>
+              <Text style={styles.emptySubtitle}>
+                Students you link will show up here.
               </Text>
-              <Text style={styles.studentUniversity}>
-                {students.length > 0 ? students.map((s) => s.student.email).join(', ') : ''}
-              </Text>
-            </View>
-          </View>
-          <Text style={styles.balanceLabel}>Total Student Balance</Text>
-          {isLoading && students.length === 0 ? (
-            <ActivityIndicator color={colors.onPrimary} style={styles.balanceLoading} />
-          ) : (
-            <Text style={styles.balanceValue}>${totalBalance.toFixed(2)}</Text>
-          )}
-          {students.length > 0 ? (
-            <Text style={styles.studentCardHint}>Tap for spending details</Text>
-          ) : null}
-        </LinearGradient>
-        </TouchableOpacity>
+            </Card.Content>
+          </Card>
+        )}
 
-        <View style={styles.pendingHeaderRow}>
+        <View style={[styles.pendingHeaderRow, styles.pendingHeaderRowSpacing]}>
           <Text style={styles.sectionLabel}>Pending Approvals</Text>
           <Button
             mode="text"
@@ -364,11 +378,14 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 10,
   },
+  studentsLoading: {
+    marginTop: 8,
+    marginBottom: 16,
+  },
   studentCard: {
     borderRadius: 20,
     padding: 20,
-    marginTop: 8,
-    marginBottom: 24,
+    marginBottom: 14,
   },
   studentRow: {
     flexDirection: 'row',
@@ -483,6 +500,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  pendingHeaderRowSpacing: {
+    marginTop: 10,
   },
   approvalRow: {
     flexDirection: 'row',

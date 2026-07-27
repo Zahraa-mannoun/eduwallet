@@ -3,10 +3,10 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar, Button, Chip, Divider, List, Text } from 'react-native-paper';
+import { useFocusEffect } from '@react-navigation/native';
 import type { NavigationProp } from '@react-navigation/native';
 import { USER_TYPES } from '../constants/userTypes';
 import { useAuth } from '../context/AuthContext';
-import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
 import * as kycService from '../services/kycService';
 import { colors } from '../theme/colors';
 import { getInitials } from '../utils/getInitials';
@@ -69,7 +69,13 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
     }
   }, [user?.userType]);
 
-  useThrottledFocusEffect(loadKycDocuments);
+  // Unthrottled: KYC status must update immediately when the student returns here after
+  // submitting documents, not up to 30s later — same reasoning as BudgetScreen/CardsScreen.
+  useFocusEffect(
+    useCallback(() => {
+      void loadKycDocuments();
+    }, [loadKycDocuments])
+  );
 
   const effectiveKycStatus = user ? getEffectiveKYCStatus(user.kycStatus, hasKycDocuments) : 'UNVERIFIED';
   const kycBadge = user ? KYC_BADGES[effectiveKycStatus] : undefined;

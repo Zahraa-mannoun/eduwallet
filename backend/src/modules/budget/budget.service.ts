@@ -94,9 +94,14 @@ export async function updateSpent(
   category: TransactionCategory,
   amount: number
 ): Promise<void> {
-  await prisma.budgetCategory.updateMany({
-    where: { walletId, category, month: getCurrentMonth() },
-    data: { spent: { increment: amount } },
+  const month = getCurrentMonth();
+  // Upsert rather than updateMany: spending must be tracked even for a category the
+  // student never set a personal monthly limit for (monthlyLimit 0 = "no limit"), so
+  // screens that show spend against locked funds have real numbers to work with.
+  await prisma.budgetCategory.upsert({
+    where: { walletId_category_month: { walletId, category, month } },
+    create: { walletId, category, month, monthlyLimit: 0, spent: amount },
+    update: { spent: { increment: amount } },
   });
 }
 
@@ -139,7 +144,7 @@ export async function getBudgetSummary(userId: string, month: string): Promise<B
       spent,
       remaining: monthlyLimit - spent,
       percentUsed,
-      overspent: spent > monthlyLimit,
+      overspent: monthlyLimit > 0 && spent > monthlyLimit,
     };
   });
 

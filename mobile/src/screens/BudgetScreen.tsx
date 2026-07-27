@@ -18,6 +18,8 @@ import type { BudgetCategoryDefinition, BudgetCategoryKey } from '../constants/b
 import { colors } from '../theme/colors';
 import { useWallet } from '../context/WalletContext';
 import * as budgetService from '../services/budgetService';
+import * as parentalService from '../services/parentalService';
+import type { MyPermissions } from '../services/parentalService';
 import { ApiError } from '../services/api';
 import type { StudentTabScreenProps } from '../navigation/types';
 
@@ -39,26 +41,20 @@ const CATEGORY_DESCRIPTIONS: Record<BudgetCategoryKey, string> = {
   general: 'Miscellaneous spending',
 };
 
-const OVERSPENT_THRESHOLD = 100;
-const APPROACHING_THRESHOLD = 90;
+const WARNING_THRESHOLD = 70;
+const DANGER_THRESHOLD = 90;
+const WARNING_COLOR = '#F59E0B';
 
-type CategoryStats = {
-  spent: number;
-  limit: number;
-  percentUsed: number;
-  overspent: boolean;
-};
-
-function statsFor(budget: BudgetCategory | undefined): CategoryStats {
-  const spent = budget ? Number(budget.spent) : 0;
-  const limit = budget ? Number(budget.monthlyLimit) : 0;
-  const percentUsed = limit > 0 ? Math.round((spent / limit) * 100) : 0;
-  return { spent, limit, overspent: spent > limit && limit > 0, percentUsed };
+function progressColor(percentUsed: number): string {
+  if (percentUsed > DANGER_THRESHOLD) return colors.danger;
+  if (percentUsed > WARNING_THRESHOLD) return WARNING_COLOR;
+  return colors.accent;
 }
 
 export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Budget'>>) {
   const { lockedFunds } = useWallet();
   const [budgets, setBudgets] = useState<BudgetCategory[]>([]);
+  const [permissions, setPermissions] = useState<MyPermissions | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dialogCategory, setDialogCategory] = useState<BudgetCategoryDefinition | null>(null);
@@ -66,7 +62,7 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
   const [isSaving, setIsSaving] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const loadBudgets = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
@@ -79,14 +75,32 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
     }
   }, []);
 
+  const loadPermissions = useCallback(async () => {
+    try {
+      const result = await parentalService.getMyPermissions();
+      setPermissions(result);
+    } catch {
+      // Authorization gating falls back to "everything allowed" on failure, same as an
+      // unlinked student — better than locking a student out of their own budgets.
+    }
+  }, []);
+
+  const load = useCallback(() => {
+    void loadBudgets();
+    void loadPermissions();
+  }, [loadBudgets, loadPermissions]);
+
   // Unlike other screens, this deliberately skips the 30s-throttled focus hook: budget
   // progress must reflect a card payment made moments ago (e.g. at EduMart) the instant
   // the student comes back to this tab, not up to 30s later.
   useFocusEffect(
     useCallback(() => {
-      void load();
+      load();
     }, [load])
   );
+
+  const hasParent = permissions !== null;
+  const allowedCategories = permissions?.allowedCategories ?? [];
 
   const budgetFor = (category: BudgetCategoryDefinition): BudgetCategory | undefined =>
     budgets.find((entry) => entry.category === category.key.toUpperCase());
@@ -96,9 +110,18 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
     return fund ? Number(fund.amount) : 0;
   };
 
+  // GENERAL spending is never category-locked by a parent (see wallet.service.ts transfer()),
+  // so it's always authorized regardless of what the parent picked in their category list.
+  const isAuthorized = (category: BudgetCategoryDefinition): boolean => {
+    if (category.key === 'general') return true;
+    if (!hasParent) return true;
+    return allowedCategories.includes(category.key.toUpperCase() as TransactionCategory);
+  };
+
   const openDialog = (category: BudgetCategoryDefinition) => {
     const existing = budgetFor(category);
-    setDialogAmount(existing ? existing.monthlyLimit : '');
+    const hasExistingLimit = existing ? Number(existing.monthlyLimit) > 0 : false;
+    setDialogAmount(hasExistingLimit ? existing!.monthlyLimit : '');
     setDialogCategory(category);
   };
 
@@ -131,7 +154,7 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
       );
       closeDialog();
       setSnackbarMessage(`${dialogCategory.label} budget updated.`);
-      await load();
+      await loadBudgets();
     } catch (err) {
       setSnackbarMessage(err instanceof ApiError ? err.message : 'Could not save that budget.');
     } finally {
@@ -153,93 +176,139 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
       >
         <View style={styles.bannerCard}>
           <Text style={styles.bannerText}>
-            Set your own monthly spending limits for each category. This is your personal
-            financial management tool — track and control your own spending goals.
+            Track your locked funds and set your own monthly spending goals for categories your
+            parent has authorized.
           </Text>
         </View>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         {BUDGET_CATEGORIES.map((category) => {
-          const stats = statsFor(budgetFor(category));
-          const progress = stats.limit > 0 ? Math.min(stats.spent / stats.limit, 1) : 0;
           const locked = lockedFundFor(category);
+          const budget = budgetFor(category);
+          const spent = budget ? Number(budget.spent) : 0;
+          const monthlyLimit = budget ? Number(budget.monthlyLimit) : 0;
+          const hasLockedFunds = locked > 0;
+          const hasPersonalLimit = monthlyLimit > 0;
+          const authorized = isAuthorized(category);
+          const isFullyEmpty = !hasLockedFunds && !hasPersonalLimit;
 
-          let alertText: string | null = null;
-          if (stats.limit > 0 && stats.percentUsed >= OVERSPENT_THRESHOLD) {
-            alertText = `Overspent by $${(stats.spent - stats.limit).toFixed(2)}`;
-          } else if (stats.limit > 0 && stats.percentUsed >= APPROACHING_THRESHOLD) {
-            alertText = `${stats.percentUsed}% of this budget used`;
-          }
-
-          const exceedsLockedFunds = stats.limit > 0 && locked > 0 && stats.limit > locked;
-
-          return (
-            <View key={category.key} style={styles.categoryCard}>
-              <View style={styles.categoryHeaderRow}>
+          if (isFullyEmpty && !authorized) {
+            return (
+              <View key={category.key} style={[styles.categoryCard, styles.categoryCardDimmed]}>
                 <View style={styles.categoryTitleRow}>
-                  <IconBadge icon={category.icon} color={category.color} size={40} />
-                  <Text variant="titleMedium" style={styles.categoryLabel}>
+                  <IconBadge icon={category.icon} color={colors.muted} size={40} />
+                  <Text variant="titleMedium" style={[styles.categoryLabel, styles.categoryLabelDimmed]}>
                     {category.label}
                   </Text>
                 </View>
-                <View style={styles.categoryAmountColumn}>
-                  <Text style={styles.categoryAmount}>
-                    ${stats.spent.toFixed(0)} / ${stats.limit.toFixed(0)}
-                  </Text>
-                  {locked > 0 ? (
-                    <Text style={styles.lockedText}>🔒 ${locked.toFixed(0)} locked</Text>
-                  ) : null}
-                </View>
+                <Text style={styles.notAuthorizedText}>Not authorized by parent</Text>
               </View>
+            );
+          }
 
+          const lockedPercent = hasLockedFunds ? Math.round((spent / locked) * 100) : 0;
+          const lockedRemaining = Math.max(locked - spent, 0);
+          const lockedColor = progressColor(lockedPercent);
+
+          const budgetPercent = hasPersonalLimit ? Math.round((spent / monthlyLimit) * 100) : 0;
+          const budgetColor = progressColor(budgetPercent);
+
+          return (
+            <View key={category.key} style={styles.categoryCard}>
+              <View style={styles.categoryTitleRow}>
+                <IconBadge icon={category.icon} color={category.color} size={40} />
+                <Text variant="titleMedium" style={styles.categoryLabel}>
+                  {category.label}
+                </Text>
+              </View>
               <Text style={styles.categoryDescription}>{CATEGORY_DESCRIPTIONS[category.key]}</Text>
 
-              <View style={styles.progressTrack}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    {
-                      width: `${Math.round(progress * 100)}%`,
-                      backgroundColor: stats.overspent ? colors.danger : category.color,
-                    },
-                  ]}
-                />
-              </View>
+              {isFullyEmpty ? (
+                <View style={styles.placeholderRow}>
+                  <Text style={styles.placeholderText}>No locked funds · No budget set</Text>
+                  <Button
+                    mode="text"
+                    compact
+                    textColor={colors.primary}
+                    onPress={() => openDialog(category)}
+                  >
+                    Edit
+                  </Button>
+                </View>
+              ) : (
+                <>
+                  {hasLockedFunds ? (
+                    <View style={styles.sectionBlock}>
+                      <View style={styles.sectionHeaderRow}>
+                        <Text style={styles.sectionTitle}>🔒 Locked Funds</Text>
+                        <Text style={[styles.sectionPercent, { color: lockedColor }]}>
+                          {lockedPercent}%
+                        </Text>
+                      </View>
+                      <View style={styles.progressTrack}>
+                        <View
+                          style={[
+                            styles.progressFill,
+                            { width: `${Math.min(lockedPercent, 100)}%`, backgroundColor: lockedColor },
+                          ]}
+                        />
+                      </View>
+                      <View style={styles.sectionStatsRow}>
+                        <View style={styles.sectionStatColumn}>
+                          <Text style={styles.sectionStatLabel}>LOCKED</Text>
+                          <Text style={styles.sectionStatValue}>${locked.toFixed(0)}</Text>
+                        </View>
+                        <View style={styles.sectionStatColumn}>
+                          <Text style={styles.sectionStatLabel}>SPENT</Text>
+                          <Text style={styles.sectionStatValue}>${spent.toFixed(0)}</Text>
+                        </View>
+                        <View style={[styles.sectionStatColumn, styles.sectionStatColumnEnd]}>
+                          <Text style={styles.sectionStatLabel}>REMAINING</Text>
+                          <Text style={styles.sectionStatValue}>${lockedRemaining.toFixed(0)}</Text>
+                        </View>
+                      </View>
+                    </View>
+                  ) : null}
 
-              <Text style={styles.categoryUsed}>
-                {stats.limit > 0 ? `${stats.percentUsed}% used` : 'No budget set'}
-              </Text>
+                  <View style={styles.sectionBlock}>
+                    <View style={styles.sectionHeaderRow}>
+                      <Text style={styles.sectionTitle}>Personal Budget</Text>
+                      {authorized ? (
+                        <Button
+                          mode="text"
+                          compact
+                          textColor={colors.primary}
+                          style={styles.inlineEditButton}
+                          onPress={() => openDialog(category)}
+                        >
+                          Edit
+                        </Button>
+                      ) : null}
+                    </View>
 
-              {alertText ? (
-                <Text
-                  style={[
-                    styles.alertText,
-                    { color: stats.percentUsed >= OVERSPENT_THRESHOLD ? colors.danger : '#B45309' },
-                  ]}
-                >
-                  {alertText}
-                </Text>
-              ) : null}
-
-              {exceedsLockedFunds ? (
-                <Text style={styles.lockedWarningText}>
-                  Your budget limit exceeds your available locked funds for this category. Actual
-                  spending is limited by your wallet balance.
-                </Text>
-              ) : null}
-
-              <Button
-                mode="contained"
-                compact
-                buttonColor={colors.primary}
-                textColor={colors.onPrimary}
-                style={styles.editButton}
-                contentStyle={styles.editButtonContent}
-                onPress={() => openDialog(category)}
-              >
-                Edit
-              </Button>
+                    {!authorized ? (
+                      <Text style={styles.notAuthorizedText}>Not authorized by parent</Text>
+                    ) : hasPersonalLimit ? (
+                      <>
+                        <Text style={styles.sectionAmount}>
+                          ${spent.toFixed(0)} of ${monthlyLimit.toFixed(0)} used this month
+                        </Text>
+                        <View style={styles.progressTrack}>
+                          <View
+                            style={[
+                              styles.progressFill,
+                              { width: `${Math.min(budgetPercent, 100)}%`, backgroundColor: budgetColor },
+                            ]}
+                          />
+                        </View>
+                      </>
+                    ) : (
+                      <Text style={styles.placeholderText}>No budget set</Text>
+                    )}
+                  </View>
+                </>
+              )}
             </View>
           );
         })}
@@ -328,11 +397,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: 16,
   },
-  categoryHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
+  categoryCardDimmed: {
+    opacity: 0.55,
   },
   categoryTitleRow: {
     flexDirection: 'row',
@@ -343,30 +409,81 @@ const styles = StyleSheet.create({
     color: colors.heading,
     marginLeft: 12,
   },
-  categoryAmountColumn: {
-    alignItems: 'flex-end',
-  },
-  categoryAmount: {
-    fontSize: 13,
-    fontWeight: '600',
+  categoryLabelDimmed: {
     color: colors.muted,
-  },
-  lockedText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.primary,
-    marginTop: 2,
-  },
-  lockedWarningText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#B45309',
-    marginTop: 6,
   },
   categoryDescription: {
     fontSize: 12,
     color: colors.muted,
-    marginBottom: 10,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  placeholderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  placeholderText: {
+    fontSize: 12,
+    color: colors.muted,
+  },
+  notAuthorizedText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.muted,
+    fontStyle: 'italic',
+    marginTop: 8,
+  },
+  sectionBlock: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.heading,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  sectionPercent: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  sectionAmount: {
+    fontSize: 12,
+    color: colors.muted,
+    marginBottom: 8,
+  },
+  sectionStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  sectionStatColumn: {
+    alignItems: 'flex-start',
+  },
+  sectionStatColumnEnd: {
+    alignItems: 'flex-end',
+  },
+  sectionStatLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: colors.muted,
+    marginBottom: 2,
+  },
+  sectionStatValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.heading,
   },
   progressTrack: {
     height: 8,
@@ -378,23 +495,8 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 4,
   },
-  categoryUsed: {
-    fontSize: 12,
-    color: colors.muted,
-    marginTop: 6,
-  },
-  alertText: {
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 6,
-  },
-  editButton: {
-    borderRadius: 10,
-    marginTop: 14,
-    alignSelf: 'stretch',
-  },
-  editButtonContent: {
-    paddingVertical: 4,
+  inlineEditButton: {
+    marginRight: -8,
   },
   dialogHelperText: {
     fontSize: 12,

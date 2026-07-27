@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, Button, Card, Chip, IconButton, Snackbar, Text } from 'react-native-paper';
 import * as DocumentPicker from 'expo-document-picker';
 import type { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -80,9 +81,11 @@ export default function KYCScreen({ navigation }: Readonly<RootStackScreenProps<
     }
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load])
+  );
 
   const handleUpload = async (key: DocumentKey, documentType: 'STUDENT_ID' | 'ENROLLMENT_CERTIFICATE') => {
     const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });

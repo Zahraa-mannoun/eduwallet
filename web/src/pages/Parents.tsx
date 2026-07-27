@@ -3,7 +3,6 @@ import type { FormEvent } from 'react';
 import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { AddFundsModal } from '../components/AddFundsModal';
-import { RefreshButton } from '../components/RefreshButton';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { formatDate } from '../lib/format';
 import type { AdminUser } from '../types/admin';
@@ -80,25 +79,21 @@ export function Parents() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <form onSubmit={handleSearchSubmit} className="flex max-w-xs gap-2">
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search by name or email…"
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          />
-          <button
-            type="submit"
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-          >
-            Search
-          </button>
-        </form>
-
-        <RefreshButton onClick={() => void loadUsers()} isLoading={isLoading} />
-      </div>
+      <form onSubmit={handleSearchSubmit} className="flex max-w-xs gap-2">
+        <input
+          type="search"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search by name or email…"
+          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+        />
+        <button
+          type="submit"
+          className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+        >
+          Search
+        </button>
+      </form>
 
       {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 

@@ -13,7 +13,8 @@ const transactionCategoryEnum = z.enum([
 
 export const linkStudentSchema = z.object({
   studentEmail: z.string().trim().toLowerCase().email('Invalid email address'),
-  approvalThreshold: z.number().positive('Approval threshold must be greater than 0'),
+  // 0 means no threshold — general transfers are auto-approved regardless of amount.
+  approvalThreshold: z.number().min(0, 'Approval threshold cannot be negative'),
   categories: z.array(transactionCategoryEnum),
 });
 

@@ -3,7 +3,6 @@ import type { FormEvent } from 'react';
 import type { ApiResponse, KYCStatus } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
-import { RefreshButton } from '../components/RefreshButton';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { getKycDisplayStatus } from '../lib/kycDisplayStatus';
 import { formatDate } from '../lib/format';
@@ -120,8 +119,6 @@ export function Students() {
             </button>
           ))}
         </div>
-
-        <RefreshButton onClick={() => void loadUsers()} isLoading={isLoading} />
       </div>
 
       {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

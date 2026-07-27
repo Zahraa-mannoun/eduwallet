@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
+import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import type { RelationshipRow } from '../types/admin';
 
 export function Relationships() {
@@ -9,21 +10,24 @@ export function Relationships() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    async function load() {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const response = await api.get<ApiResponse<RelationshipRow[]>>('/admin/relationships');
-        setRelationships(unwrap(response.data));
-      } catch (err) {
-        setError(getErrorMessage(err));
-      } finally {
-        setIsLoading(false);
-      }
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await api.get<ApiResponse<RelationshipRow[]>>('/admin/relationships');
+      setRelationships(unwrap(response.data));
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setIsLoading(false);
     }
-    void load();
   }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useVisibilityRefetch(load);
 
   return (
     <div className="space-y-4">

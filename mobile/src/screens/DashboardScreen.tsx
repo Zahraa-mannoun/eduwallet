@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, Avatar, Badge, Button, Card, IconButton, Text } from 'react-native-paper';
 import type { Transaction, TransactionCategory } from '../types/api';
 import IconBadge from '../components/IconBadge';
@@ -10,7 +11,6 @@ import type { BudgetCategoryDefinition, BudgetCategoryKey } from '../constants/b
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationsContext';
 import { useWallet } from '../context/WalletContext';
-import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
 import * as kycService from '../services/kycService';
 import * as parentalService from '../services/parentalService';
 import type { MyPermissions } from '../services/parentalService';
@@ -74,7 +74,13 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
     void loadKycDocuments();
   }, [refresh, loadPermissions, loadKycDocuments]);
 
-  useThrottledFocusEffect(refreshDashboard);
+  // Unthrottled: the home tab's balance/permissions/KYC banner must reflect a card payment
+  // or approval made moments ago (e.g. at EduMart) the instant the student returns here.
+  useFocusEffect(
+    useCallback(() => {
+      refreshDashboard();
+    }, [refreshDashboard])
+  );
 
   const lockedCategoryRows = lockedFunds
     .filter((fund) => fund.category !== 'GENERAL' && Number(fund.amount) > 0)

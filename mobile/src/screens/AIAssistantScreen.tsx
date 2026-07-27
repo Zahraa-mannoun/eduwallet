@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, Card, IconButton, Text } from 'react-native-paper';
 import type { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { Transaction } from '../types/api';
@@ -57,9 +58,11 @@ export default function AIAssistantScreen({ navigation }: RootStackScreenProps<'
     }
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load])
+  );
 
   const sentTransactions = useMemo(
     () => (wallet ? transactions.filter((tx) => tx.fromWalletId === wallet.id) : []),

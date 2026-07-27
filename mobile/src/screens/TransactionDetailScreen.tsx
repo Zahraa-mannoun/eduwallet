@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ScrollView, Share, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, Button, Chip, IconButton, Text } from 'react-native-paper';
 import type { Transaction } from '../types/api';
 import IconBadge from '../components/IconBadge';
@@ -44,9 +45,11 @@ export default function TransactionDetailScreen({
     }
   }, [route.params.transactionId]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load])
+  );
 
   const header = (
     <View style={styles.header}>

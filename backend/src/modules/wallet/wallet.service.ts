@@ -272,7 +272,9 @@ export async function lookupWalletByEmail(
   input: LookupWalletInput
 ): Promise<{ walletId: string; fullName: string; currency: Currency; userType: UserType }> {
   const user = await prisma.user.findUnique({ where: { email: input.email } });
-  if (!user) {
+  // P2P recipients must be verified students — an unverified student (or any non-student
+  // account) simply isn't findable here, same as a nonexistent email.
+  if (!user || user.userType !== 'STUDENT' || user.kycStatus !== 'VERIFIED') {
     throw new AppError(404, 'USER_NOT_FOUND', 'No account found with this email');
   }
   if (user.id === requestingUserId) {

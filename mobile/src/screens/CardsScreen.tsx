@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
 import {
   ActivityIndicator,
@@ -10,7 +11,6 @@ import {
   IconButton,
   Portal,
   Snackbar,
-  Switch,
   Text,
   TouchableRipple,
 } from 'react-native-paper';
@@ -20,7 +20,6 @@ import KYCGate from '../components/KYCGate';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryDefinition, BudgetCategoryKey } from '../constants/budgetCategories';
 import { colors } from '../theme/colors';
-import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
 import * as cardService from '../services/cardService';
 import * as parentalService from '../services/parentalService';
 import { ApiError } from '../services/api';
@@ -52,7 +51,6 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
   const [createDialogVisible, setCreateDialogVisible] = useState(false);
   const [selectedLock, setSelectedLock] = useState<BudgetCategoryDefinition | null>(null);
   const [allowedCategories, setAllowedCategories] = useState<TransactionCategory[] | null>(null);
-  const [showUsedCards, setShowUsedCards] = useState(false);
 
   const loadCards = useCallback(async () => {
     setIsLoading(true);
@@ -81,10 +79,19 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
     void loadAllowedCategories();
   }, [loadCards, loadAllowedCategories]);
 
-  useThrottledFocusEffect(refreshCards);
+  // Unthrottled (unlike most screens' useThrottledFocusEffect): a card payment made
+  // externally at EduMart must be reflected the instant the student returns to this tab,
+  // not up to 30s later — same reasoning as BudgetScreen's focus effect.
+  useFocusEffect(
+    useCallback(() => {
+      refreshCards();
+    }, [refreshCards])
+  );
 
-  const hasUsedCards = cards.some((card) => card.used);
-  const visibleCards = showUsedCards ? cards : cards.filter((card) => !card.used);
+  // A used card that isn't frozen was spent while auto-renew was on, so a replacement was
+  // already issued in its place — it's dead weight, hide it. A used card that's still frozen
+  // (auto-renew off at time of use) stays visible so the student can freeze/unfreeze or renew it.
+  const visibleCards = cards.filter((card) => !card.used || card.frozen);
 
   // A student with no parent linked has nothing restricting them, so every category
   // stays selectable — the filter only kicks in once parent settings actually exist.
@@ -161,13 +168,6 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
       >
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        {hasUsedCards ? (
-          <View style={styles.toggleRow}>
-            <Text style={styles.toggleLabel}>Show used cards</Text>
-            <Switch value={showUsedCards} onValueChange={setShowUsedCards} color={colors.primary} />
-          </View>
-        ) : null}
-
         {visibleCards.map((card) => (
           <View key={card.id} style={styles.cardWrapper}>
             <LinearGradient
@@ -240,11 +240,7 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
         ))}
 
         {visibleCards.length === 0 && !isLoading ? (
-          <Text style={styles.emptyText}>
-            {cards.length === 0
-              ? "You don't have any virtual cards yet."
-              : 'No active cards. Toggle "Show used cards" to see history.'}
-          </Text>
+          <Text style={styles.emptyText}>You don&apos;t have any virtual cards yet.</Text>
         ) : null}
 
         <Button
@@ -395,17 +391,6 @@ const styles = StyleSheet.create({
     color: colors.muted,
     textAlign: 'center',
     paddingVertical: 24,
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  toggleLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.muted,
   },
   cardWrapper: {
     marginBottom: 20,

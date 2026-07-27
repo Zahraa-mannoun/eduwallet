@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, TextInput as NativeTextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, Avatar, Button, Card, Checkbox, Chip, Snackbar, Text } from 'react-native-paper';
 import type { Transaction, TransactionCategory, User } from '../types/api';
 import CategorySelectorGrid from '../components/CategorySelectorGrid';
@@ -50,9 +51,11 @@ export default function ScholarshipPortalScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load])
+  );
 
   const toggleStudent = (id: string) => {
     setSelectedIds((prev) => {

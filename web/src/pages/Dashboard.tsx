@@ -12,7 +12,6 @@ import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { StatCard } from '../components/StatCard';
 import { Badge } from '../components/Badge';
-import { RefreshButton } from '../components/RefreshButton';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { transactionStatusTone, severityTone } from '../lib/badgeTones';
 import { formatDate, formatMoney } from '../lib/format';
@@ -82,10 +81,7 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-slate-900">Overview</h1>
-        <RefreshButton onClick={() => void load()} isLoading={isLoading} />
-      </div>
+      <h1 className="text-lg font-semibold text-slate-900">Overview</h1>
 
       {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 

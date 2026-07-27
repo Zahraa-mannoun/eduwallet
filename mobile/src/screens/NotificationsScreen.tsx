@@ -1,9 +1,10 @@
+import { useCallback } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Avatar, Card, IconButton, Text } from 'react-native-paper';
 import IconBadge from '../components/IconBadge';
 import { getNotificationMeta, useNotifications } from '../context/NotificationsContext';
-import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
 import { colors } from '../theme/colors';
 import type { RootStackScreenProps } from '../navigation/types';
 
@@ -18,7 +19,13 @@ const formatTimestamp = (isoDate: string) =>
 export default function NotificationsScreen({ navigation }: RootStackScreenProps<'Notifications'>) {
   const { notifications, isLoading, markAsRead, refresh } = useNotifications();
 
-  useThrottledFocusEffect(refresh);
+  // Unthrottled: a new notification (e.g. a card payment alert) must show up the instant
+  // the student opens this screen, not up to 30s later.
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh])
+  );
 
   const canGoBack = navigation.canGoBack();
 
