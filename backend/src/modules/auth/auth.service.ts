@@ -100,14 +100,21 @@ export async function loginUser(
     throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
   }
 
-  if (user.suspended) {
-    throw new AppError(403, 'ACCOUNT_SUSPENDED', 'This account has been suspended');
-  }
-
   const passwordMatches = await bcrypt.compare(input.password, user.password);
   if (!passwordMatches) {
     await recordFailedLoginAttempt(input.email);
     throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
+  }
+
+  // Checked after the password (not before) so a wrong-password attempt never reveals
+  // whether the account is suspended. The message carries the actual suspension reason —
+  // LoginScreen reads it directly to render "Reason: [message]" on its suspension screen.
+  if (user.suspended) {
+    throw new AppError(
+      403,
+      'ACCOUNT_SUSPENDED',
+      user.suspensionReason ?? 'This account has been suspended.'
+    );
   }
 
   await clearFailedLoginAttempts(input.email);

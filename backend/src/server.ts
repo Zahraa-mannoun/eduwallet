@@ -17,6 +17,7 @@ import kycRoutes from './modules/kyc/kyc.routes';
 import blockchainRoutes from './modules/blockchain/blockchain.routes';
 import adminRoutes from './modules/admin/admin.routes';
 import scholarshipRoutes from './modules/scholarship/scholarship.routes';
+import supportRoutes from './modules/support/support.routes';
 import { initSocket } from './modules/notifications/notifications.socket';
 import { AppError } from './utils/AppError';
 import { errorResponse } from './utils/apiResponse';
@@ -80,6 +81,7 @@ async function buildServer() {
   await app.register(blockchainRoutes, { prefix: '/blockchain' });
   await app.register(adminRoutes, { prefix: '/admin' });
   await app.register(scholarshipRoutes, { prefix: '/scholarship' });
+  await app.register(supportRoutes, { prefix: '/support' });
 
   return app;
 }

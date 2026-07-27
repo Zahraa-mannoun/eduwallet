@@ -30,7 +30,11 @@ export async function submitDocument(input: SubmitKYCInput): Promise<AcademicDoc
   return apiRequest<AcademicDocument>('/kyc/submit', { method: 'POST', formData });
 }
 
-export async function getKYCStatus(): Promise<{ kycStatus: KYCStatus; documents: AcademicDocument[] }> {
+export async function getKYCStatus(): Promise<{
+  kycStatus: KYCStatus;
+  documents: AcademicDocument[];
+  rejectionReason: string | null;
+}> {
   return apiRequest('/kyc/status');
 }
 

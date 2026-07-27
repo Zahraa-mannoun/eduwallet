@@ -35,14 +35,29 @@ export type FraudAlertType = 'CIRCULAR' | 'VELOCITY' | 'DUPLICATE' | 'UNUSUAL_AM
 
 export type FraudSeverity = 'LOW' | 'MEDIUM' | 'HIGH';
 
+export type SupportMessageStatus = 'UNREAD' | 'READ';
+
 export type User = {
   id: string;
   email: string;
   fullName: string;
   userType: UserType;
   kycStatus: KYCStatus;
+  // Set together on a REJECTED review decision, cleared together on APPROVED.
+  kycRejectionReason: string | null;
+  kycRejectedAt: string | null;
   suspended: boolean;
+  // Set on suspend, cleared on unsuspend — describes the CURRENT suspension only.
+  suspensionReason: string | null;
   cardAutoRenew: boolean;
+  createdAt: string;
+};
+
+export type SupportMessage = {
+  id: string;
+  userId: string;
+  message: string;
+  status: SupportMessageStatus;
   createdAt: string;
 };
 

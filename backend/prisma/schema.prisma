@@ -20,6 +20,11 @@ enum KYCStatus {
   REJECTED
 }
 
+enum SupportMessageStatus {
+  UNREAD
+  READ
+}
+
 enum Currency {
   USD
   EUR
@@ -70,7 +75,16 @@ model User {
   fullName  String
   userType  UserType
   kycStatus KYCStatus @default(PENDING)
+  // Set together on a REJECTED review decision, cleared together on APPROVED. While set,
+  // getKYCStatus() hides any KYC document uploaded before this timestamp (so the retry
+  // screen shows fresh "re-upload" buttons instead of the old rejected files), and this
+  // student is surfaced on the admin Resubmissions page once they upload something newer.
+  kycRejectionReason String?
+  kycRejectedAt      DateTime?
   suspended Boolean   @default(false)
+  // Set on suspend, cleared on unsuspend — describes the CURRENT suspension only (unlike
+  // kycRejectionReason above, this is not a permanent history field).
+  suspensionReason String?
   // Global card-payment setting (Profile > Account Settings > Card Settings), read at
   // card-use time in cards.service.ts — not a per-card field.
   cardAutoRenew Boolean @default(false)
@@ -80,11 +94,25 @@ model User {
   academicDocuments AcademicDocument[]
   notifications     Notification[]
   adminAuditLogs    AdminAuditLog[]
+  supportMessages   SupportMessage[]
 
   parentalControlsAsParent  ParentalControl[] @relation("ParentControls")
   parentalControlsAsStudent ParentalControl[] @relation("StudentControls")
 
   @@map("users")
+}
+
+model SupportMessage {
+  id        String               @id @default(uuid())
+  userId    String
+  message   String
+  status    SupportMessageStatus @default(UNREAD)
+  createdAt DateTime             @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("support_messages")
 }
 
 model Wallet {

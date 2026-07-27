@@ -155,7 +155,7 @@ export async function getFraudAlertsHandler(request: FastifyRequest, reply: Fast
   }
 
   try {
-    const alerts = await getFraudAlerts(parsed.data.resolved ?? false);
+    const alerts = await getFraudAlerts(parsed.data.resolved);
     return reply.status(200).send(successResponse(alerts));
   } catch (error) {
     return handleAdminError(request, reply, error);

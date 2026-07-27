@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { AcademicDocument, ApiResponse, KYCStatus } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
+import { IconChevronRight } from '../components/icons';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { getKycDisplayStatus } from '../lib/kycDisplayStatus';
 import { formatDate } from '../lib/format';
@@ -17,6 +19,7 @@ type KYCStudentRow = {
   studentIdDoc: AcademicDocument | null;
   enrollmentDoc: AcademicDocument | null;
   hasDocuments: boolean;
+  hasResubmitted: boolean;
   submittedAt: string;
 };
 
@@ -46,6 +49,7 @@ function toStudentRow(user: PendingKYCRow): KYCStudentRow {
     studentIdDoc,
     enrollmentDoc,
     hasDocuments: user.documents.length > 0,
+    hasResubmitted: user.hasResubmitted,
     submittedAt,
   };
 }
@@ -111,6 +115,7 @@ function matchesFilter(row: KYCStudentRow, filter: FilterTab): boolean {
 }
 
 export function KYC() {
+  const navigate = useNavigate();
   const [rows, setRows] = useState<KYCStudentRow[]>([]);
   const [filter, setFilter] = useState<FilterTab>('ALL');
   const [error, setError] = useState<string | null>(null);
@@ -213,7 +218,29 @@ export function KYC() {
             {!isLoading &&
               visibleRows.map((row) => (
                 <tr key={row.userId}>
-                  <td className="px-4 py-3 font-medium text-slate-900">{row.studentName}</td>
+                  <td className="px-4 py-3 font-medium text-slate-900">
+                    <div className="flex items-center gap-1.5">
+                      <span>{row.studentName}</span>
+                      {row.hasResubmitted && (
+                        <>
+                          <span
+                            title="Resubmitted new documents after a rejection"
+                            className="inline-flex items-center rounded-full bg-purple-100 px-1.5 py-0.5 text-xs"
+                          >
+                            🔄
+                          </span>
+                          <button
+                            type="button"
+                            title="View in Resubmissions"
+                            onClick={() => navigate(`/resubmissions?highlight=${row.userId}`)}
+                            className="rounded-md p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                          >
+                            <IconChevronRight className="h-3.5 w-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-slate-600">{row.studentEmail}</td>
                   <td className="px-4 py-3">
                     {(() => {

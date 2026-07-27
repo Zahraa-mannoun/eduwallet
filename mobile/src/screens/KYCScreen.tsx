@@ -62,6 +62,7 @@ const DOCUMENTS: {
 export default function KYCScreen({ navigation }: Readonly<RootStackScreenProps<'KYC'>>) {
   const [status, setStatus] = useState<KYCStatus>('PENDING');
   const [documents, setDocuments] = useState<AcademicDocument[]>([]);
+  const [rejectionReason, setRejectionReason] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [uploadingKey, setUploadingKey] = useState<DocumentKey | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -72,8 +73,10 @@ export default function KYCScreen({ navigation }: Readonly<RootStackScreenProps<
     setError(null);
     try {
       const result = await kycService.getKYCStatus();
+      console.log('[KYCScreen] GET /kyc/status ->', JSON.stringify(result));
       setStatus(result.kycStatus);
       setDocuments(result.documents);
+      setRejectionReason(result.rejectionReason);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to load your KYC status.');
     } finally {
@@ -140,6 +143,9 @@ export default function KYCScreen({ navigation }: Readonly<RootStackScreenProps<
                   {statusMeta.title}
                 </Text>
                 <Text style={styles.statusSubtitle}>{statusMeta.subtitle}</Text>
+                {status === 'REJECTED' && rejectionReason ? (
+                  <Text style={styles.rejectionReasonText}>Reason: {rejectionReason}</Text>
+                ) : null}
               </Card.Content>
             </Card>
 
@@ -150,27 +156,36 @@ export default function KYCScreen({ navigation }: Readonly<RootStackScreenProps<
               return (
                 <Card key={document.key} style={styles.documentCard} mode="elevated">
                   <Card.Content style={styles.documentContent}>
-                    <IconBadge
-                      icon={document.icon}
-                      color={isUploaded ? colors.accent : colors.primary}
-                      size={44}
-                    />
-                    <View style={styles.documentMiddle}>
-                      <Text style={styles.documentTitle}>{document.title}</Text>
-                      <Text style={styles.documentStatus}>
-                        {isUploaded ? 'Submitted' : 'Not uploaded'}
-                      </Text>
+                    <View style={styles.documentHeaderRow}>
+                      <IconBadge
+                        icon={document.icon}
+                        color={isUploaded ? colors.accent : colors.primary}
+                        size={44}
+                      />
+                      <View style={styles.documentMiddle}>
+                        <Text style={styles.documentTitle} numberOfLines={1}>
+                          {document.title}
+                        </Text>
+                        <Text style={styles.documentStatus} numberOfLines={1}>
+                          {isUploaded ? 'Submitted' : 'Not uploaded'}
+                        </Text>
+                      </View>
+                      {isUploaded ? (
+                        <Chip
+                          compact
+                          icon="check"
+                          style={styles.uploadedChip}
+                          textStyle={styles.uploadedChipText}
+                        >
+                          Uploaded
+                        </Chip>
+                      ) : null}
                     </View>
-                    {isUploaded ? (
-                      <Chip
-                        compact
-                        icon="check"
-                        style={styles.uploadedChip}
-                        textStyle={styles.uploadedChipText}
-                      >
-                        Uploaded
-                      </Chip>
-                    ) : (
+                    {!isUploaded ? (
+                      // A standalone full-width row, not squeezed alongside documentMiddle —
+                      // the REJECTED label ("Re-upload your Enrollment Certificate") is long
+                      // enough that sharing a row with it collapsed the label text down to a
+                      // near-zero width and made it wrap character-by-character.
                       <Button
                         mode="contained"
                         buttonColor={colors.primary}
@@ -178,11 +193,12 @@ export default function KYCScreen({ navigation }: Readonly<RootStackScreenProps<
                         compact
                         loading={isUploading}
                         disabled={isUploading}
+                        style={styles.documentActionButton}
                         onPress={() => handleUpload(document.key, document.type)}
                       >
-                        Upload
+                        {status === 'REJECTED' ? `Re-upload your ${document.title}` : 'Upload'}
                       </Button>
-                    )}
+                    ) : null}
                   </Card.Content>
                 </Card>
               );
@@ -252,6 +268,14 @@ const styles = StyleSheet.create({
     color: colors.muted,
     textAlign: 'center',
   },
+  rejectionReasonText: {
+    color: colors.danger,
+    fontWeight: '600',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 10,
+    paddingHorizontal: 12,
+  },
   sectionLabel: {
     fontSize: 13,
     fontWeight: '600',
@@ -263,12 +287,18 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   documentContent: {
+    flexDirection: 'column',
+  },
+  documentHeaderRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
   },
   documentMiddle: {
     flex: 1,
+    minWidth: 0,
     marginLeft: 12,
+    marginRight: 8,
   },
   documentTitle: {
     fontWeight: '700',
@@ -278,6 +308,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.muted,
     marginTop: 2,
+  },
+  documentActionButton: {
+    alignSelf: 'stretch',
+    marginTop: 12,
   },
   uploadedChip: {
     backgroundColor: `${colors.accent}1F`,

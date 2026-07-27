@@ -27,6 +27,9 @@ export type InstitutionTabParamList = {
 export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
+  // Reachable from the login-time suspension screen — no session exists at that point, so
+  // this lives in the unauthenticated branch of AppNavigator alongside Login/Register.
+  SupportMessage: { email?: string } | undefined;
   StudentMain: NavigatorScreenParams<StudentTabParamList> | undefined;
   ParentMain: NavigatorScreenParams<ParentTabParamList> | undefined;
   InstitutionMain: NavigatorScreenParams<InstitutionTabParamList> | undefined;

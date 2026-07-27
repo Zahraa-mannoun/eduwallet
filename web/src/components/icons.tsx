@@ -99,6 +99,34 @@ export function IconBell({ className = base }: IconProps) {
   );
 }
 
+export function IconRepeat({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>
+      <path d="M4 4v5h5" />
+      <path d="M20 20v-5h-5" />
+      <path d="M5.5 15a8 8 0 0013.9 3.5" />
+      <path d="M18.5 9A8 8 0 004.6 5.5" />
+    </svg>
+  );
+}
+
+export function IconChevronRight({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>
+      <path d="M9 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+export function IconSupport({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>
+      <path d="M4 5.5h16v10H8.5L4 19.5v-14z" />
+      <path d="M8 9.5h8M8 12.5h5" />
+    </svg>
+  );
+}
+
 export function IconChevronDown({ className = base }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>

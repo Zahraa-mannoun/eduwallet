@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { ApiResponse, KYCStatus } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
+import { SuspendModal } from '../components/SuspendModal';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { getKycDisplayStatus } from '../lib/kycDisplayStatus';
 import { formatDate } from '../lib/format';
@@ -11,6 +13,7 @@ import type { AdminUser } from '../types/admin';
 const KYC_FILTERS: Array<KYCStatus | 'ALL'> = ['ALL', 'VERIFIED', 'PENDING', 'REJECTED'];
 
 export function Students() {
+  const navigate = useNavigate();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -19,6 +22,7 @@ export function Students() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
+  const [suspendTarget, setSuspendTarget] = useState<AdminUser | null>(null);
 
   const limit = 20;
 
@@ -60,17 +64,13 @@ export function Students() {
   };
 
   const toggleSuspend = async (user: AdminUser) => {
+    if (!user.suspended) {
+      setSuspendTarget(user);
+      return;
+    }
     setBusyUserId(user.id);
     try {
-      if (user.suspended) {
-        await api.patch(`/admin/users/${user.id}/unsuspend`);
-      } else {
-        const reason = window.prompt('Reason for suspending this user:');
-        if (!reason) {
-          return;
-        }
-        await api.patch(`/admin/users/${user.id}/suspend`, { reason });
-      }
+      await api.patch(`/admin/users/${user.id}/unsuspend`);
       await loadUsers();
     } catch (err) {
       setError(getErrorMessage(err));
@@ -153,10 +153,22 @@ export function Students() {
               users.map((user) => (
                 <tr key={user.id}>
                   <td className="px-4 py-3 font-medium text-slate-900">
-                    {user.fullName}
-                    {user.suspended && (
-                      <span className="ml-2 text-xs font-normal text-red-500">(suspended)</span>
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      <span>{user.fullName}</span>
+                      {user.suspended && user.hasSupportMessage && (
+                        <button
+                          type="button"
+                          title="View support message"
+                          onClick={() => navigate(`/support?highlight=${user.id}`)}
+                          className="rounded-md p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                        >
+                          💬
+                        </button>
+                      )}
+                      {user.suspended && (
+                        <span className="text-xs font-normal text-red-500">(suspended)</span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-slate-600">{user.email}</td>
                   <td className="px-4 py-3">
@@ -205,6 +217,17 @@ export function Students() {
           </button>
         </div>
       </div>
+
+      {suspendTarget && (
+        <SuspendModal
+          user={suspendTarget}
+          onClose={() => setSuspendTarget(null)}
+          onDone={() => {
+            setSuspendTarget(null);
+            void loadUsers();
+          }}
+        />
+      )}
     </div>
   );
 }

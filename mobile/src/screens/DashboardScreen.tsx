@@ -42,7 +42,7 @@ type QuickAction = {
 };
 
 export default function DashboardScreen({ navigation }: Readonly<StudentTabScreenProps<'Home'>>) {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const { unreadCount } = useNotifications();
   const { wallet, lockedFunds, transactions, isLoading, error, refresh } = useWallet();
   const [showBalance, setShowBalance] = useState(true);
@@ -70,12 +70,15 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
 
   const refreshDashboard = useCallback(() => {
     void refresh();
+    void refreshUser();
     void loadPermissions();
     void loadKycDocuments();
-  }, [refresh, loadPermissions, loadKycDocuments]);
+  }, [refresh, refreshUser, loadPermissions, loadKycDocuments]);
 
-  // Unthrottled: the home tab's balance/permissions/KYC banner must reflect a card payment
-  // or approval made moments ago (e.g. at EduMart) the instant the student returns here.
+  // Unthrottled: the home tab's balance/permissions/KYC banner must reflect a card payment,
+  // approval, or admin KYC decision (approve/reject) made moments ago the instant the
+  // student returns here. refreshUser() is required for the rejection banner specifically —
+  // it reads user.kycStatus straight from AuthContext, which nothing else here updates.
   useFocusEffect(
     useCallback(() => {
       refreshDashboard();

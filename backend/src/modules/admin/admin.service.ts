@@ -45,6 +45,7 @@ export async function getUsers(filters: GetUsersInput): Promise<{
     linkedStudentsCount?: number;
     disbursementsCount?: number;
     hasDocuments?: boolean;
+    hasSupportMessage: boolean;
   })[];
   total: number;
   page: number;
@@ -119,11 +120,25 @@ export async function getUsers(filters: GetUsersInput): Promise<{
     studentIdsWithDocuments = new Set(documentOwners.map((doc) => doc.userId));
   }
 
+  // Drives the 💬 icon next to a suspended user's name (Students/Parents/Institutions
+  // pages) — only ever meaningful for suspended users, so skip the query otherwise.
+  let userIdsWithSupportMessages = new Set<string>();
+  const suspendedUserIds = usersWithWallets.filter((user) => user.suspended).map((user) => user.id);
+  if (suspendedUserIds.length > 0) {
+    const messageOwners = await prisma.supportMessage.findMany({
+      where: { userId: { in: suspendedUserIds } },
+      select: { userId: true },
+      distinct: ['userId'],
+    });
+    userIdsWithSupportMessages = new Set(messageOwners.map((message) => message.userId));
+  }
+
   const users = usersWithWallets.map((userWithWallets) => {
     const { wallets, ...user } = userWithWallets;
     return {
       ...toSafeUser(user),
       wallets,
+      hasSupportMessage: userIdsWithSupportMessages.has(user.id),
       ...(filters.userType === 'PARENT'
         ? { linkedStudentsCount: linkedStudentsCountByParent.get(user.id) ?? 0 }
         : {}),
@@ -178,7 +193,7 @@ export async function suspendUser(
 
   const updated = await prisma.user.update({
     where: { id: userId },
-    data: { suspended: true },
+    data: { suspended: true, suspensionReason: reason },
   });
 
   await createNotification(
@@ -201,7 +216,7 @@ export async function unsuspendUser(adminId: string, userId: string): Promise<Sa
 
   const updated = await prisma.user.update({
     where: { id: userId },
-    data: { suspended: false },
+    data: { suspended: false, suspensionReason: null },
   });
 
   await createNotification(
@@ -245,10 +260,12 @@ export async function getAllTransactions(filters: GetAllTransactionsInput): Prom
 }
 
 export async function getFraudAlerts(
-  resolved: boolean
+  resolved?: boolean
 ): Promise<(FraudAlert & { transaction: TransactionWithParties })[]> {
   return prisma.fraudAlert.findMany({
-    where: { resolved },
+    // undefined = "All" tab, no filter at all — must NOT collapse to { resolved: false }
+    // or a resolved alert disappears from the table entirely instead of showing Resolved.
+    where: resolved === undefined ? {} : { resolved },
     include: { transaction: { include: transactionPartyInclude } },
     orderBy: { createdAt: 'desc' },
   });

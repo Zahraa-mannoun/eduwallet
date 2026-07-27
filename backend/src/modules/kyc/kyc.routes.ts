@@ -6,6 +6,7 @@ import {
   getKYCStatusHandler,
   getMyDocumentsHandler,
   getPendingKYCHandler,
+  getResubmissionsHandler,
   reviewKYCHandler,
   submitDocumentHandler,
 } from './kyc.controller';
@@ -18,6 +19,7 @@ export default async function kycRoutes(fastify: FastifyInstance): Promise<void>
   fastify.get('/documents', getMyDocumentsHandler);
   fastify.post('/review', { preHandler: requireRole('ADMIN') }, reviewKYCHandler);
   fastify.get('/pending', { preHandler: requireRole('ADMIN') }, getPendingKYCHandler);
+  fastify.get('/resubmissions', { preHandler: requireRole('ADMIN') }, getResubmissionsHandler);
   fastify.get(
     '/document/:documentId/file',
     { preHandler: requireRole('ADMIN') },

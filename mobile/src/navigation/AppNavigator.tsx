@@ -14,6 +14,7 @@ import BlockchainVaultScreen from '../screens/BlockchainVaultScreen';
 import AIAssistantScreen from '../screens/AIAssistantScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import AccountSettingsScreen from '../screens/AccountSettingsScreen';
+import SupportMessageScreen from '../screens/SupportMessageScreen';
 import StudentMainNavigator from './StudentMainNavigator';
 import ParentMainNavigator from './ParentMainNavigator';
 import InstitutionMainNavigator from './InstitutionMainNavigator';
@@ -40,6 +41,7 @@ export default function AppNavigator() {
         <>
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Register" component={RegisterScreen} />
+          <Stack.Screen name="SupportMessage" component={SupportMessageScreen} />
         </>
       ) : (
         <>

@@ -8,6 +8,7 @@ import {
   getKYCStatus,
   getMyDocuments,
   getPendingKYC,
+  getResubmissions,
   reviewKYC,
   submitDocument,
 } from './kyc.service';
@@ -142,6 +143,16 @@ export async function getPendingKYCHandler(request: FastifyRequest, reply: Fasti
     requireAuthUser(request);
     const users = await getPendingKYC();
     return reply.status(200).send(successResponse(users));
+  } catch (error) {
+    return handleKYCError(request, reply, error);
+  }
+}
+
+export async function getResubmissionsHandler(request: FastifyRequest, reply: FastifyReply) {
+  try {
+    requireAuthUser(request);
+    const rows = await getResubmissions();
+    return reply.status(200).send(successResponse(rows));
   } catch (error) {
     return handleKYCError(request, reply, error);
   }

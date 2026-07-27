@@ -4,6 +4,7 @@ import type {
   FraudAlert,
   FraudAlertType,
   FraudSeverity,
+  SupportMessage,
   Transaction,
   TransactionCategory,
   TransactionStatus,
@@ -34,6 +35,7 @@ export type AdminUser = User & {
   linkedStudentsCount?: number;
   disbursementsCount?: number;
   hasDocuments?: boolean;
+  hasSupportMessage: boolean;
 };
 
 export type SystemStats = {
@@ -50,7 +52,16 @@ export type SystemStats = {
   wallets: { total: number; balanceByCurrency: Record<string, number> };
 };
 
-export type PendingKYCRow = User & { documents: AcademicDocument[] };
+export type PendingKYCRow = User & { documents: AcademicDocument[]; hasResubmitted: boolean };
+
+export type ResubmissionRow = User & {
+  oldDocuments: AcademicDocument[];
+  newDocuments: AcademicDocument[];
+};
+
+export type SupportMessageRow = SupportMessage & {
+  user: { id: string; fullName: string; email: string; userType: UserType; suspended: boolean };
+};
 
 export type RelationshipRow = {
   id: string;

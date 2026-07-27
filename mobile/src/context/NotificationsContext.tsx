@@ -27,6 +27,7 @@ export const NOTIFICATION_META: Record<string, NotificationMeta> = {
   ACCOUNT_SUSPENDED: { icon: 'alert-circle-outline', color: '#DC2626' },
   ACCOUNT_REACTIVATED: { icon: 'check-circle-outline', color: '#3DDC97' },
   FRAUD_ALERT: { icon: 'alert-octagon-outline', color: '#DC2626' },
+  SUPPORT_MESSAGE: { icon: 'message-alert-outline', color: '#2E5FAC' },
 };
 
 export function getNotificationMeta(type: string): NotificationMeta {

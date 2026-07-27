@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -22,6 +22,16 @@ export default function RegisterScreen({ navigation }: RootStackScreenProps<'Reg
   const [confirmPassword, setConfirmPassword] = useState('');
   const [secure, setSecure] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Some platforms (notably iOS) populate autofill suggestions into these fields shortly
+  // after mount, bypassing the empty useState() initializers above — force them back to
+  // empty once the screen has settled.
+  useEffect(() => {
+    setFullName('');
+    setEmail('');
+    setPassword('');
+    setConfirmPassword('');
+  }, []);
 
   const passwordsMatch = password.length > 0 && password === confirmPassword;
   const formError =
@@ -80,7 +90,10 @@ export default function RegisterScreen({ navigation }: RootStackScreenProps<'Reg
               setFullName(text);
               clearError();
             }}
-            autoCapitalize="words"
+            autoCapitalize="none"
+            autoComplete="off"
+            autoCorrect={false}
+            importantForAutofill="no"
             left={<TextInput.Icon icon="account-outline" />}
             outlineColor={colors.border}
             activeOutlineColor={colors.primary}
@@ -98,6 +111,8 @@ export default function RegisterScreen({ navigation }: RootStackScreenProps<'Reg
             }}
             autoCapitalize="none"
             autoCorrect={false}
+            autoComplete="off"
+            importantForAutofill="no"
             keyboardType="email-address"
             left={<TextInput.Icon icon="email-outline" />}
             outlineColor={colors.border}
@@ -115,6 +130,11 @@ export default function RegisterScreen({ navigation }: RootStackScreenProps<'Reg
               clearError();
             }}
             secureTextEntry={secure}
+            autoCapitalize="none"
+            autoComplete="off"
+            autoCorrect={false}
+            importantForAutofill="no"
+            textContentType="oneTimeCode"
             left={<TextInput.Icon icon="lock-outline" />}
             right={
               <TextInput.Icon
@@ -137,6 +157,11 @@ export default function RegisterScreen({ navigation }: RootStackScreenProps<'Reg
               clearError();
             }}
             secureTextEntry={secure}
+            autoCapitalize="none"
+            autoComplete="off"
+            autoCorrect={false}
+            importantForAutofill="no"
+            textContentType="oneTimeCode"
             left={<TextInput.Icon icon="lock-check-outline" />}
             outlineColor={colors.border}
             activeOutlineColor={colors.primary}

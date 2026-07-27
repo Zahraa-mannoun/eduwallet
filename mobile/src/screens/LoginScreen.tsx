@@ -2,15 +2,20 @@ import { useState } from 'react';
 import {
   Image,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
 import { ActivityIndicator, Button, HelperText, Text, TextInput } from 'react-native-paper';
+import IconBadge from '../components/IconBadge';
 import { useAuth } from '../context/AuthContext';
+import { ApiError } from '../services/api';
 import { colors } from '../theme/colors';
 import type { RootStackScreenProps } from '../navigation/types';
+
+const SUPPORT_EMAIL = 'eduwallet@gmail.com';
 
 export default function LoginScreen({ navigation }: RootStackScreenProps<'Login'>) {
   const { login, error, clearError } = useAuth();
@@ -18,6 +23,10 @@ export default function LoginScreen({ navigation }: RootStackScreenProps<'Login'
   const [password, setPassword] = useState('');
   const [secure, setSecure] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Set only on an ACCOUNT_SUSPENDED login failure — replaces the form with a dedicated
+  // suspension screen instead of showing this as a normal inline error. A suspended user
+  // must never reach the dashboard, so this is a hard fork at login, not a banner after entry.
+  const [suspensionReason, setSuspensionReason] = useState<string | null>(null);
 
   const canSubmit = email.trim().length > 0 && password.length > 0 && !isSubmitting;
 
@@ -27,12 +36,56 @@ export default function LoginScreen({ navigation }: RootStackScreenProps<'Login'
     try {
       await login(email.trim(), password);
       // AppNavigator reacts to the resulting auth state and switches stacks on its own.
-    } catch {
-      // error is already surfaced via useAuth().error
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'ACCOUNT_SUSPENDED') {
+        setSuspensionReason(err.message);
+      }
+      // Any other error is already surfaced via useAuth().error.
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const handleBackToLogin = () => {
+    setSuspensionReason(null);
+    clearError();
+  };
+
+  if (suspensionReason !== null) {
+    return (
+      <View style={styles.flex}>
+        <ScrollView contentContainerStyle={styles.suspendedContainer}>
+          <IconBadge icon="lock-alert-outline" color={colors.danger} size={80} iconSize={40} />
+          <Text variant="titleLarge" style={styles.suspendedTitle}>
+            Your account has been suspended.
+          </Text>
+          <Text style={styles.suspendedReason}>Reason: {suspensionReason}</Text>
+
+          <Button
+            mode="contained"
+            buttonColor={colors.primary}
+            style={styles.suspendedButton}
+            contentStyle={styles.suspendedButtonContent}
+            onPress={() => navigation.navigate('SupportMessage', { email: email.trim() })}
+          >
+            Send Message
+          </Button>
+          <Button
+            mode="outlined"
+            textColor={colors.primary}
+            style={styles.suspendedButton}
+            contentStyle={styles.suspendedButtonContent}
+            onPress={() => void Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}
+          >
+            Email Us
+          </Button>
+          <Button mode="text" textColor={colors.muted} onPress={handleBackToLogin}>
+            Back to Login
+          </Button>
+        </ScrollView>
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -170,5 +223,35 @@ const styles = StyleSheet.create({
   },
   createAccountLink: {
     marginTop: 12,
+  },
+  suspendedContainer: {
+    flexGrow: 1,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    paddingVertical: 48,
+  },
+  suspendedTitle: {
+    fontWeight: '700',
+    color: colors.heading,
+    textAlign: 'center',
+    marginTop: 20,
+  },
+  suspendedReason: {
+    fontSize: 14,
+    color: colors.muted,
+    textAlign: 'center',
+    marginTop: 10,
+    marginBottom: 28,
+    lineHeight: 20,
+  },
+  suspendedButton: {
+    width: '100%',
+    borderRadius: 10,
+    marginBottom: 12,
+  },
+  suspendedButtonContent: {
+    paddingVertical: 6,
   },
 });

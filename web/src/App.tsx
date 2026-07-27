@@ -11,6 +11,8 @@ import { Institutions } from './pages/Institutions';
 import { Transactions } from './pages/Transactions';
 import { Relationships } from './pages/Relationships';
 import { KYC } from './pages/KYC';
+import { Resubmissions } from './pages/Resubmissions';
+import { SupportMessages } from './pages/SupportMessages';
 import { Fraud } from './pages/Fraud';
 import { Scholarships } from './pages/Scholarships';
 import { Settings } from './pages/Settings';
@@ -82,6 +84,22 @@ export function App() {
           element={
             <ProtectedPage>
               <KYC />
+            </ProtectedPage>
+          }
+        />
+        <Route
+          path="/resubmissions"
+          element={
+            <ProtectedPage>
+              <Resubmissions />
+            </ProtectedPage>
+          }
+        />
+        <Route
+          path="/support"
+          element={
+            <ProtectedPage>
+              <SupportMessages />
             </ProtectedPage>
           }
         />
