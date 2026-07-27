@@ -88,9 +88,10 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
     }, [refreshCards])
   );
 
-  // A used card that isn't frozen was spent while auto-renew was on, so a replacement was
-  // already issued in its place — it's dead weight, hide it. A used card that's still frozen
-  // (auto-renew off at time of use) stays visible so the student can freeze/unfreeze or renew it.
+  // The backend deletes an auto-renewed card outright on use (see cards.service.ts useCard()),
+  // so used-and-unfrozen should never actually come back from the API — this filter is just a
+  // defensive backstop. A used card that's frozen (auto-renew off at time of use) stays visible
+  // so the student can unfreeze it to reactivate the same card.
   const visibleCards = cards.filter((card) => !card.used || card.frozen);
 
   // A student with no parent linked has nothing restricting them, so every category
@@ -131,7 +132,11 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
       await cardService.freezeCard(card.id);
       await loadCards();
       setSnackbarMessage(
-        wasUsedAndFrozen ? 'New card issued.' : card.frozen ? 'Card unfrozen.' : 'Card frozen.'
+        wasUsedAndFrozen
+          ? 'Card reactivated — ready to use again.'
+          : card.frozen
+            ? 'Card unfrozen.'
+            : 'Card frozen.'
       );
     } catch (err) {
       setSnackbarMessage(err instanceof ApiError ? err.message : 'Could not update the card.');
@@ -232,7 +237,7 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
                 onPress={() => handleToggleFreeze(card)}
                 style={styles.cardActionButton}
               >
-                {card.used && card.frozen ? 'Get New Card' : card.frozen ? 'Unfreeze' : 'Freeze'}
+                {card.frozen ? 'Unfreeze' : 'Freeze'}
               </Button>
               <IconButton icon="delete-outline" iconColor={colors.danger} onPress={() => handleDelete(card)} />
             </View>

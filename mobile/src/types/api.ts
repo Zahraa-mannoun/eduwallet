@@ -51,6 +51,9 @@ export type LockedFund = {
   walletId: string;
   category: TransactionCategory;
   amount: string;
+  // All-time total ever locked into this category, never decremented on spend — use this
+  // (not `amount`) to show the original amount the parent sent.
+  totalLocked: string;
   createdAt: string;
 };
 

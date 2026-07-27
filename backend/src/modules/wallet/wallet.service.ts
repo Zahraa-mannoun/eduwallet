@@ -177,10 +177,12 @@ export async function transfer(
       });
 
       if (isLockedCategory && toWallet.user.userType === 'STUDENT') {
+        // totalLocked mirrors amount here (both grow on new funds) but is never touched by
+        // the spend-side decrements above, so it stays the all-time total ever locked.
         await tx.lockedFund.upsert({
           where: { walletId_category: { walletId: toWallet.id, category: input.category } },
-          create: { walletId: toWallet.id, category: input.category, amount: input.amount },
-          update: { amount: { increment: input.amount } },
+          create: { walletId: toWallet.id, category: input.category, amount: input.amount, totalLocked: input.amount },
+          update: { amount: { increment: input.amount }, totalLocked: { increment: input.amount } },
         });
       }
 

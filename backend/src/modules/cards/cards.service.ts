@@ -113,14 +113,14 @@ export async function getCardById(userId: string, cardId: string): Promise<Virtu
 export async function freezeCard(userId: string, cardId: string): Promise<VirtualCard> {
   const card = await getOwnedCard(userId, cardId);
 
-  // A used card can never be charged again (useCard rejects `used: true` outright), so
-  // "unfreezing" one is meaningless — instead it's the manual equivalent of auto-renew:
-  // issue a fresh replacement with the same lock, mirroring the auto-renew card swap.
+  // A used-and-frozen card only exists when auto-renew was off at the time it was spent
+  // (auto-renew cards are deleted outright in useCard() instead of being left in this
+  // state). Unfreezing it reactivates the same card in place — clear both flags so it's
+  // chargeable again, rather than issuing a replacement.
   if (card.used && card.frozen) {
-    return issueCard(card.walletId, {
-      merchantLock: card.merchantLock,
-      categoryLock: card.categoryLock,
-      expiry: generateExpiry(RENEWAL_EXPIRY_DAYS),
+    return prisma.virtualCard.update({
+      where: { id: card.id },
+      data: { used: false, frozen: false },
     });
   }
 
@@ -189,14 +189,27 @@ export async function useCard(input: UseCardInput): Promise<{ transaction: Trans
   const autoRenew = wallet.user.cardAutoRenew;
 
   const transaction = await prisma.$transaction(async (tx) => {
-    // Auto-renew cards stay unfrozen after use (a replacement is issued right below instead);
-    // otherwise the spent card freezes so the student has to explicitly renew it.
-    const claimed = await tx.virtualCard.updateMany({
-      where: { id: card.id, used: false, frozen: false },
-      data: { used: true, frozen: !autoRenew },
-    });
-    if (claimed.count === 0) {
-      throw new AppError(403, 'CARD_UNAVAILABLE', 'This card is frozen or has already been used');
+    if (autoRenew) {
+      // Auto-renew replaces the card outright: delete it now (a fresh replacement is issued
+      // right below, once the transaction commits) instead of leaving a used, unfrozen row
+      // behind that CardsScreen would otherwise have to filter out of the list forever. The
+      // where-clause still guards against a double-spend race on the same card.
+      const claimed = await tx.virtualCard.deleteMany({
+        where: { id: card.id, used: false, frozen: false },
+      });
+      if (claimed.count === 0) {
+        throw new AppError(403, 'CARD_UNAVAILABLE', 'This card is frozen or has already been used');
+      }
+    } else {
+      // No auto-renew: the spent card freezes in place so the student has to explicitly
+      // unfreeze it (reactivating the same card) before it can be used again.
+      const claimed = await tx.virtualCard.updateMany({
+        where: { id: card.id, used: false, frozen: false },
+        data: { used: true, frozen: true },
+      });
+      if (claimed.count === 0) {
+        throw new AppError(403, 'CARD_UNAVAILABLE', 'This card is frozen or has already been used');
+      }
     }
 
     if (card.categoryLock && card.categoryLock !== 'GENERAL') {

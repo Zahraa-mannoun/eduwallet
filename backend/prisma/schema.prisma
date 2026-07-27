@@ -108,11 +108,15 @@ model Wallet {
 }
 
 model LockedFund {
-  id        String              @id @default(uuid())
-  walletId  String
-  category  TransactionCategory
-  amount    Decimal             @default(0) @db.Decimal(12, 2)
-  createdAt DateTime            @default(now())
+  id          String              @id @default(uuid())
+  walletId    String
+  category    TransactionCategory
+  amount      Decimal             @default(0) @db.Decimal(12, 2)
+  // Cumulative total ever locked into this category by a parent — only ever incremented,
+  // never decremented on spend. `amount` is the current remaining balance; this is the
+  // original total the "Locked Funds" progress bar is measured against.
+  totalLocked Decimal             @default(0) @db.Decimal(12, 2)
+  createdAt   DateTime            @default(now())
 
   wallet Wallet @relation(fields: [walletId], references: [id])
 

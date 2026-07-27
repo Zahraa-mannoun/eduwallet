@@ -105,9 +105,17 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
   const budgetFor = (category: BudgetCategoryDefinition): BudgetCategory | undefined =>
     budgets.find((entry) => entry.category === category.key.toUpperCase());
 
-  const lockedFundFor = (category: BudgetCategoryDefinition): number => {
+  type LockedFundInfo = { total: number; remaining: number };
+
+  // `amount` is the current remaining balance (decremented on spend); `totalLocked` is the
+  // all-time total the parent has ever sent into this category (never decremented) — the
+  // Locked Funds section needs both, not just the remaining balance.
+  const lockedFundFor = (category: BudgetCategoryDefinition): LockedFundInfo => {
     const fund = lockedFunds.find((entry) => entry.category === category.key.toUpperCase());
-    return fund ? Number(fund.amount) : 0;
+    return {
+      total: fund ? Number(fund.totalLocked) : 0,
+      remaining: fund ? Number(fund.amount) : 0,
+    };
   };
 
   // GENERAL spending is never category-locked by a parent (see wallet.service.ts transfer()),
@@ -127,7 +135,7 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
 
   const closeDialog = () => setDialogCategory(null);
 
-  const dialogLockedAmount = dialogCategory ? lockedFundFor(dialogCategory) : 0;
+  const dialogLockedAmount = dialogCategory ? lockedFundFor(dialogCategory).total : 0;
 
   const handleDialogAmountChange = (text: string) => {
     const cleaned = text.replace(/[^0-9.]/g, '');
@@ -184,11 +192,11 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         {BUDGET_CATEGORIES.map((category) => {
-          const locked = lockedFundFor(category);
+          const { total: lockedTotal, remaining: lockedRemaining } = lockedFundFor(category);
           const budget = budgetFor(category);
           const spent = budget ? Number(budget.spent) : 0;
           const monthlyLimit = budget ? Number(budget.monthlyLimit) : 0;
-          const hasLockedFunds = locked > 0;
+          const hasLockedFunds = lockedTotal > 0;
           const hasPersonalLimit = monthlyLimit > 0;
           const authorized = isAuthorized(category);
           const isFullyEmpty = !hasLockedFunds && !hasPersonalLimit;
@@ -207,8 +215,11 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
             );
           }
 
-          const lockedPercent = hasLockedFunds ? Math.round((spent / locked) * 100) : 0;
-          const lockedRemaining = Math.max(locked - spent, 0);
+          // Spent from the locked pool = total ever locked minus what's still remaining —
+          // deliberately not budget.spent, which is this month only and wouldn't reconcile
+          // with an all-time total/remaining pair.
+          const lockedSpent = Math.max(lockedTotal - lockedRemaining, 0);
+          const lockedPercent = hasLockedFunds ? Math.round((lockedSpent / lockedTotal) * 100) : 0;
           const lockedColor = progressColor(lockedPercent);
 
           const budgetPercent = hasPersonalLimit ? Math.round((spent / monthlyLimit) * 100) : 0;
@@ -257,11 +268,11 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
                       <View style={styles.sectionStatsRow}>
                         <View style={styles.sectionStatColumn}>
                           <Text style={styles.sectionStatLabel}>LOCKED</Text>
-                          <Text style={styles.sectionStatValue}>${locked.toFixed(0)}</Text>
+                          <Text style={styles.sectionStatValue}>${lockedTotal.toFixed(0)}</Text>
                         </View>
                         <View style={styles.sectionStatColumn}>
                           <Text style={styles.sectionStatLabel}>SPENT</Text>
-                          <Text style={styles.sectionStatValue}>${spent.toFixed(0)}</Text>
+                          <Text style={styles.sectionStatValue}>${lockedSpent.toFixed(0)}</Text>
                         </View>
                         <View style={[styles.sectionStatColumn, styles.sectionStatColumnEnd]}>
                           <Text style={styles.sectionStatLabel}>REMAINING</Text>
