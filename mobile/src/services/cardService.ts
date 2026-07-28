@@ -40,6 +40,8 @@ export async function deleteCard(id: string): Promise<{ message: string }> {
 export type UseCardInput = {
   cardNumber: string;
   cvv: string;
+  // MM/YY — cross-checked server-side against the card's actual stored expiry.
+  expiry: string;
   amount: number;
   currency: Currency;
   merchantName: string;

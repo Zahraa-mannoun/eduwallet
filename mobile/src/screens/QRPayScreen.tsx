@@ -27,6 +27,13 @@ function isCardUsable(card: VirtualCard): boolean {
   return !card.used && !card.frozen && new Date(card.expiry).getTime() > Date.now();
 }
 
+function formatExpiry(iso: string): string {
+  const date = new Date(iso);
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = String(date.getFullYear() % 100).padStart(2, '0');
+  return `${month}/${year}`;
+}
+
 export default function QRPayScreen({ navigation }: RootStackScreenProps<'QRPay'>) {
   const { wallet } = useWallet();
   const [merchantCode, setMerchantCode] = useState('');
@@ -101,6 +108,7 @@ export default function QRPayScreen({ navigation }: RootStackScreenProps<'QRPay'
       await cardService.useCard({
         cardNumber: card.cardNumber,
         cvv: card.cvv,
+        expiry: formatExpiry(card.expiry),
         amount: parsedAmount,
         currency: wallet?.currency ?? 'USD',
         merchantName: submittedMerchantCode,

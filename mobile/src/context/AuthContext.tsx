@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import type { User } from '../types/api';
 import * as authService from '../services/authService';
 import type { RegisterUserType } from '../services/authService';
-import { ApiError, getAccessToken } from '../services/api';
+import { ApiError, clearTokens, getAccessToken, setAccountSuspendedHandler } from '../services/api';
 import { connectSocket, disconnectSocket } from '../services/socket';
 
 export type UserType = RegisterUserType;
@@ -18,6 +18,12 @@ type AuthContextValue = {
   // stored session may still be perfectly valid once connectivity is back.
   isOffline: boolean;
   error: string | null;
+  // Set when an already-logged-in session gets a 403 ACCOUNT_SUSPENDED on some other API call
+  // (an admin suspended the account mid-session) — distinct from the login-time suspension
+  // LoginScreen already handles itself via its own catch on login(). LoginScreen reads this to
+  // show the same suspension screen immediately once AppNavigator swaps back to it.
+  suspensionReason: string | null;
+  clearSuspensionReason: () => void;
   login: (email: string, password: string) => Promise<void>;
   register: (input: {
     fullName: string;
@@ -53,6 +59,7 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
   const [isOffline, setIsOffline] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [checkAttempt, setCheckAttempt] = useState(0);
+  const [suspensionReason, setSuspensionReason] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -141,6 +148,21 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
     []
   );
 
+  // The session is already dead server-side by the time this fires (the account was just
+  // suspended), so there's no point round-tripping through authService.logout()'s own
+  // POST /auth/logout — it would just 403 again. Clear the client side directly instead.
+  useEffect(() => {
+    setAccountSuspendedHandler((reason) => {
+      disconnectSocket();
+      setUser(null);
+      void clearTokens();
+      setSuspensionReason(reason);
+    });
+    return () => setAccountSuspendedHandler(null);
+  }, []);
+
+  const clearSuspensionReason = useCallback(() => setSuspensionReason(null), []);
+
   const logout = useCallback(async () => {
     disconnectSocket();
     setUser(null);
@@ -176,6 +198,8 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
       isLoading,
       isOffline,
       error,
+      suspensionReason,
+      clearSuspensionReason,
       login,
       register,
       logout,
@@ -183,7 +207,20 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
       refreshUser,
       retryConnection,
     }),
-    [user, isLoading, isOffline, error, login, register, logout, clearError, refreshUser, retryConnection]
+    [
+      user,
+      isLoading,
+      isOffline,
+      error,
+      suspensionReason,
+      clearSuspensionReason,
+      login,
+      register,
+      logout,
+      clearError,
+      refreshUser,
+      retryConnection,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -11,13 +11,25 @@ interface CategoryPaymentPanelProps {
   amount: number;
   index: number;
   onSuccess: () => void;
+  // True when this category was already paid earlier in the same checkout session (restored
+  // from sessionStorage by CheckoutPage) — the original transaction details aren't persisted,
+  // just the fact that it's done, so the success view below falls back to a simpler message.
+  initiallyPaid?: boolean;
 }
 
-export function CategoryPaymentPanel({ category, amount, index, onSuccess }: CategoryPaymentPanelProps) {
+const GENERIC_PAYMENT_ERROR = 'Payment failed. Please check your card details and try again.';
+
+export function CategoryPaymentPanel({
+  category,
+  amount,
+  index,
+  onSuccess,
+  initiallyPaid = false,
+}: CategoryPaymentPanelProps) {
   const [cardNumber, setCardNumber] = useState('');
   const [cvv, setCvv] = useState('');
   const [expiry, setExpiry] = useState('');
-  const [status, setStatus] = useState<PaymentStatus>('idle');
+  const [status, setStatus] = useState<PaymentStatus>(initiallyPaid ? 'success' : 'idle');
   const [error, setError] = useState<string | null>(null);
   const [transaction, setTransaction] = useState<UseCardResponseData['transaction'] | null>(null);
 
@@ -33,38 +45,47 @@ export function CategoryPaymentPanel({ category, amount, index, onSuccess }: Cat
     setStatus('processing');
     setError(null);
     try {
-      const result = await payWithCard({ cardNumber, cvv, amount, category });
+      const result = await payWithCard({ cardNumber, cvv, expiry, amount, category });
       setTransaction(result.transaction);
       setStatus('success');
       onSuccess();
     } catch (err) {
-      setError(getErrorMessage(err));
+      setError(getErrorMessage(err) || GENERIC_PAYMENT_ERROR);
       setStatus('failed');
+      // Don't leave credentials sitting in the form after a failed attempt.
+      setCardNumber('');
+      setCvv('');
     }
   }
 
-  if (status === 'success' && transaction) {
+  if (status === 'success') {
     return (
       <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center">
         <h3 className="text-lg font-bold text-emerald-700">Payment Approved!</h3>
-        <dl className="mx-auto mt-3 max-w-xs space-y-1 text-left text-sm text-emerald-900">
-          <div className="flex justify-between">
-            <dt className="text-emerald-600">Category</dt>
-            <dd className="font-medium">{categoryLabel(category)}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-emerald-600">Amount</dt>
-            <dd className="font-medium">${Number(transaction.amount).toFixed(2)}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-emerald-600">Transaction ID</dt>
-            <dd className="truncate pl-2 font-mono text-xs">{transaction.id}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-emerald-600">Status</dt>
-            <dd className="font-medium">{transaction.status}</dd>
-          </div>
-        </dl>
+        {transaction ? (
+          <dl className="mx-auto mt-3 max-w-xs space-y-1 text-left text-sm text-emerald-900">
+            <div className="flex justify-between">
+              <dt className="text-emerald-600">Category</dt>
+              <dd className="font-medium">{categoryLabel(category)}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-emerald-600">Amount</dt>
+              <dd className="font-medium">${Number(transaction.amount).toFixed(2)}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-emerald-600">Transaction ID</dt>
+              <dd className="truncate pl-2 font-mono text-xs">{transaction.id}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-emerald-600">Status</dt>
+              <dd className="font-medium">{transaction.status}</dd>
+            </div>
+          </dl>
+        ) : (
+          <p className="mt-2 text-sm text-emerald-700">
+            {categoryLabel(category)} was already paid for earlier in this checkout.
+          </p>
+        )}
       </div>
     );
   }
@@ -110,7 +131,7 @@ export function CategoryPaymentPanel({ category, amount, index, onSuccess }: Cat
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-600">CVV</label>
             <input
-              type="text"
+              type="password"
               inputMode="numeric"
               value={cvv}
               onChange={(event) => setCvv(formatCvvInput(event.target.value))}
@@ -121,10 +142,10 @@ export function CategoryPaymentPanel({ category, amount, index, onSuccess }: Cat
           </div>
         </div>
 
-        {status === 'failed' && error && (
+        {status === 'failed' && (
           <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-center">
             <p className="text-sm font-semibold text-red-700">Payment Failed</p>
-            <p className="text-xs text-red-600">{error}</p>
+            <p className="text-xs text-red-600">{error || GENERIC_PAYMENT_ERROR}</p>
           </div>
         )}
 

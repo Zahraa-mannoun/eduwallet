@@ -11,6 +11,25 @@ interface CategoryGroup {
   subtotal: number;
 }
 
+// A virtual card is single-use — once a category is paid, its card is already frozen/reissued
+// server-side. Without this, refreshing or navigating away mid-checkout (after paying for one
+// of several categories) would re-render that category's payment form and re-demand payment.
+// Cleared once every category is paid (see handleGroupSuccess) so it doesn't bleed into an
+// unrelated later checkout.
+const PAID_CATEGORIES_KEY = 'edumart_checkout_paid_categories';
+
+function loadPaidCategories(): Set<Category> {
+  try {
+    const raw = sessionStorage.getItem(PAID_CATEGORIES_KEY);
+    if (!raw) return new Set();
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed as Category[]);
+  } catch {
+    return new Set();
+  }
+}
+
 function groupByCategory(items: CartItem[]): CategoryGroup[] {
   const map = new Map<Category, CartItem[]>();
   for (const item of items) {
@@ -30,7 +49,7 @@ export function CheckoutPage() {
   // Snapshot the cart at entry so clearing it on final success doesn't blank this page mid-flow.
   const [checkoutItems] = useState<CartItem[]>(items);
   const groups = useMemo(() => groupByCategory(checkoutItems), [checkoutItems]);
-  const [paidCategories, setPaidCategories] = useState<Set<Category>>(new Set());
+  const [paidCategories, setPaidCategories] = useState<Set<Category>>(loadPaidCategories);
 
   if (checkoutItems.length === 0) {
     return <Navigate to="/cart" replace />;
@@ -45,6 +64,9 @@ export function CheckoutPage() {
     setPaidCategories(next);
     if (next.size === groups.length) {
       clearCart();
+      sessionStorage.removeItem(PAID_CATEGORIES_KEY);
+    } else {
+      sessionStorage.setItem(PAID_CATEGORIES_KEY, JSON.stringify([...next]));
     }
   }
 
@@ -110,6 +132,7 @@ export function CheckoutPage() {
               amount={group.subtotal}
               index={i + 1}
               onSuccess={() => handleGroupSuccess(group.category)}
+              initiallyPaid={paidCategories.has(group.category)}
             />
           ))}
         </div>

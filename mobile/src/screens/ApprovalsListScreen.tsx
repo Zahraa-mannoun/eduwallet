@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, Avatar, Card, Chip, Text } from 'react-native-paper';
 import type { Transaction } from '../types/api';
 import IconBadge from '../components/IconBadge';
@@ -8,7 +9,6 @@ import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryKey } from '../constants/budgetCategories';
 import { TRANSACTION_STATUS_META } from '../constants/mockTransactions';
 import { colors } from '../theme/colors';
-import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
 import * as parentalService from '../services/parentalService';
 import type { LinkedStudent } from '../services/parentalService';
 import { ApiError } from '../services/api';
@@ -45,7 +45,13 @@ export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps
     }
   }, []);
 
-  useThrottledFocusEffect(load);
+  // Unthrottled: a transaction approved/rejected in ApprovalRequestScreen must disappear from
+  // this list the instant the parent taps back, not up to 30s later.
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load])
+  );
 
   const walletToStudentName = useMemo(() => {
     const map = new Map<string, string>();

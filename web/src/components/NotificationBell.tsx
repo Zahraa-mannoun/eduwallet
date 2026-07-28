@@ -11,6 +11,7 @@ export function NotificationBell() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const loadUnreadCount = useCallback(async () => {
@@ -23,6 +24,7 @@ export function NotificationBell() {
   }, []);
 
   const loadNotifications = useCallback(async () => {
+    setIsLoading(true);
     setError(null);
     try {
       const response = await api.get<
@@ -31,6 +33,8 @@ export function NotificationBell() {
       setNotifications(unwrap(response.data).notifications);
     } catch (err) {
       setError(getErrorMessage(err));
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
@@ -91,11 +95,20 @@ export function NotificationBell() {
             <h3 className="text-sm font-semibold text-slate-900">Notifications</h3>
           </div>
           <div className="max-h-96 overflow-y-auto">
-            {error && <p className="px-4 py-3 text-sm text-red-600">{error}</p>}
-            {!error && notifications.length === 0 && (
+            {isLoading && (
+              <div className="flex items-center justify-center px-4 py-6">
+                <svg className="h-5 w-5 animate-spin text-slate-400" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                </svg>
+              </div>
+            )}
+            {!isLoading && error && <p className="px-4 py-3 text-sm text-red-600">{error}</p>}
+            {!isLoading && !error && notifications.length === 0 && (
               <p className="px-4 py-6 text-center text-sm text-slate-400">No notifications</p>
             )}
-            {!error &&
+            {!isLoading &&
+              !error &&
               notifications.map((notification) => (
                 <button
                   key={notification.id}

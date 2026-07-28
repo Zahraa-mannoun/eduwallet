@@ -18,7 +18,13 @@ import type { RootStackScreenProps } from '../navigation/types';
 const SUPPORT_EMAIL = 'eduwallet@gmail.com';
 
 export default function LoginScreen({ navigation }: RootStackScreenProps<'Login'>) {
-  const { login, error, clearError } = useAuth();
+  const {
+    login,
+    error,
+    clearError,
+    suspensionReason: sessionSuspensionReason,
+    clearSuspensionReason,
+  } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [secure, setSecure] = useState(true);
@@ -27,6 +33,11 @@ export default function LoginScreen({ navigation }: RootStackScreenProps<'Login'
   // suspension screen instead of showing this as a normal inline error. A suspended user
   // must never reach the dashboard, so this is a hard fork at login, not a banner after entry.
   const [suspensionReason, setSuspensionReason] = useState<string | null>(null);
+
+  // Covers both ways a student ends up looking at this screen with a suspension to explain:
+  // failing to log in while already suspended (suspensionReason, set below), or getting
+  // suspended mid-session and bounced back here by AuthContext (sessionSuspensionReason).
+  const effectiveSuspensionReason = suspensionReason ?? sessionSuspensionReason;
 
   const canSubmit = email.trim().length > 0 && password.length > 0 && !isSubmitting;
 
@@ -48,10 +59,11 @@ export default function LoginScreen({ navigation }: RootStackScreenProps<'Login'
 
   const handleBackToLogin = () => {
     setSuspensionReason(null);
+    clearSuspensionReason();
     clearError();
   };
 
-  if (suspensionReason !== null) {
+  if (effectiveSuspensionReason !== null) {
     return (
       <View style={styles.flex}>
         <ScrollView contentContainerStyle={styles.suspendedContainer}>
@@ -59,7 +71,7 @@ export default function LoginScreen({ navigation }: RootStackScreenProps<'Login'
           <Text variant="titleLarge" style={styles.suspendedTitle}>
             Your account has been suspended.
           </Text>
-          <Text style={styles.suspendedReason}>Reason: {suspensionReason}</Text>
+          <Text style={styles.suspendedReason}>Reason: {effectiveSuspensionReason}</Text>
 
           <Button
             mode="contained"

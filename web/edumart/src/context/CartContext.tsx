@@ -3,6 +3,23 @@ import type { CartItem, Product } from '../types';
 
 const CART_KEY = 'edumart_cart';
 
+// localStorage is user-editable — a tampered entry (negative/zero/non-numeric price or
+// quantity) must never survive into `items`, since that value flows straight into the
+// checkout total and the /cards/use payload with no other validation downstream.
+function isValidCartItem(item: unknown): item is CartItem {
+  if (typeof item !== 'object' || item === null) return false;
+  const candidate = item as Partial<CartItem>;
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.price === 'number' &&
+    Number.isFinite(candidate.price) &&
+    candidate.price > 0 &&
+    typeof candidate.quantity === 'number' &&
+    Number.isFinite(candidate.quantity) &&
+    candidate.quantity > 0
+  );
+}
+
 interface CartContextValue {
   items: CartItem[];
   itemCount: number;
@@ -18,7 +35,10 @@ const CartContext = createContext<CartContextValue | undefined>(undefined);
 function loadCart(): CartItem[] {
   try {
     const raw = localStorage.getItem(CART_KEY);
-    return raw ? (JSON.parse(raw) as CartItem[]) : [];
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isValidCartItem);
   } catch {
     return [];
   }
@@ -48,7 +68,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }
 
   function updateQuantity(productId: string, quantity: number) {
-    if (quantity <= 0) {
+    if (!Number.isFinite(quantity) || quantity <= 0) {
       removeFromCart(productId);
       return;
     }

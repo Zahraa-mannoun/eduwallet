@@ -28,6 +28,10 @@ export type UpdateCardAutoRenewInput = z.infer<typeof updateCardAutoRenewSchema>
 export const useCardSchema = z.object({
   cardNumber: z.string().regex(/^\d{4}-\d{4}-\d{4}-\d{4}$/, 'Invalid card number format'),
   cvv: z.string().regex(/^\d{3}$/, 'Invalid CVV format'),
+  // Cross-checked against the card's actual stored expiry in useCard() — card number + CVV +
+  // expiry together are the full credential set, matching how a real card-present checkout
+  // verifies all three, not just two.
+  expiry: z.string().regex(/^\d{2}\/\d{2}$/, 'Invalid expiry format'),
   amount: z.number().positive('Amount must be greater than 0'),
   currency: z.enum(['USD', 'EUR', 'LBP']),
   merchantName: z.string().trim().min(1).max(200),

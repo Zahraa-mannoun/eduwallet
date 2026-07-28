@@ -73,7 +73,6 @@ export default function KYCScreen({ navigation }: Readonly<RootStackScreenProps<
     setError(null);
     try {
       const result = await kycService.getKYCStatus();
-      console.log('[KYCScreen] GET /kyc/status ->', JSON.stringify(result));
       setStatus(result.kycStatus);
       setDocuments(result.documents);
       setRejectionReason(result.rejectionReason);

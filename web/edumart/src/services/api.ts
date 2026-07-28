@@ -47,7 +47,16 @@ export class ApiRequestError extends Error {
   }
 }
 
+const FALLBACK_ERROR_MESSAGE = 'Something went wrong. Please try again.';
+
 export function getErrorMessage(error: unknown): string {
+  const message = resolveErrorMessage(error);
+  // A response can be non-JSON, or a well-formed-but-empty { success:false, error:'' } — either
+  // way, a blank string here previously meant the failure UI silently never rendered at all.
+  return message.trim().length > 0 ? message : FALLBACK_ERROR_MESSAGE;
+}
+
+function resolveErrorMessage(error: unknown): string {
   if (error instanceof ApiRequestError) {
     return error.message;
   }
@@ -56,12 +65,15 @@ export function getErrorMessage(error: unknown): string {
     if (data && !data.success) {
       return data.error;
     }
+    if (error.code === 'ECONNABORTED') {
+      return "The request timed out. If this was a payment, check your transaction history before retrying — it may have gone through.";
+    }
     return error.message;
   }
   if (error instanceof Error) {
     return error.message;
   }
-  return 'Something went wrong';
+  return FALLBACK_ERROR_MESSAGE;
 }
 
 export function getErrorCode(error: unknown): string | undefined {

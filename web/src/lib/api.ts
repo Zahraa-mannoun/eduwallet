@@ -10,7 +10,16 @@ export const tokenStorage = {
   getRefreshToken: () => localStorage.getItem(REFRESH_TOKEN_KEY),
   getStoredUser: () => {
     const raw = localStorage.getItem(USER_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      // Corrupted value (manual edit, partial write, extension interference) — treat as
+      // unauthenticated instead of throwing during AuthProvider's initial render, which would
+      // otherwise white-screen the whole app with no error boundary to catch it.
+      localStorage.removeItem(USER_KEY);
+      return null;
+    }
   },
   setSession: (accessToken: string, refreshToken: string, user: unknown) => {
     localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);

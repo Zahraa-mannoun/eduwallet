@@ -149,8 +149,11 @@ export async function deleteCard(userId: string, cardId: string): Promise<void> 
 
 export async function useCard(input: UseCardInput): Promise<{ transaction: Transaction }> {
   const card = await prisma.virtualCard.findUnique({ where: { cardNumber: input.cardNumber } });
-  if (!card || card.cvv !== input.cvv) {
-    throw new AppError(401, 'INVALID_CARD', 'Invalid card number or CVV');
+  // Card number + CVV + expiry are checked together as a single credential set (same generic
+  // failure either way) — previously the client-supplied expiry was never even sent, so it was
+  // never actually verified against the card on file.
+  if (!card || card.cvv !== input.cvv || formatExpiryMMYY(card.expiry) !== input.expiry) {
+    throw new AppError(401, 'INVALID_CARD', 'Invalid card number, CVV, or expiry date');
   }
 
   if (card.frozen) {

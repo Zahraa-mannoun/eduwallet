@@ -41,14 +41,41 @@ export function WalletProvider({ children }: Readonly<{ children: ReactNode }>) 
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
     if (isAuthenticated) {
-      void refresh();
+      (async () => {
+        setIsLoading(true);
+        setError(null);
+        try {
+          const [walletResult, transactionsResult] = await Promise.all([
+            walletService.getWallet(),
+            walletService.getTransactions({ limit: 10 }),
+          ]);
+          if (cancelled) return;
+          setWallet(walletResult);
+          setTransactions(transactionsResult.transactions);
+        } catch (err) {
+          if (cancelled) return;
+          setError(err instanceof ApiError ? err.message : 'Failed to load your wallet.');
+        } finally {
+          if (!cancelled) setIsLoading(false);
+        }
+      })();
     } else {
       setWallet(null);
       setTransactions([]);
       setError(null);
     }
-  }, [isAuthenticated, refresh]);
+
+    // Guards against a fetch started for the previous user still being in flight when
+    // isAuthenticated flips (logout, or logout-then-relogin as a different user) — without
+    // this, a stale response could land after the transition and overwrite the next user's
+    // wallet/transactions with the previous user's data.
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated]);
 
   const value = useMemo(
     () => ({

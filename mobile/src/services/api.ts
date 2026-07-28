@@ -36,6 +36,17 @@ export class ApiError extends Error {
   }
 }
 
+// Lets AuthContext react to a mid-session suspension (an admin suspends the account while the
+// user is already logged in) from wherever it's actually detected — every authenticated
+// request funnels through apiRequest below, not just login. AuthContext registers itself on
+// mount; screens that hit this error otherwise just see it as a normal thrown ApiError.
+type AccountSuspendedHandler = (reason: string) => void;
+let onAccountSuspended: AccountSuspendedHandler | null = null;
+
+export function setAccountSuspendedHandler(handler: AccountSuspendedHandler | null): void {
+  onAccountSuspended = handler;
+}
+
 // Distinguishes "the refresh token is genuinely invalid/missing" (session really is over) from
 // "couldn't even reach the server to ask" (network hiccup — the stored tokens may still be
 // perfectly valid). Conflating these used to make a flaky connection during token refresh look
@@ -169,6 +180,12 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     throw new ApiError('Unexpected response from the server.', 'UNKNOWN_ERROR', res.status);
   }
   if (!json.success) {
+    // useAuth excludes the login/register calls themselves (they pass auth:false) — a
+    // suspension surfaced there is handled locally by LoginScreen's own catch, not this
+    // mid-session path.
+    if (useAuth && json.code === 'ACCOUNT_SUSPENDED') {
+      onAccountSuspended?.(json.error);
+    }
     throw new ApiError(json.error, json.code, res.status);
   }
   return json.data;

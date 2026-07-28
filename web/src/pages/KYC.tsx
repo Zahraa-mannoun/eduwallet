@@ -122,6 +122,7 @@ export function KYC() {
   const [isLoading, setIsLoading] = useState(true);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
   const [rejectTarget, setRejectTarget] = useState<KYCStudentRow | null>(null);
+  const [approveTarget, setApproveTarget] = useState<KYCStudentRow | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -152,18 +153,6 @@ export function KYC() {
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (err) {
       setError(getErrorMessage(err));
-    }
-  };
-
-  const approve = async (row: KYCStudentRow) => {
-    setBusyUserId(row.userId);
-    try {
-      await api.post('/kyc/review', { userId: row.userId, decision: 'APPROVED' });
-      await load();
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setBusyUserId(null);
     }
   };
 
@@ -290,7 +279,7 @@ export function KYC() {
                             <button
                               type="button"
                               disabled={busyUserId === row.userId || actionState.approveDisabled}
-                              onClick={() => void approve(row)}
+                              onClick={() => setApproveTarget(row)}
                               title={actionState.approveTooltip}
                               className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-emerald-50"
                             >
@@ -319,6 +308,17 @@ export function KYC() {
         </table>
       </div>
 
+      {approveTarget && (
+        <ApproveModal
+          row={approveTarget}
+          onClose={() => setApproveTarget(null)}
+          onDone={() => {
+            setApproveTarget(null);
+            void load();
+          }}
+        />
+      )}
+
       {rejectTarget && (
         <RejectModal
           row={rejectTarget}
@@ -330,6 +330,62 @@ export function KYC() {
         />
       )}
     </div>
+  );
+}
+
+function ApproveModal({
+  row,
+  onClose,
+  onDone,
+}: {
+  row: KYCStudentRow;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleConfirm = async () => {
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await api.post('/kyc/review', { userId: row.userId, decision: 'APPROVED' });
+      onDone();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal title={`Approve KYC — ${row.studentName}`} onClose={onClose}>
+      <p className="text-sm text-slate-600">
+        Are you sure you want to approve {row.studentName}&apos;s KYC verification? This decision
+        cannot be changed afterward.
+      </p>
+
+      {error && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      <div className="mt-4 flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={isSubmitting}
+          className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleConfirm()}
+          disabled={isSubmitting}
+          className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+        >
+          {isSubmitting ? 'Approving…' : 'Confirm'}
+        </button>
+      </div>
+    </Modal>
   );
 }
 

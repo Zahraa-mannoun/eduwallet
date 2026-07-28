@@ -67,13 +67,38 @@ export function NotificationsProvider({ children }: Readonly<{ children: ReactNo
   };
 
   useEffect(() => {
+    let cancelled = false;
+
     if (!isAuthenticated) {
       setNotifications([]);
       setUnreadCount(0);
-      return;
+      return undefined;
     }
-    void refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    (async () => {
+      setIsLoading(true);
+      try {
+        const [listResult, countResult] = await Promise.all([
+          notificationService.getNotifications({ limit: 50 }),
+          notificationService.getUnreadCount(),
+        ]);
+        if (cancelled) return;
+        setNotifications(listResult.notifications);
+        setUnreadCount(countResult.count);
+      } catch {
+        // Leave existing state as-is; the screen that triggered this can surface its own error.
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+
+    // Guards against a fetch started for the previous user still being in flight when
+    // isAuthenticated flips (logout, or logout-then-relogin as a different user) — without
+    // this, a stale response could land after the transition and overwrite the next user's
+    // notifications with the previous user's data.
+    return () => {
+      cancelled = true;
+    };
   }, [isAuthenticated]);
 
   useEffect(() => {
