@@ -3,7 +3,12 @@ import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/database';
 import { redis } from '../../config/redis';
 import { AppError } from '../../utils/AppError';
-import type { LoginInput, RegisterInput, UpdateAdminCredentialsInput } from './auth.schema';
+import type {
+  ChangePasswordInput,
+  LoginInput,
+  RegisterInput,
+  UpdateAdminCredentialsInput,
+} from './auth.schema';
 import { toSafeUser } from './auth.types';
 import type { AccessTokenPayload, RefreshTokenPayload, SafeUser } from './auth.types';
 
@@ -214,6 +219,30 @@ export async function updateAdminCredentials(
   });
 
   // Changing credentials invalidates any other session running on the old ones.
+  await redis.del(refreshTokenKey(userId));
+
+  return toSafeUser(updated);
+}
+
+// Self-service password change for any user type (STUDENT/PARENT/INSTITUTION/ADMIN) —
+// unlike updateAdminCredentials above, this never touches email and isn't role-gated.
+export async function changePassword(userId: string, input: ChangePasswordInput): Promise<SafeUser> {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw new AppError(404, 'USER_NOT_FOUND', 'User not found');
+  }
+
+  const passwordMatches = await bcrypt.compare(input.currentPassword, user.password);
+  if (!passwordMatches) {
+    throw new AppError(401, 'INVALID_CREDENTIALS', 'Current password is incorrect');
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: { password: await bcrypt.hash(input.newPassword, SALT_ROUNDS) },
+  });
+
+  // Changing the password invalidates any other session running on the old one.
   await redis.del(refreshTokenKey(userId));
 
   return toSafeUser(updated);

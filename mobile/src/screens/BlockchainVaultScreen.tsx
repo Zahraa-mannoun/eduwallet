@@ -22,6 +22,7 @@ import IconBadge from '../components/IconBadge';
 import KYCGate from '../components/KYCGate';
 import { colors } from '../theme/colors';
 import * as blockchainService from '../services/blockchainService';
+import type { VerifyResult } from '../services/blockchainService';
 import { API_BASE_URL, ApiError } from '../services/api';
 import type { RootStackScreenProps } from '../navigation/types';
 
@@ -46,7 +47,7 @@ function truncateHash(hash: string): string {
   return `${hash.slice(0, 10)}...${hash.slice(-8)}`;
 }
 
-type PendingUpload = { uri: string; name: string; mimeType: string };
+type PendingUpload = { uri: string; name: string; mimeType: string; file?: File };
 
 export default function BlockchainVaultScreen({
   navigation,
@@ -57,6 +58,9 @@ export default function BlockchainVaultScreen({
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
   const [verifiedIds, setVerifiedIds] = useState<Set<string>>(new Set());
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [verifyModal, setVerifyModal] = useState<{ document: AcademicDocument; result: VerifyResult } | null>(
+    null
+  );
 
   const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null);
   const [documentName, setDocumentName] = useState('');
@@ -87,7 +91,12 @@ export default function BlockchainVaultScreen({
     if (result.canceled || result.assets.length === 0) return;
 
     const asset = result.assets[0];
-    setPendingUpload({ uri: asset.uri, name: asset.name, mimeType: asset.mimeType ?? 'application/octet-stream' });
+    setPendingUpload({
+      uri: asset.uri,
+      name: asset.name,
+      mimeType: asset.mimeType ?? 'application/octet-stream',
+      file: asset.file,
+    });
     setDocumentName(asset.name);
     setDocumentType('DEGREE');
   };
@@ -102,6 +111,7 @@ export default function BlockchainVaultScreen({
         fileType: pendingUpload.mimeType,
         documentName: documentName.trim(),
         documentType,
+        file: pendingUpload.file,
       });
       setPendingUpload(null);
       setSnackbarMessage('Document stored on blockchain.');
@@ -120,10 +130,8 @@ export default function BlockchainVaultScreen({
       const result = await blockchainService.verifyDocument(document.sha256Hash);
       if (result.status === 'AUTHENTIC') {
         setVerifiedIds((prev) => new Set(prev).add(document.id));
-        setSnackbarMessage('Authentic — hash matches the blockchain record.');
-      } else {
-        setSnackbarMessage('No matching blockchain record found.');
       }
+      setVerifyModal({ document, result });
     } catch (err) {
       setSnackbarMessage(err instanceof ApiError ? err.message : 'Could not verify that document.');
     } finally {
@@ -268,6 +276,47 @@ export default function BlockchainVaultScreen({
             <Button onPress={handleConfirmUpload} disabled={!documentName.trim() || isUploading}>
               {isUploading ? <ActivityIndicator size={16} color={colors.primary} /> : 'Upload'}
             </Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        <Dialog visible={verifyModal !== null} onDismiss={() => setVerifyModal(null)}>
+          <Dialog.Title>Blockchain Verification</Dialog.Title>
+          <Dialog.Content>
+            {verifyModal?.result.status === 'AUTHENTIC' ? (
+              <>
+                <Chip compact icon="check-decagram" style={styles.verifiedChip} textStyle={styles.verifiedChipText}>
+                  AUTHENTIC
+                </Chip>
+
+                <View style={styles.verifyRow}>
+                  <Text style={styles.verifyLabel}>Document Name</Text>
+                  <Text style={styles.verifyValue}>
+                    {verifyModal.result.documentName ?? verifyModal.document.fileName}
+                  </Text>
+                </View>
+                <View style={styles.verifyRow}>
+                  <Text style={styles.verifyLabel}>SHA-256 Hash</Text>
+                  <Text style={styles.verifyValueMono}>{verifyModal.document.sha256Hash}</Text>
+                </View>
+                <View style={styles.verifyRow}>
+                  <Text style={styles.verifyLabel}>Blockchain Tx Hash</Text>
+                  <Text style={styles.verifyValueMono}>{verifyModal.result.blockchainTxHash}</Text>
+                </View>
+                <View style={styles.verifyRow}>
+                  <Text style={styles.verifyLabel}>Owner</Text>
+                  <Text style={styles.verifyValue}>{verifyModal.result.issuedTo}</Text>
+                </View>
+                <View style={styles.verifyRow}>
+                  <Text style={styles.verifyLabel}>Upload Date</Text>
+                  <Text style={styles.verifyValue}>{formatDate(verifyModal.result.createdAt)}</Text>
+                </View>
+              </>
+            ) : (
+              <Text style={styles.verifyValue}>No matching blockchain record found.</Text>
+            )}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setVerifyModal(null)}>Close</Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>
@@ -418,5 +467,26 @@ const styles = StyleSheet.create({
   },
   typeChoiceChip: {
     marginRight: 4,
+  },
+  verifyRow: {
+    marginTop: 14,
+  },
+  verifyLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.muted,
+    textTransform: 'uppercase',
+    marginBottom: 3,
+  },
+  verifyValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.heading,
+  },
+  verifyValueMono: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.heading,
+    letterSpacing: 0.3,
   },
 });

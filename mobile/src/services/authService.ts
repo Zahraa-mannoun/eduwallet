@@ -46,3 +46,10 @@ export async function logout(): Promise<void> {
 export async function getMe(): Promise<User> {
   return apiRequest<User>('/auth/me');
 }
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<User> {
+  return apiRequest<User>('/auth/change-password', {
+    method: 'PATCH',
+    body: { currentPassword, newPassword },
+  });
+}

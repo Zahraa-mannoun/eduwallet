@@ -8,12 +8,17 @@ import { colors } from '../theme/colors';
 type CategorySelectorGridProps = Readonly<{
   value: BudgetCategoryDefinition | null;
   onChange: (category: BudgetCategoryDefinition) => void;
+  categories?: BudgetCategoryDefinition[];
 }>;
 
-export default function CategorySelectorGrid({ value, onChange }: CategorySelectorGridProps) {
+export default function CategorySelectorGrid({
+  value,
+  onChange,
+  categories = BUDGET_CATEGORIES,
+}: CategorySelectorGridProps) {
   return (
     <View style={styles.grid}>
-      {BUDGET_CATEGORIES.map((category) => {
+      {categories.map((category) => {
         const selected = value?.key === category.key;
         return (
           <TouchableRipple

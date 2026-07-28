@@ -40,6 +40,7 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
 
   useEffect(() => {
     let cancelled = false;
+    const MAX_ATTEMPTS = 3;
 
     (async () => {
       const token = await getAccessToken();
@@ -47,17 +48,27 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
         if (!cancelled) setIsLoading(false);
         return;
       }
-      try {
-        const me = await authService.getMe();
-        if (!cancelled) {
-          setUser(me);
-          connectSocket(token);
+
+      // A stored token must only be treated as invalid on a genuine auth failure (401 after
+      // apiRequest's own refresh attempt) — a transient network hiccup on cold start (backend
+      // still warming up, spotty wifi) is common on mobile and must not silently boot the user
+      // back to the Login screen while their session is still perfectly valid.
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+          const me = await authService.getMe();
+          if (!cancelled) {
+            setUser(me);
+            connectSocket(token);
+          }
+          break;
+        } catch (err) {
+          const isNetworkError = err instanceof ApiError && err.code === 'NETWORK_ERROR';
+          if (!isNetworkError || attempt === MAX_ATTEMPTS) break;
+          await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
         }
-      } catch {
-        // Stored token is invalid/expired and refresh already failed inside apiRequest.
-      } finally {
-        if (!cancelled) setIsLoading(false);
       }
+
+      if (!cancelled) setIsLoading(false);
     })();
 
     return () => {

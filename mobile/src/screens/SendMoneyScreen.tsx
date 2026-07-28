@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -23,6 +23,7 @@ import IconBadge from '../components/IconBadge';
 import KYCGate from '../components/KYCGate';
 import { useWallet } from '../context/WalletContext';
 import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
+import * as parentalService from '../services/parentalService';
 import * as walletService from '../services/walletService';
 import { ApiError } from '../services/api';
 import { colors } from '../theme/colors';
@@ -56,8 +57,21 @@ export default function SendMoneyScreen({ navigation }: RootStackScreenProps<'Se
   const [sendError, setSendError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [transaction, setTransaction] = useState<SentTransaction | null>(null);
+  const [approvalThreshold, setApprovalThreshold] = useState<number | null>(null);
+
+  const loadApprovalThreshold = useCallback(async () => {
+    try {
+      const permissions = await parentalService.getMyPermissions();
+      const threshold = permissions ? Number(permissions.approvalThreshold) : 0;
+      setApprovalThreshold(threshold > 0 ? threshold : null);
+    } catch {
+      // Reminder is supplementary — leave it hidden on failure rather than showing stale data.
+      setApprovalThreshold(null);
+    }
+  }, []);
 
   useThrottledFocusEffect(refresh);
+  useThrottledFocusEffect(loadApprovalThreshold);
 
   const parsedAmount = Number(amount);
   const canSend = Boolean(recipient) && parsedAmount > 0 && !isSending;
@@ -263,6 +277,12 @@ export default function SendMoneyScreen({ navigation }: RootStackScreenProps<'Se
             />
           </View>
 
+          {approvalThreshold !== null && (
+            <Text style={styles.thresholdReminder}>
+              Transfers above ${approvalThreshold.toFixed(0)} require parent approval.
+            </Text>
+          )}
+
           <TextInput
             mode="outlined"
             label="Note (optional)"
@@ -361,6 +381,12 @@ const styles = StyleSheet.create({
     minWidth: 120,
     textAlign: 'center',
     padding: 0,
+  },
+  thresholdReminder: {
+    fontSize: 12,
+    color: colors.muted,
+    textAlign: 'center',
+    marginBottom: 16,
   },
   noteInput: {
     backgroundColor: colors.inputBackground,

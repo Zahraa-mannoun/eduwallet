@@ -6,6 +6,10 @@ import type { SafeUser } from '../auth/auth.types';
 import { createNotification } from '../notifications/notifications.service';
 import type { BulkDisburseInput } from './scholarship.schema';
 
+function titleCaseCategory(category: string): string {
+  return category.charAt(0) + category.slice(1).toLowerCase();
+}
+
 export async function getStudents(): Promise<SafeUser[]> {
   const students = await prisma.user.findMany({
     where: { userType: 'STUDENT', kycStatus: 'VERIFIED', suspended: false },
@@ -56,6 +60,11 @@ export async function bulkDisburse(
     );
   }
 
+  const institution = await prisma.user.findUnique({
+    where: { id: institutionUserId },
+    select: { fullName: true },
+  });
+
   const totalDisbursed = input.amountPerStudent * students.length;
 
   const transactions = await prisma.$transaction(async (tx) => {
@@ -79,6 +88,25 @@ export async function bulkDisburse(
         update: { balance: { increment: input.amountPerStudent } },
       });
 
+      // A non-GENERAL category lock restricts how the student can spend this money, same as
+      // a parent's locked transfer (see wallet.service.ts transfer()) — without this, the
+      // disbursement landed in the wallet's general balance regardless of the chosen category.
+      if (input.category !== 'GENERAL') {
+        await tx.lockedFund.upsert({
+          where: { walletId_category: { walletId: studentWallet.id, category: input.category } },
+          create: {
+            walletId: studentWallet.id,
+            category: input.category,
+            amount: input.amountPerStudent,
+            totalLocked: input.amountPerStudent,
+          },
+          update: {
+            amount: { increment: input.amountPerStudent },
+            totalLocked: { increment: input.amountPerStudent },
+          },
+        });
+      }
+
       const transaction = await tx.transaction.create({
         data: {
           fromWalletId: institutionWallet.id,
@@ -100,7 +128,7 @@ export async function bulkDisburse(
       createNotification(
         student.id,
         'Scholarship Received',
-        `You received ${input.amountPerStudent} ${input.currency} for ${input.category.toLowerCase()}.`,
+        `You received ${input.amountPerStudent} ${input.currency} from ${institution?.fullName ?? 'your institution'} for ${titleCaseCategory(input.category)}.`,
         'TRANSFER_RECEIVED'
       )
     )

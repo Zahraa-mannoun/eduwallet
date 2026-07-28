@@ -91,6 +91,9 @@ export type Transaction = {
   status: TransactionStatus;
   note: string | null;
   receiverName: string | null;
+  // Only populated by GET /wallet/transactions and /wallet/transactions/:id — other endpoints
+  // that return a bare Transaction (e.g. POST /wallet/transfer) leave this undefined.
+  senderName?: string | null;
   createdAt: string;
 };
 

@@ -1,12 +1,105 @@
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { IconButton, Snackbar, Switch, Text } from 'react-native-paper';
+import { ActivityIndicator, Button, HelperText, IconButton, Snackbar, Switch, Text, TextInput } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
+import * as authService from '../services/authService';
 import * as cardService from '../services/cardService';
 import { ApiError } from '../services/api';
 import { colors } from '../theme/colors';
 import type { RootStackScreenProps } from '../navigation/types';
+
+function ChangePasswordSection() {
+  const { logout } = useAuth();
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [secure, setSecure] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const canSubmit =
+    currentPassword.length > 0 &&
+    newPassword.length >= 8 &&
+    confirmPassword.length > 0 &&
+    !isSubmitting;
+
+  const handleSubmit = async () => {
+    if (!canSubmit) return;
+    if (newPassword !== confirmPassword) {
+      setError('New password and confirmation do not match.');
+      return;
+    }
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      await authService.changePassword(currentPassword, newPassword);
+      // Changing the password revokes this session's refresh token server-side — sign out
+      // now rather than waiting for the next silent refresh to fail unexpectedly.
+      await logout();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not change your password.');
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <Text style={styles.sectionLabel}>Change Password</Text>
+      <View style={styles.settingCard}>
+        <TextInput
+          mode="outlined"
+          label="Current password"
+          value={currentPassword}
+          onChangeText={setCurrentPassword}
+          secureTextEntry={secure}
+          outlineColor={colors.border}
+          activeOutlineColor={colors.primary}
+          style={styles.passwordInput}
+        />
+        <TextInput
+          mode="outlined"
+          label="New password"
+          value={newPassword}
+          onChangeText={setNewPassword}
+          secureTextEntry={secure}
+          outlineColor={colors.border}
+          activeOutlineColor={colors.primary}
+          style={styles.passwordInput}
+        />
+        <TextInput
+          mode="outlined"
+          label="Confirm new password"
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          secureTextEntry={secure}
+          right={
+            <TextInput.Icon
+              icon={secure ? 'eye-outline' : 'eye-off-outline'}
+              onPress={() => setSecure((v) => !v)}
+            />
+          }
+          outlineColor={colors.border}
+          activeOutlineColor={colors.primary}
+          style={styles.passwordInput}
+        />
+        <HelperText type="error" visible={Boolean(error)}>
+          {error}
+        </HelperText>
+        <Button
+          mode="contained"
+          buttonColor={colors.primary}
+          disabled={!canSubmit}
+          style={styles.saveButton}
+          contentStyle={styles.saveButtonContent}
+          onPress={handleSubmit}
+        >
+          {isSubmitting ? <ActivityIndicator size={18} color={colors.onPrimary} /> : 'Update Password'}
+        </Button>
+      </View>
+    </>
+  );
+}
 
 export default function AccountSettingsScreen({
   navigation,
@@ -41,7 +134,7 @@ export default function AccountSettingsScreen({
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        {user?.userType === 'STUDENT' ? (
+        {user?.userType === 'STUDENT' && (
           <>
             <Text style={styles.sectionLabel}>Card Settings</Text>
             <View style={styles.settingCard}>
@@ -62,9 +155,9 @@ export default function AccountSettingsScreen({
               </View>
             </View>
           </>
-        ) : (
-          <Text style={styles.settingDescription}>No account settings available yet.</Text>
         )}
+
+        <ChangePasswordSection />
       </ScrollView>
 
       <Snackbar
@@ -130,5 +223,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.muted,
     lineHeight: 17,
+  },
+  passwordInput: {
+    backgroundColor: colors.inputBackground,
+    marginBottom: 12,
+  },
+  saveButton: {
+    borderRadius: 10,
+    marginTop: 4,
+  },
+  saveButtonContent: {
+    paddingVertical: 6,
   },
 });

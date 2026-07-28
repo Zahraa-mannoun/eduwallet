@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
@@ -15,6 +15,7 @@ type ScholarshipRow = {
   currency: string;
   category: string;
   date: string;
+  studentNames: string[];
 };
 
 const MAX_PAGES = 5;
@@ -45,17 +46,18 @@ async function fetchAllTransactions(): Promise<TransactionRow[]> {
 function aggregate(transactions: TransactionRow[]): ScholarshipRow[] {
   const institutionTx = transactions.filter((tx) => tx.fromWallet?.user.userType === 'INSTITUTION');
 
-  const groups = new Map<string, ScholarshipRow & { studentIds: Set<string> }>();
+  const groups = new Map<string, ScholarshipRow & { studentNamesById: Map<string, string> }>();
 
   for (const tx of institutionTx) {
     const institutionName = tx.fromWallet?.user.fullName ?? 'Unknown Institution';
     const key = `${tx.fromWallet?.user.id}-${tx.category}`;
     const existing = groups.get(key);
     const studentId = tx.toWallet?.user.id ?? tx.toWalletId ?? tx.id;
+    const studentName = tx.toWallet?.user.fullName ?? 'Unknown Student';
 
     if (existing) {
       existing.totalAmount += Number(tx.amount);
-      existing.studentIds.add(studentId);
+      existing.studentNamesById.set(studentId, studentName);
       if (new Date(tx.createdAt) > new Date(existing.date)) {
         existing.date = tx.createdAt;
       }
@@ -68,13 +70,18 @@ function aggregate(transactions: TransactionRow[]): ScholarshipRow[] {
         currency: tx.currency,
         category: tx.category,
         date: tx.createdAt,
-        studentIds: new Set([studentId]),
+        studentNames: [],
+        studentNamesById: new Map([[studentId, studentName]]),
       });
     }
   }
 
   return [...groups.values()]
-    .map((group) => ({ ...group, studentsCount: group.studentIds.size }))
+    .map((group) => ({
+      ...group,
+      studentsCount: group.studentNamesById.size,
+      studentNames: [...group.studentNamesById.values()].sort((a, b) => a.localeCompare(b)),
+    }))
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 }
 
@@ -82,6 +89,7 @@ export function Scholarships() {
   const [rows, setRows] = useState<ScholarshipRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -133,19 +141,59 @@ export function Scholarships() {
               </tr>
             )}
             {!isLoading &&
-              rows.map((row) => (
-                <tr key={row.key}>
-                  <td className="px-4 py-3 font-medium text-slate-900">{row.institutionName}</td>
-                  <td className="px-4 py-3 text-slate-700">{row.studentsCount}</td>
-                  <td className="px-4 py-3 font-medium text-slate-900">
-                    {formatMoney(row.totalAmount, row.currency)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge tone={categoryTone[row.category] ?? 'gray'}>{row.category}</Badge>
-                  </td>
-                  <td className="px-4 py-3 text-slate-500">{formatDate(row.date)}</td>
-                </tr>
-              ))}
+              rows.map((row) => {
+                const isExpanded = expandedKey === row.key;
+                return (
+                  <Fragment key={row.key}>
+                    <tr
+                      className="cursor-pointer hover:bg-slate-50"
+                      onClick={() => setExpandedKey(isExpanded ? null : row.key)}
+                    >
+                      <td className="px-4 py-3 font-medium text-slate-900">
+                        <span className="inline-flex items-center gap-1.5">
+                          <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                            className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
+                          </svg>
+                          {row.institutionName}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-700">{row.studentsCount}</td>
+                      <td className="px-4 py-3 font-medium text-slate-900">
+                        {formatMoney(row.totalAmount, row.currency)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge tone={categoryTone[row.category] ?? 'gray'}>{row.category}</Badge>
+                      </td>
+                      <td className="px-4 py-3 text-slate-500">{formatDate(row.date)}</td>
+                    </tr>
+                    {isExpanded && (
+                      <tr className="bg-slate-50">
+                        <td colSpan={5} className="px-4 py-3">
+                          <p className="mb-1.5 text-xs font-semibold uppercase text-slate-500">
+                            Recipient Students
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {row.studentNames.map((name) => (
+                              <span
+                                key={name}
+                                className="rounded-full bg-white px-2.5 py-1 text-xs text-slate-700 ring-1 ring-inset ring-slate-200"
+                              >
+                                {name}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
           </tbody>
         </table>
       </div>

@@ -24,6 +24,11 @@ const FILTERS: { value: FilterValue; label: string }[] = [
   { value: 'PENDING', label: 'Pending' },
 ];
 
+// Only a STUDENT's own transfers ever go through parent approval — a PARENT's history is
+// their own spending (never pending), and an INSTITUTION's disbursements are always
+// AUTO_APPROVED, so "Pending" is a dead filter for both and only clutters their history tab.
+const PENDING_TAB_ROLES: ReadonlyArray<string> = ['STUDENT'];
+
 // Parent-facing history reframes statuses around approval, not the raw state machine —
 // a parent cares whether money moved or is waiting on them, not "auto" vs "manual" approval.
 const PARENT_STATUS_LABELS: Partial<Record<TransactionStatus, string>> = {
@@ -61,7 +66,10 @@ export default function TransactionHistoryScreen({
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterValue>('ALL');
 
-  const filters = isParent ? FILTERS.filter((item) => item.value !== 'PENDING') : FILTERS;
+  const filters =
+    user && !PENDING_TAB_ROLES.includes(user.userType)
+      ? FILTERS.filter((item) => item.value !== 'PENDING')
+      : FILTERS;
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -97,6 +105,13 @@ export default function TransactionHistoryScreen({
       ? (PARENT_STATUS_LABELS[transaction.status] ?? statusMeta.label)
       : statusMeta.label;
     const isReceived = wallet !== null && transaction.toWalletId === wallet.id;
+    const partyLabel = isReceived
+      ? transaction.senderName
+        ? `From: ${transaction.senderName}`
+        : null
+      : transaction.receiverName
+        ? `To: ${transaction.receiverName}`
+        : null;
 
     return (
       <TouchableOpacity
@@ -116,6 +131,7 @@ export default function TransactionHistoryScreen({
           <Text style={styles.rowSubtitle}>
             {category?.label ?? 'Other'} • {formatDate(transaction.createdAt)}
           </Text>
+          {partyLabel ? <Text style={styles.rowParty}>{partyLabel}</Text> : null}
         </View>
         <View style={styles.rowRight}>
           <Text style={[styles.rowAmount, { color: isReceived ? colors.accent : colors.heading }]}>
@@ -241,6 +257,12 @@ const styles = StyleSheet.create({
   rowSubtitle: {
     fontSize: 12,
     color: colors.muted,
+    marginTop: 2,
+  },
+  rowParty: {
+    fontSize: 12,
+    color: colors.label,
+    fontWeight: '600',
     marginTop: 2,
   },
   rowRight: {

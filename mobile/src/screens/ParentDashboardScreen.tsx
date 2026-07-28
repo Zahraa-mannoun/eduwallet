@@ -6,10 +6,12 @@ import { useFocusEffect } from '@react-navigation/native';
 import {
   ActivityIndicator,
   Avatar,
+  Badge,
   Button,
   Card,
   Chip,
   Dialog,
+  IconButton,
   Portal,
   Text,
 } from 'react-native-paper';
@@ -18,6 +20,7 @@ import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryKey } from '../constants/budgetCategories';
 import { TRANSACTION_STATUS_META } from '../constants/mockTransactions';
+import { useNotifications } from '../context/NotificationsContext';
 import { useWallet } from '../context/WalletContext';
 import { colors } from '../theme/colors';
 import { getInitials } from '../utils/getInitials';
@@ -39,6 +42,7 @@ export default function ParentDashboardScreen({
   navigation,
 }: Readonly<ParentTabScreenProps<'Home'>>) {
   const { wallet: parentWallet, refresh: refreshParentWallet } = useWallet();
+  const { unreadCount } = useNotifications();
   const [students, setStudents] = useState<LinkedStudent[]>([]);
   const [approvals, setApprovals] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -113,6 +117,20 @@ export default function ParentDashboardScreen({
         <Text variant="headlineSmall" style={styles.headerTitle}>
           Parent Dashboard
         </Text>
+        <View style={styles.bellWrapper}>
+          <IconButton
+            icon="bell-outline"
+            iconColor={colors.heading}
+            size={24}
+            onPress={() => navigation.navigate('Notifications')}
+            style={styles.bellButton}
+          />
+          {unreadCount > 0 && (
+            <Badge style={styles.bellBadge} size={16}>
+              {unreadCount}
+            </Badge>
+          )}
+        </View>
       </View>
 
       <ScrollView
@@ -350,6 +368,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 4,
@@ -357,6 +378,18 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontWeight: '700',
     color: colors.heading,
+  },
+  bellWrapper: {
+    marginRight: -8,
+  },
+  bellButton: {
+    margin: 0,
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: colors.danger,
   },
   content: {
     paddingHorizontal: 20,

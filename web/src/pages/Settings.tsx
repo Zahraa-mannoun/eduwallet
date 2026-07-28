@@ -6,8 +6,70 @@ import { api, getErrorMessage } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 
 const inputClass =
-  'w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary';
+  'w-full rounded-md border border-slate-300 px-3 py-2 pr-9 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary';
 const labelClass = 'mb-1 block text-sm font-medium text-slate-700';
+
+function EyeIcon({ open }: { open: boolean }) {
+  return open ? (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7Z" />
+      <circle cx="12" cy="12" r="3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ) : (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M3 3l18 18M10.6 10.6a3 3 0 0 0 4.24 4.24M9.4 5.5A9.6 9.6 0 0 1 12 5c6 0 9.5 7 9.5 7a13.8 13.8 0 0 1-3.2 4.15M6.3 6.9C4 8.5 2.5 12 2.5 12a13.7 13.7 0 0 0 4.15 4.9"
+      />
+    </svg>
+  );
+}
+
+function PasswordField({
+  id,
+  label,
+  value,
+  onChange,
+  autoComplete,
+  minLength,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  autoComplete: string;
+  minLength?: number;
+}) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div>
+      <label htmlFor={id} className={labelClass}>
+        {label}
+      </label>
+      <div className="relative">
+        <input
+          id={id}
+          type={visible ? 'text' : 'password'}
+          required
+          minLength={minLength}
+          autoComplete={autoComplete}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className={inputClass}
+        />
+        <button
+          type="button"
+          onClick={() => setVisible((v) => !v)}
+          className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-slate-400 hover:text-slate-600"
+          aria-label={visible ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+        >
+          <EyeIcon open={visible} />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function EmailSection() {
   const { admin, logout } = useAuth();
@@ -50,20 +112,13 @@ function EmailSection() {
         </p>
       ) : (
         <form className="mt-4 max-w-sm space-y-4" onSubmit={handleSubmit}>
-          <div>
-            <label htmlFor="email-current-password" className={labelClass}>
-              Current Password
-            </label>
-            <input
-              id="email-current-password"
-              type="password"
-              required
-              autoComplete="current-password"
-              value={currentPassword}
-              onChange={(event) => setCurrentPassword(event.target.value)}
-              className={inputClass}
-            />
-          </div>
+          <PasswordField
+            id="email-current-password"
+            label="Current Password"
+            value={currentPassword}
+            onChange={setCurrentPassword}
+            autoComplete="current-password"
+          />
 
           <div>
             <label htmlFor="new-email" className={labelClass}>
@@ -146,52 +201,31 @@ function PasswordSection() {
         </p>
       ) : (
         <form className="mt-4 max-w-sm space-y-4" onSubmit={handleSubmit}>
-          <div>
-            <label htmlFor="password-current-password" className={labelClass}>
-              Current Password
-            </label>
-            <input
-              id="password-current-password"
-              type="password"
-              required
-              autoComplete="current-password"
-              value={currentPassword}
-              onChange={(event) => setCurrentPassword(event.target.value)}
-              className={inputClass}
-            />
-          </div>
+          <PasswordField
+            id="password-current-password"
+            label="Current Password"
+            value={currentPassword}
+            onChange={setCurrentPassword}
+            autoComplete="current-password"
+          />
 
-          <div>
-            <label htmlFor="new-password" className={labelClass}>
-              New Password
-            </label>
-            <input
-              id="new-password"
-              type="password"
-              required
-              minLength={8}
-              autoComplete="new-password"
-              value={newPassword}
-              onChange={(event) => setNewPassword(event.target.value)}
-              className={inputClass}
-            />
-          </div>
+          <PasswordField
+            id="new-password"
+            label="New Password"
+            value={newPassword}
+            onChange={setNewPassword}
+            autoComplete="new-password"
+            minLength={8}
+          />
 
-          <div>
-            <label htmlFor="confirm-password" className={labelClass}>
-              Confirm New Password
-            </label>
-            <input
-              id="confirm-password"
-              type="password"
-              required
-              minLength={8}
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              className={inputClass}
-            />
-          </div>
+          <PasswordField
+            id="confirm-password"
+            label="Confirm New Password"
+            value={confirmPassword}
+            onChange={setConfirmPassword}
+            autoComplete="new-password"
+            minLength={8}
+          />
 
           {error && (
             <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">

@@ -16,6 +16,19 @@ import { ApiError } from '../services/api';
 
 const categoryLookup = new Map(BUDGET_CATEGORIES.map((category) => [category.key, category]));
 
+// Scholarship disbursements only make sense against academic/institutional spending —
+// Food, Transport, Rent, and Personal are a parent's discretionary-spending categories, not
+// something an institution should be locking a disbursement to.
+const DISBURSEMENT_LOCK_KEYS: ReadonlySet<BudgetCategoryKey> = new Set([
+  'tuition',
+  'books',
+  'software',
+  'general',
+]);
+const DISBURSEMENT_LOCK_CATEGORIES = BUDGET_CATEGORIES.filter((category) =>
+  DISBURSEMENT_LOCK_KEYS.has(category.key)
+);
+
 const formatDate = (isoDate: string) =>
   new Date(isoDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 
@@ -184,7 +197,11 @@ export default function ScholarshipPortalScreen() {
             </View>
 
             <Text style={styles.fieldLabel}>Category Lock</Text>
-            <CategorySelectorGrid value={category} onChange={setCategory} />
+            <CategorySelectorGrid
+              value={category}
+              onChange={setCategory}
+              categories={DISBURSEMENT_LOCK_CATEGORIES}
+            />
 
             <Button
               mode="contained"
@@ -212,7 +229,10 @@ export default function ScholarshipPortalScreen() {
                   <Text style={styles.historyTitle}>
                     {cat?.label ?? 'Payment'} • ${Number(tx.amount).toFixed(2)}
                   </Text>
-                  <Text style={styles.historySubtitle}>{formatDate(tx.createdAt)}</Text>
+                  <Text style={styles.historySubtitle}>
+                    {tx.receiverName ? `To: ${tx.receiverName} • ` : ''}
+                    {formatDate(tx.createdAt)}
+                  </Text>
                 </View>
                 <Text style={styles.historyAmount}>${Number(tx.amount).toFixed(2)}</Text>
               </View>

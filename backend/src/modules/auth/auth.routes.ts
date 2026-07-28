@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { authenticate } from '../../middleware/authenticate';
 import { requireRole } from '../../middleware/requireRole';
 import {
+  changePasswordHandler,
   loginHandler,
   logoutHandler,
   meHandler,
@@ -22,6 +23,11 @@ export default async function authRoutes(fastify: FastifyInstance): Promise<void
   );
   fastify.post('/refresh', { config: { rateLimit: AUTH_RATE_LIMIT } }, refreshHandler);
   fastify.get('/me', { preHandler: authenticate, config: { rateLimit: AUTH_RATE_LIMIT } }, meHandler);
+  fastify.patch(
+    '/change-password',
+    { preHandler: authenticate, config: { rateLimit: AUTH_RATE_LIMIT } },
+    changePasswordHandler
+  );
   fastify.patch(
     '/admin/update-credentials',
     { preHandler: [authenticate, requireRole('ADMIN')], config: { rateLimit: AUTH_RATE_LIMIT } },

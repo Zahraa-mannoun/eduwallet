@@ -11,6 +11,40 @@ import type {
   TransferInput,
 } from './wallet.schema';
 
+export type TransactionWithParties = Transaction & {
+  senderName: string | null;
+  receiverName: string | null;
+};
+
+function titleCaseCategory(category: string): string {
+  return category.charAt(0) + category.slice(1).toLowerCase();
+}
+
+// Card payments already store the merchant's name directly on the transaction row (there's no
+// toWallet for those, since the merchant isn't a EduWallet user) — everything else derives
+// sender/receiver display names from the wallet owner, resolved here in one batched query.
+async function attachPartyNames(transactions: Transaction[]): Promise<TransactionWithParties[]> {
+  const walletIds = new Set<string>();
+  for (const transaction of transactions) {
+    if (transaction.fromWalletId) walletIds.add(transaction.fromWalletId);
+    if (transaction.toWalletId) walletIds.add(transaction.toWalletId);
+  }
+
+  const wallets = await prisma.wallet.findMany({
+    where: { id: { in: [...walletIds] } },
+    select: { id: true, user: { select: { fullName: true } } },
+  });
+  const nameByWalletId = new Map(wallets.map((wallet) => [wallet.id, wallet.user.fullName]));
+
+  return transactions.map((transaction) => ({
+    ...transaction,
+    senderName: transaction.fromWalletId ? (nameByWalletId.get(transaction.fromWalletId) ?? null) : null,
+    receiverName:
+      transaction.receiverName ??
+      (transaction.toWalletId ? (nameByWalletId.get(transaction.toWalletId) ?? null) : null),
+  }));
+}
+
 export async function getWallet(userId: string): Promise<Wallet & { lockedFunds: LockedFund[] }> {
   const wallet = await prisma.wallet.findFirst({
     where: { userId },
@@ -141,7 +175,7 @@ export async function transfer(
     await createNotification(
       parentalControl.parentUserId,
       'Approval Needed',
-      `A ${input.category.toLowerCase()} transfer of ${input.amount} ${input.currency} needs your approval.`,
+      `${fromUser.fullName} wants to send a ${titleCaseCategory(input.category)} transfer of ${input.amount} ${input.currency}. Your approval is needed.`,
       'APPROVAL_NEEDED'
     );
   } else {
@@ -204,7 +238,7 @@ export async function transfer(
     await createNotification(
       toWallet.userId,
       'Money Received',
-      `You received ${input.amount} ${input.currency} for ${input.category.toLowerCase()}.`,
+      `You received ${input.amount} ${input.currency} from ${fromUser.fullName} for ${titleCaseCategory(input.category)}.`,
       'TRANSFER_RECEIVED'
     );
 
@@ -226,7 +260,7 @@ export async function transfer(
 export async function getTransactions(
   userId: string,
   filters: GetTransactionsInput
-): Promise<{ transactions: Transaction[]; total: number; page: number; limit: number }> {
+): Promise<{ transactions: TransactionWithParties[]; total: number; page: number; limit: number }> {
   const wallets = await prisma.wallet.findMany({ where: { userId }, select: { id: true } });
   const walletIds = wallets.map((wallet) => wallet.id);
 
@@ -236,7 +270,7 @@ export async function getTransactions(
     ...(filters.status ? { status: filters.status } : {}),
   };
 
-  const [transactions, total] = await Promise.all([
+  const [rawTransactions, total] = await Promise.all([
     prisma.transaction.findMany({
       where,
       orderBy: { createdAt: 'desc' },
@@ -246,13 +280,15 @@ export async function getTransactions(
     prisma.transaction.count({ where }),
   ]);
 
+  const transactions = await attachPartyNames(rawTransactions);
+
   return { transactions, total, page: filters.page, limit: filters.limit };
 }
 
 export async function getTransactionById(
   userId: string,
   transactionId: string
-): Promise<Transaction> {
+): Promise<TransactionWithParties> {
   const wallets = await prisma.wallet.findMany({ where: { userId }, select: { id: true } });
   const walletIds = new Set(wallets.map((wallet) => wallet.id));
 
@@ -266,7 +302,8 @@ export async function getTransactionById(
     throw new AppError(404, 'TRANSACTION_NOT_FOUND', 'Transaction not found');
   }
 
-  return transaction;
+  const [enriched] = await attachPartyNames([transaction]);
+  return enriched;
 }
 
 export async function lookupWalletByEmail(
