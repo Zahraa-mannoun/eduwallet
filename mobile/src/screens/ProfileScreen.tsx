@@ -54,7 +54,7 @@ type ProfileScreenProps = Readonly<{
 }>;
 
 export default function ProfileScreen({ navigation }: ProfileScreenProps) {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const displayName = user?.fullName || 'there';
   const typeDefinition = USER_TYPES.find((type) => type.key === user?.userType) ?? USER_TYPES[0];
   const [hasKycDocuments, setHasKycDocuments] = useState(false);
@@ -69,12 +69,16 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
     }
   }, [user?.userType]);
 
-  // Unthrottled: KYC status must update immediately when the student returns here after
-  // submitting documents, not up to 30s later — same reasoning as BudgetScreen/CardsScreen.
+  // Unthrottled: KYC status must update immediately when the student returns here after an
+  // admin approves/rejects their documents, not up to 30s later — same reasoning as
+  // BudgetScreen/CardsScreen. refreshUser() re-fetches GET /auth/me so user.kycStatus (the
+  // badge above reads it via getEffectiveKYCStatus) reflects the latest admin decision, not
+  // just whatever was current when the app first loaded.
   useFocusEffect(
     useCallback(() => {
+      void refreshUser();
       void loadKycDocuments();
-    }, [loadKycDocuments])
+    }, [refreshUser, loadKycDocuments])
   );
 
   const effectiveKycStatus = user ? getEffectiveKYCStatus(user.kycStatus, hasKycDocuments) : 'UNVERIFIED';

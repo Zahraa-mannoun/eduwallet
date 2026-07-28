@@ -1,5 +1,3 @@
-import { StyleSheet, View } from 'react-native';
-import { ActivityIndicator } from 'react-native-paper';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
@@ -14,25 +12,28 @@ import BlockchainVaultScreen from '../screens/BlockchainVaultScreen';
 import AIAssistantScreen from '../screens/AIAssistantScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import AccountSettingsScreen from '../screens/AccountSettingsScreen';
+import SplashScreen from '../screens/SplashScreen';
 import SupportMessageScreen from '../screens/SupportMessageScreen';
 import StudentMainNavigator from './StudentMainNavigator';
 import ParentMainNavigator from './ParentMainNavigator';
 import InstitutionMainNavigator from './InstitutionMainNavigator';
 import { useAuth } from '../context/AuthContext';
-import { colors } from '../theme/colors';
 import type { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function AppNavigator() {
-  const { isAuthenticated, isLoading, user } = useAuth();
+  const { isAuthenticated, isLoading, isOffline, retryConnection, user } = useAuth();
 
+  // Both branches gate ALL navigation decisions on the cold-start session check having
+  // actually finished — isLoading while it's in flight, isOffline if it gave up purely on
+  // connectivity. Neither renders the Login screen, so a slow/flaky network on startup can
+  // never look like a logout; only a confirmed-invalid token falls through to Login below.
   if (isLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
+    return <SplashScreen />;
+  }
+  if (isOffline) {
+    return <SplashScreen isOffline onRetry={retryConnection} />;
   }
 
   return (
@@ -70,12 +71,3 @@ export default function AppNavigator() {
     </Stack.Navigator>
   );
 }
-
-const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.background,
-  },
-});

@@ -138,7 +138,7 @@ export default function RegisterScreen({ navigation }: RootStackScreenProps<'Reg
             left={<TextInput.Icon icon="lock-outline" />}
             right={
               <TextInput.Icon
-                icon={secure ? 'eye-outline' : 'eye-off-outline'}
+                icon={secure ? 'eye-off-outline' : 'eye-outline'}
                 onPress={() => setSecure((v) => !v)}
               />
             }

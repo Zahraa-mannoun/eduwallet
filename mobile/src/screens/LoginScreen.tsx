@@ -139,7 +139,7 @@ export default function LoginScreen({ navigation }: RootStackScreenProps<'Login'
             left={<TextInput.Icon icon="lock-outline" />}
             right={
               <TextInput.Icon
-                icon={secure ? 'eye-outline' : 'eye-off-outline'}
+                icon={secure ? 'eye-off-outline' : 'eye-outline'}
                 onPress={() => setSecure((v) => !v)}
               />
             }

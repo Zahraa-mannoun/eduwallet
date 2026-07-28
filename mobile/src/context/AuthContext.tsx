@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { User } from '../types/api';
 import * as authService from '../services/authService';
@@ -12,6 +12,11 @@ type AuthContextValue = {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  // True once the cold-start session check has given up retrying purely because it couldn't
+  // reach the server (or got rate-limited) — never because the token was confirmed invalid.
+  // AppNavigator shows a "can't connect" screen for this, NOT the Login screen, since the
+  // stored session may still be perfectly valid once connectivity is back.
+  isOffline: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
   register: (input: {
@@ -23,6 +28,7 @@ type AuthContextValue = {
   logout: () => Promise<void>;
   clearError: () => void;
   refreshUser: () => Promise<void>;
+  retryConnection: () => void;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -33,26 +39,50 @@ function messageFromError(err: unknown): string {
   return 'Something went wrong. Please try again.';
 }
 
+// A completed-but-inconclusive response (couldn't reach the server, or got rate-limited) must
+// be retried rather than treated as proof the session is invalid. NETWORK_ERROR uses status 0
+// (see api.ts); 429 is @fastify/rate-limit's "too many requests" — hitting it is a sign of too
+// much polling, not an invalid token, and must never be read as one.
+function isInconclusiveError(err: unknown): boolean {
+  return err instanceof ApiError && (err.status === 0 || err.status === 429);
+}
+
 export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isOffline, setIsOffline] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [checkAttempt, setCheckAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    const MAX_ATTEMPTS = 3;
+    const MAX_ATTEMPTS = 5;
 
     (async () => {
-      const token = await getAccessToken();
+      setIsLoading(true);
+      setIsOffline(false);
+
+      let token: string | null;
+      try {
+        token = await getAccessToken();
+      } catch {
+        // SecureStore itself failed to read (e.g. a corrupted keystore) — there's no session
+        // to restore either way, but this must not hang the splash screen forever.
+        token = null;
+      }
+
       if (!token) {
         if (!cancelled) setIsLoading(false);
         return;
       }
 
-      // A stored token must only be treated as invalid on a genuine auth failure (401 after
-      // apiRequest's own refresh attempt) — a transient network hiccup on cold start (backend
-      // still warming up, spotty wifi) is common on mobile and must not silently boot the user
+      // A stored token must only be treated as invalid on a genuine auth failure confirmed by
+      // the server (a real 401/403 after apiRequest's own /auth/refresh attempt) — a transient
+      // network hiccup or a rate-limit response on cold start must never silently boot the user
       // back to the Login screen while their session is still perfectly valid.
+      let restored = false;
+      let wasInconclusive = false;
+
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         try {
           const me = await authService.getMe();
@@ -60,23 +90,30 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
             setUser(me);
             connectSocket(token);
           }
+          restored = true;
           break;
         } catch (err) {
-          const isNetworkError = err instanceof ApiError && err.code === 'NETWORK_ERROR';
-          if (!isNetworkError || attempt === MAX_ATTEMPTS) break;
-          await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+          if (!isInconclusiveError(err)) break; // confirmed invalid — stop, go to Login
+          wasInconclusive = true;
+          if (attempt < MAX_ATTEMPTS) {
+            await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+          }
         }
       }
 
-      if (!cancelled) setIsLoading(false);
+      if (cancelled) return;
+      if (!restored && wasInconclusive) {
+        setIsOffline(true);
+      }
+      setIsLoading(false);
     })();
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [checkAttempt]);
 
-  const login = async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string) => {
     setError(null);
     try {
       const result = await authService.login({ email, password });
@@ -86,27 +123,25 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
       setError(messageFromError(err));
       throw err;
     }
-  };
+  }, []);
 
-  const register = async (input: {
-    fullName: string;
-    email: string;
-    password: string;
-    userType: UserType;
-  }) => {
-    setError(null);
-    try {
-      await authService.register(input);
-      const result = await authService.login({ email: input.email, password: input.password });
-      setUser(result.user);
-      connectSocket(result.accessToken);
-    } catch (err) {
-      setError(messageFromError(err));
-      throw err;
-    }
-  };
+  const register = useCallback(
+    async (input: { fullName: string; email: string; password: string; userType: UserType }) => {
+      setError(null);
+      try {
+        await authService.register(input);
+        const result = await authService.login({ email: input.email, password: input.password });
+        setUser(result.user);
+        connectSocket(result.accessToken);
+      } catch (err) {
+        setError(messageFromError(err));
+        throw err;
+      }
+    },
+    []
+  );
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     disconnectSocket();
     setUser(null);
     try {
@@ -114,32 +149,41 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
     } catch {
       // Tokens are cleared locally by authService.logout()'s finally block regardless.
     }
-  };
+  }, []);
 
-  const clearError = () => setError(null);
+  const clearError = useCallback(() => setError(null), []);
 
-  const refreshUser = async () => {
+  // Stable across renders (useCallback with no deps) — screens call this from useFocusEffect,
+  // and an unstable reference here would make that effect re-fire on every user-state change
+  // (i.e. every time this very function resolves), snowballing into repeated GET /auth/me
+  // calls that could exhaust the rate limit and mask a real update behind a silently-caught
+  // failure below.
+  const refreshUser = useCallback(async () => {
     try {
       const me = await authService.getMe();
       setUser(me);
     } catch {
       // Best-effort refresh (e.g. after updating a profile setting) — leave stale state on failure.
     }
-  };
+  }, []);
+
+  const retryConnection = useCallback(() => setCheckAttempt((n) => n + 1), []);
 
   const value = useMemo(
     () => ({
       user,
       isAuthenticated: user !== null,
       isLoading,
+      isOffline,
       error,
       login,
       register,
       logout,
       clearError,
       refreshUser,
+      retryConnection,
     }),
-    [user, isLoading, error]
+    [user, isLoading, isOffline, error, login, register, logout, clearError, refreshUser, retryConnection]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

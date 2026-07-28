@@ -6,6 +6,12 @@ import type { UploadDocumentInput } from './blockchain.schema';
 
 const APP_URL = process.env.APP_URL ?? 'http://localhost:3000';
 
+// AcademicDocument is shared with the unrelated KYC feature (STUDENT_ID, ENROLLMENT_CERTIFICATE
+// documentTypes, created by kyc.service.ts's submitDocument() — which never sets sha256Hash/
+// blockchainTxHash). Every vault query must scope to just these three types, or a student's KYC
+// uploads show up here too with a missing hash and a Verify button that silently no-ops.
+const VAULT_DOCUMENT_TYPES = new Set(['DEGREE', 'TRANSCRIPT', 'CERTIFICATE']);
+
 export function hashDocument(fileContent: Buffer): string {
   return createHash('sha256').update(fileContent).digest('hex');
 }
@@ -38,7 +44,7 @@ export async function uploadDocument(
 
 export async function getMyDocuments(userId: string): Promise<AcademicDocument[]> {
   return prisma.academicDocument.findMany({
-    where: { userId },
+    where: { userId, documentType: { in: [...VAULT_DOCUMENT_TYPES] } },
     orderBy: { createdAt: 'desc' },
   });
 }

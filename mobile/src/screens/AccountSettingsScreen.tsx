@@ -53,6 +53,12 @@ function ChangePasswordSection() {
           value={currentPassword}
           onChangeText={setCurrentPassword}
           secureTextEntry={secure}
+          right={
+            <TextInput.Icon
+              icon={secure ? 'eye-off-outline' : 'eye-outline'}
+              onPress={() => setSecure((v) => !v)}
+            />
+          }
           outlineColor={colors.border}
           activeOutlineColor={colors.primary}
           style={styles.passwordInput}
@@ -75,7 +81,7 @@ function ChangePasswordSection() {
           secureTextEntry={secure}
           right={
             <TextInput.Icon
-              icon={secure ? 'eye-outline' : 'eye-off-outline'}
+              icon={secure ? 'eye-off-outline' : 'eye-outline'}
               onPress={() => setSecure((v) => !v)}
             />
           }

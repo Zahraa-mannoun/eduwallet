@@ -36,35 +36,49 @@ export class ApiError extends Error {
   }
 }
 
-let pendingRefresh: Promise<string | null> | null = null;
+// Distinguishes "the refresh token is genuinely invalid/missing" (session really is over) from
+// "couldn't even reach the server to ask" (network hiccup — the stored tokens may still be
+// perfectly valid). Conflating these used to make a flaky connection during token refresh look
+// identical to an expired session, which is what caused AuthContext's cold-start check to log
+// the user out on nothing more than a slow network.
+type RefreshOutcome = { accessToken: string } | { networkError: true } | { invalid: true };
 
-async function performRefresh(): Promise<string | null> {
+let pendingRefresh: Promise<RefreshOutcome> | null = null;
+
+async function performRefresh(): Promise<RefreshOutcome> {
   const refreshToken = await getRefreshToken();
   if (!refreshToken) {
-    return null;
+    return { invalid: true };
   }
 
+  let res: Response;
   try {
-    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+    res = await fetch(`${API_BASE_URL}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken }),
     });
-    const json = (await res.json()) as ApiResponse<{ accessToken: string }>;
-
-    if (!res.ok || !json.success) {
-      await clearTokens();
-      return null;
-    }
-
-    await setTokens(json.data.accessToken, refreshToken);
-    return json.data.accessToken;
   } catch {
-    return null;
+    return { networkError: true };
   }
+
+  let json: ApiResponse<{ accessToken: string }>;
+  try {
+    json = (await res.json()) as ApiResponse<{ accessToken: string }>;
+  } catch {
+    return { networkError: true };
+  }
+
+  if (!res.ok || !json.success) {
+    await clearTokens();
+    return { invalid: true };
+  }
+
+  await setTokens(json.data.accessToken, refreshToken);
+  return { accessToken: json.data.accessToken };
 }
 
-function refreshAccessToken(): Promise<string | null> {
+function refreshAccessToken(): Promise<RefreshOutcome> {
   if (!pendingRefresh) {
     pendingRefresh = performRefresh().finally(() => {
       pendingRefresh = null;
@@ -130,14 +144,18 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
   }
 
   if (res.status === 401 && useAuth && token) {
-    const newToken = await refreshAccessToken();
-    if (newToken) {
+    const outcome = await refreshAccessToken();
+    if ('accessToken' in outcome) {
       try {
-        res = await performFetch(path, options, newToken);
+        res = await performFetch(path, options, outcome.accessToken);
       } catch {
         throw new ApiError('Could not reach the server. Check your connection.', 'NETWORK_ERROR', 0);
       }
+    } else if ('networkError' in outcome) {
+      throw new ApiError('Could not reach the server. Check your connection.', 'NETWORK_ERROR', 0);
     }
+    // 'invalid' falls through to parse/throw the original 401 response below — the refresh
+    // token really is gone, so the caller's own auth-failure handling should take over.
   }
 
   let json: ApiResponse<T> | null = null;
