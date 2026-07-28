@@ -34,7 +34,14 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
       throw new AppError(401, 'USER_NOT_FOUND', 'User no longer exists');
     }
     if (user.suspended) {
-      throw new AppError(401, 'ACCOUNT_SUSPENDED', 'This account has been suspended');
+      // Matches loginUser()'s suspended check (auth.service.ts) — the actual reason, not a
+      // generic message, so a client mid-session (e.g. LoginScreen after being bounced back
+      // by AuthContext) can show the same "Reason: ..." text a suspended login attempt would.
+      throw new AppError(
+        401,
+        'ACCOUNT_SUSPENDED',
+        user.suspensionReason ?? 'This account has been suspended.'
+      );
     }
 
     request.authUser = { id: payload.sub, email: payload.email, userType: payload.userType };
