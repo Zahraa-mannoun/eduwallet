@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ActivityIndicator, Button, HelperText, IconButton, Snackbar, Switch, Text, TextInput } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
 import * as authService from '../services/authService';
@@ -164,6 +165,27 @@ export default function AccountSettingsScreen({
         )}
 
         <ChangePasswordSection />
+
+        {user?.userType !== 'ADMIN' && (
+          <>
+            <Text style={styles.sectionLabel}>Account Email</Text>
+            <TouchableOpacity
+              style={styles.settingCard}
+              onPress={() => navigation.navigate('EmailChangeRequest')}
+            >
+              <View style={styles.settingRow}>
+                <View style={styles.settingTextColumn}>
+                  <Text style={styles.settingTitle}>Request Email Change</Text>
+                  <Text style={styles.settingDescription}>
+                    Submit a request to change the email address on your account, with proof for
+                    admin review.
+                  </Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={24} color={colors.muted} />
+              </View>
+            </TouchableOpacity>
+          </>
+        )}
       </ScrollView>
 
       <Snackbar

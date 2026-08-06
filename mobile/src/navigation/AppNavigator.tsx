@@ -12,6 +12,7 @@ import KYCScreen from '../screens/KYCScreen';
 import PersonalSavingsScreen from '../screens/PersonalSavingsScreen';
 import ReportRequestScreen from '../screens/ReportRequestScreen';
 import ReportHistoryScreen from '../screens/ReportHistoryScreen';
+import EmailChangeRequestScreen from '../screens/EmailChangeRequestScreen';
 import UniversityStudentsScreen from '../screens/UniversityStudentsScreen';
 import BlockchainVaultScreen from '../screens/BlockchainVaultScreen';
 import AIAssistantScreen from '../screens/AIAssistantScreen';
@@ -71,6 +72,7 @@ export default function AppNavigator() {
           <Stack.Screen name="PersonalSavings" component={PersonalSavingsScreen} />
           <Stack.Screen name="ReportRequest" component={ReportRequestScreen} />
           <Stack.Screen name="ReportHistory" component={ReportHistoryScreen} />
+          <Stack.Screen name="EmailChangeRequest" component={EmailChangeRequestScreen} />
           <Stack.Screen name="UniversityStudents" component={UniversityStudentsScreen} />
           <Stack.Screen name="BlockchainVault" component={BlockchainVaultScreen} />
           <Stack.Screen name="AIAssistant" component={AIAssistantScreen} />

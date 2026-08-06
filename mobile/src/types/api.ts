@@ -59,6 +59,8 @@ export type ReportPeriod = 'LAST_WEEK' | 'LAST_MONTH' | 'LAST_YEAR' | 'LAST_2_YE
 
 export type ReportStatus = 'PENDING' | 'GENERATED';
 
+export type EmailChangeStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
+
 export type User = {
   id: string;
   email: string;
@@ -234,6 +236,18 @@ export type ReportRequest = {
   generatedAt: string | null;
   parent: { id: string; fullName: string; email: string };
   student: { id: string; fullName: string; email: string };
+};
+
+export type EmailChangeRequest = {
+  id: string;
+  userId: string;
+  currentEmail: string;
+  requestedEmail: string;
+  reason: string;
+  proofImagePath: string | null;
+  status: EmailChangeStatus;
+  createdAt: string;
+  resolvedAt: string | null;
 };
 
 export type UniversityStudentCourse = {

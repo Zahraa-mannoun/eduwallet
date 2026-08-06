@@ -23,6 +23,7 @@ import { startSavingsCron, stopSavingsCron } from './modules/savings/savings.ser
 import withdrawalsRoutes from './modules/withdrawals/withdrawals.routes';
 import universityRoutes from './modules/university/university.routes';
 import reportsRoutes from './modules/reports/reports.routes';
+import emailChangeRoutes from './modules/email-change/email-change.routes';
 import { initSocket } from './modules/notifications/notifications.socket';
 import { AppError } from './utils/AppError';
 import { errorResponse } from './utils/apiResponse';
@@ -91,6 +92,7 @@ async function buildServer() {
   await app.register(withdrawalsRoutes, { prefix: '/withdrawals' });
   await app.register(universityRoutes, { prefix: '/university' });
   await app.register(reportsRoutes, { prefix: '/reports' });
+  await app.register(emailChangeRoutes, { prefix: '/email-change' });
 
   return app;
 }

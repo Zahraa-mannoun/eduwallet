@@ -55,6 +55,7 @@ export type RootStackParamList = {
   PersonalSavings: undefined;
   ReportRequest: undefined;
   ReportHistory: undefined;
+  EmailChangeRequest: undefined;
   UniversityStudents: undefined;
   BlockchainVault: undefined;
   AIAssistant: undefined;

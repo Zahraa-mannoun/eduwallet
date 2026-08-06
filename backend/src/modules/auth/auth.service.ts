@@ -226,6 +226,13 @@ export async function refreshAccessToken(
   return { accessToken };
 }
 
+// Lets other modules force a re-login after they change a user's credentials out from under
+// them (email-change.service.ts approving an email change) without duplicating the Redis key
+// format used by login/logout/changePassword above.
+export async function revokeRefreshToken(userId: string): Promise<void> {
+  await redis.del(refreshTokenKey(userId));
+}
+
 export async function getCurrentUser(userId: string): Promise<SafeUser> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) {

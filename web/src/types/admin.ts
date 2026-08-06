@@ -170,3 +170,18 @@ export const REPORT_PERIOD_LABELS: Record<ReportPeriod, string> = {
   LAST_YEAR: 'Last Year',
   LAST_2_YEARS: 'Last 2 Years',
 };
+
+export type EmailChangeStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
+
+export type EmailChangeRequestRow = {
+  id: string;
+  userId: string;
+  currentEmail: string;
+  requestedEmail: string;
+  reason: string;
+  proofImagePath: string | null;
+  status: EmailChangeStatus;
+  createdAt: string;
+  resolvedAt: string | null;
+  user: { id: string; fullName: string; email: string; userType: string };
+};

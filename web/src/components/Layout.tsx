@@ -9,6 +9,7 @@ import {
   IconBuilding,
   IconChevronDown,
   IconDashboard,
+  IconEmail,
   IconGraduation,
   IconLink,
   IconLogout,
@@ -41,6 +42,7 @@ const trailingNavItems = [
   { to: '/fraud', label: 'Fraud Alerts', icon: IconAlert },
   { to: '/scholarships', label: 'Scholarships', icon: IconGraduation },
   { to: '/reports', label: 'Reports', icon: IconReports },
+  { to: '/email-requests', label: 'Email Requests', icon: IconEmail },
   { to: '/settings', label: 'Settings', icon: IconSettings },
 ];
 
