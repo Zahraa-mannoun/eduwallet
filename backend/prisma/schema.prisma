@@ -210,6 +210,12 @@ model LockedFund {
   id          String              @id @default(uuid())
   walletId    String
   category    TransactionCategory
+  // Current remaining locked balance. EVERY spend path against a locked category must
+  // decrement this — not just card/EduMart payments and P2P transfers (cards.service.ts,
+  // wallet.service.ts), but also future spend types (cash withdrawal, OCR merchant payments,
+  // etc). Personal Savings rollover (savings.service.ts runRollover()) sums this field
+  // directly as the source of truth for unspent locked money — a spend path that forgets to
+  // decrement it will silently overstate what rolls into savings.
   amount      Decimal             @default(0) @db.Decimal(12, 2)
   // Cumulative total ever locked into this category by a parent — only ever incremented,
   // never decremented on spend. `amount` is the current remaining balance; this is the

@@ -2,8 +2,19 @@ import { useCallback, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { ActivityIndicator, Avatar, Card, Chip, Text } from 'react-native-paper';
-import type { Transaction } from '../types/api';
+import {
+  ActivityIndicator,
+  Avatar,
+  Button,
+  Card,
+  Chip,
+  Dialog,
+  Portal,
+  Snackbar,
+  Text,
+  TextInput,
+} from 'react-native-paper';
+import type { PersonalSavingsHistory, Transaction } from '../types/api';
 import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryKey } from '../constants/budgetCategories';
@@ -11,6 +22,7 @@ import { TRANSACTION_STATUS_META } from '../constants/mockTransactions';
 import { colors } from '../theme/colors';
 import * as parentalService from '../services/parentalService';
 import type { LinkedStudent } from '../services/parentalService';
+import * as savingsService from '../services/savingsService';
 import { ApiError } from '../services/api';
 import type { ParentTabScreenProps } from '../navigation/types';
 
@@ -24,20 +36,28 @@ function transactionTitle(transaction: Transaction): string {
 
 export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps<'Approvals'>) {
   const [approvals, setApprovals] = useState<Transaction[]>([]);
+  const [savingsRequests, setSavingsRequests] = useState<PersonalSavingsHistory[]>([]);
   const [students, setStudents] = useState<LinkedStudent[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<PersonalSavingsHistory | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [approvalsResult, studentsResult] = await Promise.all([
+      const [approvalsResult, studentsResult, savingsRequestsResult] = await Promise.all([
         parentalService.getPendingApprovals(),
         parentalService.getLinkedStudents(),
+        savingsService.getWithdrawalRequests(),
       ]);
       setApprovals(approvalsResult);
       setStudents(studentsResult);
+      setSavingsRequests(savingsRequestsResult);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to load approvals.');
     } finally {
@@ -60,6 +80,44 @@ export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps
     });
     return map;
   }, [students]);
+
+  const handleApproveSavings = async (request: PersonalSavingsHistory) => {
+    setProcessingId(request.id);
+    try {
+      await savingsService.approveWithdrawal(request.id);
+      setSnackbarMessage('Withdrawal approved.');
+      await load();
+    } catch (err) {
+      setSnackbarMessage(err instanceof ApiError ? err.message : 'Could not approve this request.');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const openRejectDialog = (request: PersonalSavingsHistory) => {
+    setRejectTarget(request);
+    setRejectReason('');
+  };
+
+  const closeRejectDialog = () => {
+    if (processingId) return;
+    setRejectTarget(null);
+  };
+
+  const handleRejectSavings = async () => {
+    if (!rejectTarget || !rejectReason.trim()) return;
+    setProcessingId(rejectTarget.id);
+    try {
+      await savingsService.rejectWithdrawal(rejectTarget.id, rejectReason.trim());
+      setRejectTarget(null);
+      setSnackbarMessage('Withdrawal rejected.');
+      await load();
+    } catch (err) {
+      setSnackbarMessage(err instanceof ApiError ? err.message : 'Could not reject this request.');
+    } finally {
+      setProcessingId(null);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -136,7 +194,111 @@ export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps
             </Card.Content>
           </Card>
         )}
+
+        <Text style={styles.sectionTitle}>Savings Withdrawal Requests</Text>
+        <View style={styles.infoBanner}>
+          <Text style={styles.infoBannerText}>
+            Your student is asking to withdraw from their Personal Savings balance.
+          </Text>
+        </View>
+
+        {isLoading && savingsRequests.length === 0 ? (
+          <ActivityIndicator color={colors.primary} style={styles.loading} />
+        ) : savingsRequests.length > 0 ? (
+          savingsRequests.map((request) => {
+            const studentName = walletToStudentName.get(request.walletId) ?? 'Student';
+            const isProcessing = processingId === request.id;
+            return (
+              <View key={request.id} style={styles.savingsRow}>
+                <IconBadge icon="piggy-bank-outline" color={colors.accent} size={44} />
+                <View style={styles.approvalMiddle}>
+                  <Text style={styles.approvalTitle}>
+                    {studentName} • ${Number(request.amount).toFixed(2)}
+                  </Text>
+                  <Text style={styles.approvalSubtitle} numberOfLines={2}>
+                    {request.reason}
+                  </Text>
+                  <View style={styles.savingsActionsRow}>
+                    <Button
+                      mode="outlined"
+                      textColor={colors.danger}
+                      compact
+                      style={[styles.savingsActionButton, styles.rejectButton]}
+                      disabled={isProcessing}
+                      onPress={() => openRejectDialog(request)}
+                    >
+                      Reject
+                    </Button>
+                    <Button
+                      mode="contained"
+                      buttonColor={colors.accent}
+                      compact
+                      style={styles.savingsActionButton}
+                      disabled={isProcessing}
+                      onPress={() => handleApproveSavings(request)}
+                    >
+                      {isProcessing ? (
+                        <ActivityIndicator size={14} color={colors.onPrimary} />
+                      ) : (
+                        'Approve'
+                      )}
+                    </Button>
+                  </View>
+                </View>
+              </View>
+            );
+          })
+        ) : (
+          <Card style={styles.emptyCard} mode="elevated">
+            <Card.Content style={styles.emptyState}>
+              <Avatar.Icon
+                icon="piggy-bank-outline"
+                size={56}
+                style={styles.emptyIcon}
+                color={colors.accent}
+              />
+              <Text style={styles.emptyTitle}>No withdrawal requests</Text>
+              <Text style={styles.emptySubtitle}>You&apos;re all caught up.</Text>
+            </Card.Content>
+          </Card>
+        )}
       </ScrollView>
+
+      <Portal>
+        <Dialog visible={Boolean(rejectTarget)} onDismiss={closeRejectDialog}>
+          <Dialog.Title>Reject Withdrawal</Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              mode="outlined"
+              label="Reason"
+              value={rejectReason}
+              onChangeText={setRejectReason}
+              outlineColor={colors.border}
+              activeOutlineColor={colors.primary}
+              multiline
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={closeRejectDialog} disabled={Boolean(processingId)}>
+              Cancel
+            </Button>
+            <Button
+              onPress={handleRejectSavings}
+              disabled={!rejectReason.trim() || Boolean(processingId)}
+            >
+              {processingId ? <ActivityIndicator size={16} color={colors.danger} /> : 'Reject'}
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      <Snackbar
+        visible={Boolean(snackbarMessage)}
+        onDismiss={() => setSnackbarMessage(null)}
+        duration={3000}
+      >
+        {snackbarMessage}
+      </Snackbar>
     </SafeAreaView>
   );
 }
@@ -177,6 +339,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.label,
     lineHeight: 18,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.heading,
+    marginTop: 24,
+    marginBottom: 12,
+  },
+  savingsRow: {
+    flexDirection: 'row',
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+  },
+  savingsActionsRow: {
+    flexDirection: 'row',
+    marginTop: 10,
+  },
+  savingsActionButton: {
+    flex: 1,
+    marginRight: 8,
+    borderRadius: 8,
+  },
+  rejectButton: {
+    borderColor: colors.danger,
   },
   approvalRow: {
     flexDirection: 'row',

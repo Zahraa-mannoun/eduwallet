@@ -18,6 +18,8 @@ import blockchainRoutes from './modules/blockchain/blockchain.routes';
 import adminRoutes from './modules/admin/admin.routes';
 import scholarshipRoutes from './modules/scholarship/scholarship.routes';
 import supportRoutes from './modules/support/support.routes';
+import savingsRoutes from './modules/savings/savings.routes';
+import { startSavingsCron, stopSavingsCron } from './modules/savings/savings.service';
 import { initSocket } from './modules/notifications/notifications.socket';
 import { AppError } from './utils/AppError';
 import { errorResponse } from './utils/apiResponse';
@@ -82,6 +84,7 @@ async function buildServer() {
   await app.register(adminRoutes, { prefix: '/admin' });
   await app.register(scholarshipRoutes, { prefix: '/scholarship' });
   await app.register(supportRoutes, { prefix: '/support' });
+  await app.register(savingsRoutes, { prefix: '/savings' });
 
   return app;
 }
@@ -96,8 +99,10 @@ async function start() {
 
     const server = await buildServer();
     const io = initSocket(server.server, server);
+    startSavingsCron(server);
 
     server.addHook('onClose', async () => {
+      stopSavingsCron();
       io.close();
       await prisma.$disconnect();
       await redis.quit();

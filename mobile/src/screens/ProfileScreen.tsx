@@ -104,6 +104,11 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
             onPress: () => navigation.navigate('KYC'),
           },
           {
+            title: 'Personal Savings',
+            icon: 'piggy-bank-outline',
+            onPress: () => navigation.navigate('PersonalSavings'),
+          },
+          {
             title: 'Blockchain Vault',
             icon: 'cube-outline',
             onPress: () => navigation.navigate('BlockchainVault'),

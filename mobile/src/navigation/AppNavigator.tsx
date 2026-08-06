@@ -8,6 +8,7 @@ import TransactionHistoryScreen from '../screens/TransactionHistoryScreen';
 import TransactionDetailScreen from '../screens/TransactionDetailScreen';
 import ApprovalRequestScreen from '../screens/ApprovalRequestScreen';
 import KYCScreen from '../screens/KYCScreen';
+import PersonalSavingsScreen from '../screens/PersonalSavingsScreen';
 import BlockchainVaultScreen from '../screens/BlockchainVaultScreen';
 import AIAssistantScreen from '../screens/AIAssistantScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
@@ -62,6 +63,7 @@ export default function AppNavigator() {
           <Stack.Screen name="TransactionDetail" component={TransactionDetailScreen} />
           <Stack.Screen name="ApprovalRequest" component={ApprovalRequestScreen} />
           <Stack.Screen name="KYC" component={KYCScreen} />
+          <Stack.Screen name="PersonalSavings" component={PersonalSavingsScreen} />
           <Stack.Screen name="BlockchainVault" component={BlockchainVaultScreen} />
           <Stack.Screen name="AIAssistant" component={AIAssistantScreen} />
           <Stack.Screen name="Notifications" component={NotificationsScreen} />

@@ -38,6 +38,14 @@ export type FraudSeverity = 'LOW' | 'MEDIUM' | 'HIGH';
 
 export type SupportMessageStatus = 'UNREAD' | 'READ';
 
+export type SavingsHistoryType =
+  | 'ROLLOVER'
+  | 'WITHDRAWAL_REQUEST'
+  | 'WITHDRAWAL_APPROVED'
+  | 'WITHDRAWAL_REJECTED';
+
+export type SavingsHistoryStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
 export type User = {
   id: string;
   email: string;
@@ -157,6 +165,17 @@ export type ParentalControl = {
   studentUserId: string;
   approvalThreshold: string;
   categories: TransactionCategory[];
+};
+
+export type PersonalSavingsHistory = {
+  id: string;
+  walletId: string;
+  type: SavingsHistoryType;
+  amount: string;
+  month: string | null;
+  reason: string | null;
+  status: SavingsHistoryStatus;
+  createdAt: string;
 };
 
 export type FraudAlert = {

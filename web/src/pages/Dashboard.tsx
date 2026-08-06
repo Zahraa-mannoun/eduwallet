@@ -12,10 +12,132 @@ import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { StatCard } from '../components/StatCard';
 import { Badge } from '../components/Badge';
+import { Modal } from '../components/Modal';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { transactionStatusTone, severityTone } from '../lib/badgeTones';
 import { formatDate, formatMoney } from '../lib/format';
 import type { FraudAlertRow, SystemStats, TransactionRow } from '../types/admin';
+
+type RolloverResult = {
+  month: string;
+  processed: Array<{ walletId: string; userId: string; amountSaved: string }>;
+};
+
+function formatMonthLabel(month: string): string {
+  const [year, monthNum] = month.split('-').map(Number);
+  const date = new Date(year, (monthNum ?? 1) - 1, 1);
+  return date.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+}
+
+function RolloverConfirmModal({
+  onClose,
+  onConfirmed,
+}: {
+  onClose: () => void;
+  onConfirmed: (result: RolloverResult) => void;
+}) {
+  const [isRunning, setIsRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleConfirm = async () => {
+    setIsRunning(true);
+    setError(null);
+    try {
+      const res = await api.post<ApiResponse<RolloverResult>>('/savings/rollover');
+      onConfirmed(unwrap(res.data));
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
+  return (
+    <Modal title="Trigger Monthly Rollover" onClose={onClose}>
+      <div className="space-y-4">
+        <p className="text-sm text-slate-700">
+          Are you sure you want to trigger the monthly rollover for all students?
+        </p>
+        <p className="text-xs text-slate-400">
+          This sweeps every student&apos;s unspent budget for the current month into their
+          Personal Savings and archives the month&apos;s budget categories. This is the same job
+          that runs automatically at midnight on the last day of every month.
+        </p>
+
+        {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isRunning}
+            className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={isRunning}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-60"
+          >
+            {isRunning ? 'Running…' : 'Confirm'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function SystemActionsCard() {
+  const [modalOpen, setModalOpen] = useState(false);
+  const [result, setResult] = useState<RolloverResult | null>(null);
+
+  const totalSaved = result?.processed.reduce((sum, entry) => sum + Number(entry.amountSaved), 0) ?? 0;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="text-sm font-semibold text-slate-900">System Actions</h2>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-100 bg-slate-50 px-4 py-3">
+        <div>
+          <p className="text-sm font-medium text-slate-800">Personal Savings — Monthly Rollover</p>
+          <p className="mt-1 text-sm text-slate-500">
+            Normally runs automatically at midnight on the last day of every month. Trigger it
+            manually here for demo or testing purposes.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setResult(null);
+            setModalOpen(true);
+          }}
+          className="whitespace-nowrap rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-600"
+        >
+          Trigger Monthly Rollover
+        </button>
+      </div>
+
+      {result && (
+        <p className="mt-4 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          Rollover complete for {formatMonthLabel(result.month)} — {result.processed.length}{' '}
+          student{result.processed.length === 1 ? '' : 's'} saved a total of ${totalSaved.toFixed(2)}.
+        </p>
+      )}
+
+      {modalOpen && (
+        <RolloverConfirmModal
+          onClose={() => setModalOpen(false)}
+          onConfirmed={(res) => {
+            setResult(res);
+            setModalOpen(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
 
 export function Dashboard() {
   const [stats, setStats] = useState<SystemStats | null>(null);
@@ -96,6 +218,8 @@ export function Dashboard() {
           accent="yellow"
         />
       </div>
+
+      <SystemActionsCard />
 
       <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="mb-4 text-sm font-semibold text-slate-900">Transactions by Status</h2>
