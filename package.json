@@ -8,12 +8,14 @@
     "mobile",
     "web",
     "web/edumart",
+    "web/agent",
     "packages/shared"
   ],
   "scripts": {
     "backend": "cd backend && npm run dev",
     "mobile": "cd mobile && npm start",
     "web": "cd web && npm start",
-    "edumart": "cd web/edumart && npm start"
+    "edumart": "cd web/edumart && npm start",
+    "agent": "cd web/agent && npm start"
   }
 }

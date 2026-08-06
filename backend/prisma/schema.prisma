@@ -84,6 +84,7 @@ enum SavingsHistoryStatus {
 
 enum WithdrawalStatus {
   PENDING
+  PENDING_PARENT_APPROVAL
   APPROVED
   REJECTED
   COMPLETED

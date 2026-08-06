@@ -106,6 +106,7 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
     { key: 'receive', label: 'Receive', icon: 'arrow-down-circle-outline', onPress: () => navigation.navigate('ReceiveMoney') },
     { key: 'qr', label: 'QR Pay', icon: 'qrcode-scan', onPress: () => navigation.navigate('QRPay') },
     { key: 'cards', label: 'Cards', icon: 'credit-card-outline', onPress: () => navigation.navigate('Cards') },
+    { key: 'withdraw', label: 'Withdraw', icon: 'cash-multiple', onPress: () => navigation.navigate('Withdrawal') },
   ];
 
   const balanceLabel = wallet ? `${Number(wallet.balance).toFixed(2)} ${wallet.currency}` : '0.00';
@@ -481,12 +482,14 @@ const styles = StyleSheet.create({
   },
   quickActionsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
+    rowGap: 16,
     marginBottom: 24,
   },
   quickAction: {
     alignItems: 'center',
-    width: 72,
+    width: 64,
   },
   quickActionLabel: {
     fontSize: 12,

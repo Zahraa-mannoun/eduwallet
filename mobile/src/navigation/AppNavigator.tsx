@@ -4,6 +4,7 @@ import RegisterScreen from '../screens/RegisterScreen';
 import SendMoneyScreen from '../screens/SendMoneyScreen';
 import ReceiveMoneyScreen from '../screens/ReceiveMoneyScreen';
 import QRPayScreen from '../screens/QRPayScreen';
+import WithdrawalScreen from '../screens/WithdrawalScreen';
 import TransactionHistoryScreen from '../screens/TransactionHistoryScreen';
 import TransactionDetailScreen from '../screens/TransactionDetailScreen';
 import ApprovalRequestScreen from '../screens/ApprovalRequestScreen';
@@ -59,6 +60,7 @@ export default function AppNavigator() {
           <Stack.Screen name="SendMoney" component={SendMoneyScreen} />
           <Stack.Screen name="ReceiveMoney" component={ReceiveMoneyScreen} />
           <Stack.Screen name="QRPay" component={QRPayScreen} />
+          <Stack.Screen name="Withdrawal" component={WithdrawalScreen} />
           <Stack.Screen name="TransactionHistory" component={TransactionHistoryScreen} />
           <Stack.Screen name="TransactionDetail" component={TransactionDetailScreen} />
           <Stack.Screen name="ApprovalRequest" component={ApprovalRequestScreen} />

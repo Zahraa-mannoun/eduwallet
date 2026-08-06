@@ -36,6 +36,7 @@ export type RootStackParamList = {
   SendMoney: undefined;
   ReceiveMoney: undefined;
   QRPay: undefined;
+  Withdrawal: undefined;
   TransactionHistory: undefined;
   TransactionDetail: { transactionId: string };
   ApprovalRequest: { transaction: Transaction; studentName: string };

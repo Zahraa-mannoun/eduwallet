@@ -14,7 +14,7 @@ import {
   Text,
   TextInput,
 } from 'react-native-paper';
-import type { PersonalSavingsHistory, Transaction } from '../types/api';
+import type { PersonalSavingsHistory, Transaction, WithdrawalRequestWithStudent } from '../types/api';
 import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryKey } from '../constants/budgetCategories';
@@ -23,6 +23,7 @@ import { colors } from '../theme/colors';
 import * as parentalService from '../services/parentalService';
 import type { LinkedStudent } from '../services/parentalService';
 import * as savingsService from '../services/savingsService';
+import * as withdrawalService from '../services/withdrawalService';
 import { ApiError } from '../services/api';
 import type { ParentTabScreenProps } from '../navigation/types';
 
@@ -37,6 +38,7 @@ function transactionTitle(transaction: Transaction): string {
 export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps<'Approvals'>) {
   const [approvals, setApprovals] = useState<Transaction[]>([]);
   const [savingsRequests, setSavingsRequests] = useState<PersonalSavingsHistory[]>([]);
+  const [cashWithdrawals, setCashWithdrawals] = useState<WithdrawalRequestWithStudent[]>([]);
   const [students, setStudents] = useState<LinkedStudent[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,18 +48,25 @@ export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps
   const [rejectReason, setRejectReason] = useState('');
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
 
+  const [cashProcessingId, setCashProcessingId] = useState<string | null>(null);
+  const [cashRejectTarget, setCashRejectTarget] = useState<WithdrawalRequestWithStudent | null>(null);
+  const [cashRejectReason, setCashRejectReason] = useState('');
+
   const load = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [approvalsResult, studentsResult, savingsRequestsResult] = await Promise.all([
-        parentalService.getPendingApprovals(),
-        parentalService.getLinkedStudents(),
-        savingsService.getWithdrawalRequests(),
-      ]);
+      const [approvalsResult, studentsResult, savingsRequestsResult, cashWithdrawalsResult] =
+        await Promise.all([
+          parentalService.getPendingApprovals(),
+          parentalService.getLinkedStudents(),
+          savingsService.getWithdrawalRequests(),
+          withdrawalService.getPendingApprovals(),
+        ]);
       setApprovals(approvalsResult);
       setStudents(studentsResult);
       setSavingsRequests(savingsRequestsResult);
+      setCashWithdrawals(cashWithdrawalsResult);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to load approvals.');
     } finally {
@@ -116,6 +125,44 @@ export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps
       setSnackbarMessage(err instanceof ApiError ? err.message : 'Could not reject this request.');
     } finally {
       setProcessingId(null);
+    }
+  };
+
+  const handleApproveCashWithdrawal = async (request: WithdrawalRequestWithStudent) => {
+    setCashProcessingId(request.id);
+    try {
+      await withdrawalService.approveWithdrawal(request.id);
+      setSnackbarMessage('Cash withdrawal approved.');
+      await load();
+    } catch (err) {
+      setSnackbarMessage(err instanceof ApiError ? err.message : 'Could not approve this request.');
+    } finally {
+      setCashProcessingId(null);
+    }
+  };
+
+  const openCashRejectDialog = (request: WithdrawalRequestWithStudent) => {
+    setCashRejectTarget(request);
+    setCashRejectReason('');
+  };
+
+  const closeCashRejectDialog = () => {
+    if (cashProcessingId) return;
+    setCashRejectTarget(null);
+  };
+
+  const handleRejectCashWithdrawal = async () => {
+    if (!cashRejectTarget || !cashRejectReason.trim()) return;
+    setCashProcessingId(cashRejectTarget.id);
+    try {
+      await withdrawalService.rejectWithdrawal(cashRejectTarget.id, cashRejectReason.trim());
+      setCashRejectTarget(null);
+      setSnackbarMessage('Cash withdrawal rejected.');
+      await load();
+    } catch (err) {
+      setSnackbarMessage(err instanceof ApiError ? err.message : 'Could not reject this request.');
+    } finally {
+      setCashProcessingId(null);
     }
   };
 
@@ -262,6 +309,72 @@ export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps
             </Card.Content>
           </Card>
         )}
+
+        <Text style={styles.sectionTitle}>Pending Cash Withdrawal Approvals</Text>
+        <View style={styles.infoBanner}>
+          <Text style={styles.infoBannerText}>
+            Your student is at an agent trying to withdraw general cash above your approval
+            threshold. The agent can&apos;t dispense it until you approve.
+          </Text>
+        </View>
+
+        {isLoading && cashWithdrawals.length === 0 ? (
+          <ActivityIndicator color={colors.primary} style={styles.loading} />
+        ) : cashWithdrawals.length > 0 ? (
+          cashWithdrawals.map((request) => {
+            const isProcessing = cashProcessingId === request.id;
+            return (
+              <View key={request.id} style={styles.savingsRow}>
+                <IconBadge icon="cash-multiple" color={colors.primary} size={44} />
+                <View style={styles.approvalMiddle}>
+                  <Text style={styles.approvalTitle}>
+                    {request.wallet.user.fullName} • ${Number(request.amount).toFixed(2)}
+                  </Text>
+                  <Text style={styles.approvalSubtitle}>Cash withdrawal — General</Text>
+                  <View style={styles.savingsActionsRow}>
+                    <Button
+                      mode="outlined"
+                      textColor={colors.danger}
+                      compact
+                      style={[styles.savingsActionButton, styles.rejectButton]}
+                      disabled={isProcessing}
+                      onPress={() => openCashRejectDialog(request)}
+                    >
+                      Reject
+                    </Button>
+                    <Button
+                      mode="contained"
+                      buttonColor={colors.accent}
+                      compact
+                      style={styles.savingsActionButton}
+                      disabled={isProcessing}
+                      onPress={() => handleApproveCashWithdrawal(request)}
+                    >
+                      {isProcessing ? (
+                        <ActivityIndicator size={14} color={colors.onPrimary} />
+                      ) : (
+                        'Approve'
+                      )}
+                    </Button>
+                  </View>
+                </View>
+              </View>
+            );
+          })
+        ) : (
+          <Card style={styles.emptyCard} mode="elevated">
+            <Card.Content style={styles.emptyState}>
+              <Avatar.Icon
+                icon="cash-multiple"
+                size={56}
+                style={styles.emptyIcon}
+                color={colors.primary}
+              />
+              <Text style={styles.emptyTitle}>No cash withdrawal requests</Text>
+              <Text style={styles.emptySubtitle}>You&apos;re all caught up.</Text>
+            </Card.Content>
+          </Card>
+        )}
       </ScrollView>
 
       <Portal>
@@ -287,6 +400,32 @@ export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps
               disabled={!rejectReason.trim() || Boolean(processingId)}
             >
               {processingId ? <ActivityIndicator size={16} color={colors.danger} /> : 'Reject'}
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        <Dialog visible={Boolean(cashRejectTarget)} onDismiss={closeCashRejectDialog}>
+          <Dialog.Title>Reject Cash Withdrawal</Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              mode="outlined"
+              label="Reason"
+              value={cashRejectReason}
+              onChangeText={setCashRejectReason}
+              outlineColor={colors.border}
+              activeOutlineColor={colors.primary}
+              multiline
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={closeCashRejectDialog} disabled={Boolean(cashProcessingId)}>
+              Cancel
+            </Button>
+            <Button
+              onPress={handleRejectCashWithdrawal}
+              disabled={!cashRejectReason.trim() || Boolean(cashProcessingId)}
+            >
+              {cashProcessingId ? <ActivityIndicator size={16} color={colors.danger} /> : 'Reject'}
             </Button>
           </Dialog.Actions>
         </Dialog>

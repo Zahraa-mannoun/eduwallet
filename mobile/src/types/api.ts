@@ -46,6 +46,15 @@ export type SavingsHistoryType =
 
 export type SavingsHistoryStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
+export type WithdrawalStatus =
+  | 'PENDING'
+  | 'PENDING_PARENT_APPROVAL'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'COMPLETED';
+
+export type ReceiptVerificationStatus = 'PENDING' | 'AUTO_VERIFIED' | 'FLAGGED' | 'MANUALLY_VERIFIED';
+
 export type User = {
   id: string;
   email: string;
@@ -176,6 +185,32 @@ export type PersonalSavingsHistory = {
   reason: string | null;
   status: SavingsHistoryStatus;
   createdAt: string;
+};
+
+export type WithdrawalRequest = {
+  id: string;
+  walletId: string;
+  amount: string;
+  category: TransactionCategory;
+  status: WithdrawalStatus;
+  receiptPath: string | null;
+  receiptVerificationStatus: ReceiptVerificationStatus;
+  receiptVerificationNote: string | null;
+  merchantName: string | null;
+  detectedCategory: TransactionCategory | null;
+  agentId: string | null;
+  createdAt: string;
+  completedAt: string | null;
+};
+
+// Only populated on GET /withdrawals/pending-approval (parent-facing) — the parent needs to
+// know which student a withdrawal belongs to, unlike GET /withdrawals/mine (student-facing).
+export type WithdrawalRequestWithStudent = WithdrawalRequest & {
+  wallet: {
+    id: string;
+    userId: string;
+    user: { id: string; fullName: string; email: string };
+  };
 };
 
 export type FraudAlert = {

@@ -20,6 +20,7 @@ import scholarshipRoutes from './modules/scholarship/scholarship.routes';
 import supportRoutes from './modules/support/support.routes';
 import savingsRoutes from './modules/savings/savings.routes';
 import { startSavingsCron, stopSavingsCron } from './modules/savings/savings.service';
+import withdrawalsRoutes from './modules/withdrawals/withdrawals.routes';
 import { initSocket } from './modules/notifications/notifications.socket';
 import { AppError } from './utils/AppError';
 import { errorResponse } from './utils/apiResponse';
@@ -85,6 +86,7 @@ async function buildServer() {
   await app.register(scholarshipRoutes, { prefix: '/scholarship' });
   await app.register(supportRoutes, { prefix: '/support' });
   await app.register(savingsRoutes, { prefix: '/savings' });
+  await app.register(withdrawalsRoutes, { prefix: '/withdrawals' });
 
   return app;
 }
