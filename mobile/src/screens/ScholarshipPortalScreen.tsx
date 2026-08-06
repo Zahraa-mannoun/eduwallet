@@ -17,8 +17,8 @@ import { ApiError } from '../services/api';
 const categoryLookup = new Map(BUDGET_CATEGORIES.map((category) => [category.key, category]));
 
 // Scholarship disbursements only make sense against academic/institutional spending —
-// Food, Transport, Rent, and Personal are a parent's discretionary-spending categories, not
-// something an institution should be locking a disbursement to.
+// Food, Transport, Rent, Lifestyle, and Personal Savings are a parent's discretionary-spending
+// categories, not something an institution should be locking a disbursement to.
 const DISBURSEMENT_LOCK_KEYS: ReadonlySet<BudgetCategoryKey> = new Set([
   'tuition',
   'books',

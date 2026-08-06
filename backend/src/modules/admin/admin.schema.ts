@@ -29,7 +29,7 @@ export const getAllTransactionsSchema = z.object({
   limit: z.coerce.number().int().positive().max(100).default(20),
   status: z.enum(['PENDING', 'AUTO_APPROVED', 'APPROVED', 'REJECTED', 'EMERGENCY']).optional(),
   category: z
-    .enum(['TUITION', 'BOOKS', 'FOOD', 'TRANSPORT', 'SOFTWARE', 'RENT', 'PERSONAL', 'GENERAL'])
+    .enum(['TUITION', 'BOOKS', 'FOOD', 'TRANSPORT', 'SOFTWARE', 'RENT', 'LIFESTYLE', 'PERSONAL_SAVINGS', 'GENERAL'])
     .optional(),
   flagged: booleanQueryParam.optional(),
 });

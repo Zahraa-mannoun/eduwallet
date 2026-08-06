@@ -8,7 +8,8 @@ export type BudgetCategoryKey =
   | 'transport'
   | 'software'
   | 'rent'
-  | 'personal'
+  | 'lifestyle'
+  | 'personal_savings'
   | 'general';
 
 export type BudgetCategoryDefinition = {
@@ -25,6 +26,18 @@ export const BUDGET_CATEGORIES: BudgetCategoryDefinition[] = [
   { key: 'transport', icon: 'bus', color: categoryColors.transport, label: 'Transport' },
   { key: 'software', icon: 'laptop', color: categoryColors.software, label: 'Software' },
   { key: 'rent', icon: 'home-outline', color: categoryColors.rent, label: 'Rent' },
-  { key: 'personal', icon: 'account-outline', color: categoryColors.personal, label: 'Personal' },
+  { key: 'lifestyle', icon: 'account-outline', color: categoryColors.lifestyle, label: 'Lifestyle' },
+  {
+    key: 'personal_savings',
+    icon: 'piggy-bank-outline',
+    color: categoryColors.personalSavings,
+    label: 'Personal Savings',
+  },
   { key: 'general', icon: 'shape-outline', color: categoryColors.general, label: 'General' },
 ];
+
+// Card creation and parent-to-student transfers never offer Personal Savings as a lockable
+// category — it's an auto-accumulating pool, not something funds can be sent/locked into.
+export const LOCKABLE_BUDGET_CATEGORIES: BudgetCategoryDefinition[] = BUDGET_CATEGORIES.filter(
+  (category) => category.key !== 'personal_savings'
+);

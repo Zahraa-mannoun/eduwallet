@@ -1,4 +1,4 @@
-export type Category = 'BOOKS' | 'FOOD' | 'SOFTWARE' | 'TRANSPORT' | 'TUITION' | 'RENT' | 'PERSONAL';
+export type Category = 'BOOKS' | 'FOOD' | 'SOFTWARE' | 'TRANSPORT' | 'TUITION' | 'RENT' | 'LIFESTYLE';
 
 export interface CategoryInfo {
   key: Category;

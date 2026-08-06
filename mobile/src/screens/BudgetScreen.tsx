@@ -37,7 +37,8 @@ const CATEGORY_DESCRIPTIONS: Record<BudgetCategoryKey, string> = {
   transport: 'Bus, taxi and travel expenses',
   software: 'Dev tools, apps and subscriptions',
   rent: 'Housing and accommodation',
-  personal: 'Everyday personal expenses',
+  lifestyle: 'Everyday personal expenses',
+  personal_savings: 'Unspent funds automatically saved each month',
   general: 'Miscellaneous spending',
 };
 

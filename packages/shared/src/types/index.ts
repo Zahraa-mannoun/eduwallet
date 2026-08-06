@@ -15,7 +15,8 @@ export type TransactionCategory =
   | 'TRANSPORT'
   | 'SOFTWARE'
   | 'RENT'
-  | 'PERSONAL'
+  | 'LIFESTYLE'
+  | 'PERSONAL_SAVINGS'
   | 'GENERAL';
 
 export type TransactionStatus = 'PENDING' | 'AUTO_APPROVED' | 'APPROVED' | 'REJECTED' | 'EMERGENCY';

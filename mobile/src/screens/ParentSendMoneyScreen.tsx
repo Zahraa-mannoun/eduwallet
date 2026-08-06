@@ -20,7 +20,7 @@ import {
 } from 'react-native-paper';
 import type { TransactionCategory } from '../types/api';
 import IconBadge from '../components/IconBadge';
-import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
+import { LOCKABLE_BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryDefinition, BudgetCategoryKey } from '../constants/budgetCategories';
 import { useWallet } from '../context/WalletContext';
 import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
@@ -32,7 +32,7 @@ import { colors } from '../theme/colors';
 import { getInitials } from '../utils/getInitials';
 import type { ParentTabScreenProps } from '../navigation/types';
 
-const LOCK_CATEGORIES = BUDGET_CATEGORIES;
+const LOCK_CATEGORIES = LOCKABLE_BUDGET_CATEGORIES;
 
 const CATEGORY_EXPLANATIONS: Partial<Record<BudgetCategoryKey, string>> = {
   tuition: 'Student can only use these funds for tuition payments.',
@@ -41,7 +41,7 @@ const CATEGORY_EXPLANATIONS: Partial<Record<BudgetCategoryKey, string>> = {
   transport: 'Student can only use these funds for transportation.',
   software: 'Student can only use these funds for software and tech tools.',
   rent: 'Student can only use these funds for rent and housing.',
-  personal: 'Student can only use these funds for personal spending.',
+  lifestyle: 'Student can only use these funds for personal/lifestyle spending.',
   general: 'No restriction — the student can spend this money anywhere.',
 };
 

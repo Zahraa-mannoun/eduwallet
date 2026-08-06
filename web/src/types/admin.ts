@@ -89,7 +89,8 @@ export const TRANSACTION_CATEGORIES: TransactionCategory[] = [
   'TRANSPORT',
   'SOFTWARE',
   'RENT',
-  'PERSONAL',
+  'LIFESTYLE',
+  'PERSONAL_SAVINGS',
   'GENERAL',
 ];
 

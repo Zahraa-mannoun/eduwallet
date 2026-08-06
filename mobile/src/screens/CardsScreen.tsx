@@ -17,7 +17,7 @@ import {
 import type { NewVirtualCard, TransactionCategory, VirtualCard } from '../types/api';
 import IconBadge from '../components/IconBadge';
 import KYCGate from '../components/KYCGate';
-import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
+import { BUDGET_CATEGORIES, LOCKABLE_BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryDefinition, BudgetCategoryKey } from '../constants/budgetCategories';
 import { colors } from '../theme/colors';
 import * as cardService from '../services/cardService';
@@ -25,7 +25,7 @@ import * as parentalService from '../services/parentalService';
 import { ApiError } from '../services/api';
 import type { StudentTabScreenProps } from '../navigation/types';
 
-const LOCK_CATEGORIES = BUDGET_CATEGORIES.filter((category) => category.key !== 'general');
+const LOCK_CATEGORIES = LOCKABLE_BUDGET_CATEGORIES.filter((category) => category.key !== 'general');
 const categoryLookup = new Map(BUDGET_CATEGORIES.map((category) => [category.key, category]));
 
 function formatExpiry(iso: string): string {

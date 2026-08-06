@@ -205,14 +205,14 @@ export const PRODUCTS: Product[] = [
     category: 'RENT',
   },
 
-  // PERSONAL
+  // LIFESTYLE
   {
     id: 'personal-gym-membership',
     name: 'Gym Membership (1 month)',
     price: 20,
     image: '/images/category-personal.jpeg',
     description: 'Access to university gym and sports facilities',
-    category: 'PERSONAL',
+    category: 'LIFESTYLE',
   },
   {
     id: 'personal-printing-credits',
@@ -220,7 +220,7 @@ export const PRODUCTS: Product[] = [
     price: 10,
     image: '/images/category-personal.jpeg',
     description: '100 pages of printing at university library',
-    category: 'PERSONAL',
+    category: 'LIFESTYLE',
   },
   {
     id: 'personal-student-insurance',
@@ -228,7 +228,7 @@ export const PRODUCTS: Product[] = [
     price: 35,
     image: '/images/category-personal.jpeg',
     description: 'Monthly student health insurance coverage',
-    category: 'PERSONAL',
+    category: 'LIFESTYLE',
   },
   {
     id: 'personal-stationery-pack',
@@ -236,7 +236,7 @@ export const PRODUCTS: Product[] = [
     price: 15,
     image: '/images/category-personal.jpeg',
     description: 'Notebooks, pens and essential stationery',
-    category: 'PERSONAL',
+    category: 'LIFESTYLE',
   },
 ];
 

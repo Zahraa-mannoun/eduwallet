@@ -7,7 +7,7 @@ export const CATEGORIES: CategoryInfo[] = [
   { key: 'TRANSPORT', name: 'Transport', image: '/images/category-transport.png' },
   { key: 'TUITION', name: 'Tuition', image: '/images/category-tuition.jpeg' },
   { key: 'RENT', name: 'Rent', image: '/images/category-rent.jpeg' },
-  { key: 'PERSONAL', name: 'Personal', image: '/images/category-personal.jpeg' },
+  { key: 'LIFESTYLE', name: 'Lifestyle', image: '/images/category-personal.jpeg' },
 ];
 
 export function getCategoryInfo(key: string): CategoryInfo | undefined {

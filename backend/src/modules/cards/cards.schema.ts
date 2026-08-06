@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+// Card creation (categoryLock) and card use never accept PERSONAL_SAVINGS — locking a card
+// or spending against the savings pool isn't a supported flow, unlike the other categories.
 const transactionCategoryEnum = z.enum([
   'TUITION',
   'BOOKS',
@@ -7,7 +9,7 @@ const transactionCategoryEnum = z.enum([
   'TRANSPORT',
   'SOFTWARE',
   'RENT',
-  'PERSONAL',
+  'LIFESTYLE',
   'GENERAL',
 ]);
 
