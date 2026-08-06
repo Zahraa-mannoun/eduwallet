@@ -9,6 +9,7 @@
     "web",
     "web/edumart",
     "web/agent",
+    "web/ocr-shop",
     "packages/shared"
   ],
   "scripts": {
@@ -16,6 +17,7 @@
     "mobile": "cd mobile && npm start",
     "web": "cd web && npm start",
     "edumart": "cd web/edumart && npm start",
-    "agent": "cd web/agent && npm start"
+    "agent": "cd web/agent && npm start",
+    "ocr-shop": "cd web/ocr-shop && npm start"
   }
 }
