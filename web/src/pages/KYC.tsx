@@ -120,7 +120,6 @@ export function KYC() {
   const [filter, setFilter] = useState<FilterTab>('ALL');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [busyUserId, setBusyUserId] = useState<string | null>(null);
   const [rejectTarget, setRejectTarget] = useState<KYCStudentRow | null>(null);
   const [approveTarget, setApproveTarget] = useState<KYCStudentRow | null>(null);
 
@@ -278,7 +277,7 @@ export function KYC() {
                           <div className="flex flex-wrap gap-2">
                             <button
                               type="button"
-                              disabled={busyUserId === row.userId || actionState.approveDisabled}
+                              disabled={actionState.approveDisabled}
                               onClick={() => setApproveTarget(row)}
                               title={actionState.approveTooltip}
                               className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-emerald-50"
@@ -287,7 +286,7 @@ export function KYC() {
                             </button>
                             <button
                               type="button"
-                              disabled={busyUserId === row.userId || actionState.rejectDisabled}
+                              disabled={actionState.rejectDisabled}
                               onClick={() => setRejectTarget(row)}
                               title={actionState.rejectTooltip}
                               className="rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-red-50"
