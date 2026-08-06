@@ -7,10 +7,13 @@ import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { formatDateTime } from '../lib/format';
 import type { SupportMessageRow } from '../types/admin';
 
+type Tab = 'appeals' | 'general';
+
 export function SupportMessages() {
   const [searchParams] = useSearchParams();
   const highlightUserId = searchParams.get('highlight');
   const highlightedRowRef = useRef<HTMLTableRowElement | null>(null);
+  const [activeTab, setActiveTab] = useState<Tab>('appeals');
 
   const [messages, setMessages] = useState<SupportMessageRow[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -72,12 +75,44 @@ export function SupportMessages() {
       <div>
         <h1 className="text-lg font-semibold text-slate-900">Support Messages</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Messages sent by suspended users asking for their case to be reviewed.
+          Suspension appeals from suspended users, and general support requests.
         </p>
+      </div>
+
+      <div className="flex gap-1 border-b border-slate-200">
+        <button
+          type="button"
+          onClick={() => setActiveTab('appeals')}
+          className={`px-4 py-2 text-sm font-medium ${
+            activeTab === 'appeals'
+              ? 'border-b-2 border-primary text-primary'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          Suspension Appeals
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('general')}
+          className={`px-4 py-2 text-sm font-medium ${
+            activeTab === 'general'
+              ? 'border-b-2 border-primary text-primary'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          General Support
+        </button>
       </div>
 
       {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
+      {activeTab === 'general' && (
+        <div className="rounded-lg border border-slate-200 bg-white p-10 text-center shadow-sm">
+          <p className="text-sm text-slate-400">No general support requests yet</p>
+        </div>
+      )}
+
+      {activeTab === 'appeals' && (
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50 text-xs uppercase text-slate-500">
@@ -158,6 +193,7 @@ export function SupportMessages() {
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }

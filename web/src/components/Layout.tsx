@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { NotificationBell } from './NotificationBell';
 import {
   IconAlert,
+  IconAnalytics,
   IconBuilding,
   IconChevronDown,
   IconDashboard,
@@ -19,7 +20,10 @@ import {
   IconUsers,
 } from './icons';
 
-const navItems = [{ to: '/dashboard', label: 'Dashboard', icon: IconDashboard }];
+const navItems = [
+  { to: '/dashboard', label: 'Dashboard', icon: IconDashboard },
+  { to: '/analytics', label: 'Analytics', icon: IconAnalytics },
+];
 
 const usersSubItems = [
   { to: '/users/students', label: 'Students', icon: IconGraduation },

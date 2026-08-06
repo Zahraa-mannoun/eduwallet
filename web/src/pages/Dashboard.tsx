@@ -217,6 +217,26 @@ export function Dashboard() {
           subtitle="Students awaiting review"
           accent="yellow"
         />
+        <StatCard label="Total Withdrawals" value={stats.withdrawals.totalCompleted} />
+        <StatCard
+          label="Pending Report Requests"
+          value={stats.reportRequests.pending}
+          accent="yellow"
+        />
+        <StatCard
+          label="Pending Email Change Requests"
+          value={stats.emailChangeRequests.pending}
+          accent="yellow"
+        />
+        <StatCard
+          label="Total Personal Savings"
+          value={formatMoney(stats.personalSavings.totalBalance, 'USD')}
+        />
+        <StatCard
+          label="Scholarships Disbursed This Month"
+          value={formatMoney(stats.scholarships.totalThisMonth, 'USD')}
+          accent="green"
+        />
       </div>
 
       <SystemActionsCard />

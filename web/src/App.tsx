@@ -5,6 +5,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/Layout';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
+import { Analytics } from './pages/Analytics';
 import { Students } from './pages/Students';
 import { Parents } from './pages/Parents';
 import { Institutions } from './pages/Institutions';
@@ -35,6 +36,14 @@ export function App() {
           element={
             <ProtectedPage>
               <Dashboard />
+            </ProtectedPage>
+          }
+        />
+        <Route
+          path="/analytics"
+          element={
+            <ProtectedPage>
+              <Analytics />
             </ProtectedPage>
           }
         />

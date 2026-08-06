@@ -4,6 +4,7 @@ import { requireRole } from '../../middleware/requireRole';
 import {
   addFundsHandler,
   getAllTransactionsHandler,
+  getAnalyticsHandler,
   getAuditLogHandler,
   getFraudAlertsHandler,
   getPendingKYCHandler,
@@ -21,6 +22,7 @@ export default async function adminRoutes(fastify: FastifyInstance): Promise<voi
   fastify.addHook('preHandler', requireRole('ADMIN'));
 
   fastify.get('/stats', getStatsHandler);
+  fastify.get('/analytics', getAnalyticsHandler);
   fastify.get('/users', getUsersHandler);
   fastify.get('/users/:id', getUserByIdHandler);
   fastify.patch('/users/:id/suspend', suspendUserHandler);

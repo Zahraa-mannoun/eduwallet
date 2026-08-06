@@ -16,6 +16,7 @@ import {
 import {
   addFunds,
   getAllTransactions,
+  getAnalytics,
   getAuditLog,
   getFraudAlerts,
   getRelationships,
@@ -244,6 +245,15 @@ export async function getRelationshipsHandler(request: FastifyRequest, reply: Fa
   try {
     const relationships = await getRelationships();
     return reply.status(200).send(successResponse(relationships));
+  } catch (error) {
+    return handleAdminError(request, reply, error);
+  }
+}
+
+export async function getAnalyticsHandler(request: FastifyRequest, reply: FastifyReply) {
+  try {
+    const analytics = await getAnalytics();
+    return reply.status(200).send(successResponse(analytics));
   } catch (error) {
     return handleAdminError(request, reply, error);
   }

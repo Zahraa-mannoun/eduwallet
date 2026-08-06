@@ -50,6 +50,43 @@ export type SystemStats = {
   fraudAlerts: { active: number };
   kyc: { pending: number };
   wallets: { total: number; balanceByCurrency: Record<string, number> };
+  withdrawals: { totalCompleted: number };
+  reportRequests: { pending: number };
+  emailChangeRequests: { pending: number };
+  personalSavings: { totalBalance: number };
+  scholarships: { totalThisMonth: number };
+};
+
+export type AnalyticsResult = {
+  spending: {
+    byCategory: Array<{ category: string; total: number }>;
+    dailyVolume: Array<{ date: string; total: number }>;
+  };
+  withdrawals: {
+    byCategory: Array<{ category: string; total: number }>;
+    totalThisMonth: number;
+    verificationSuccessRate: number;
+  };
+  scholarships: {
+    byCategory: Array<{ category: string; total: number }>;
+    totalInstitutions: number;
+    totalAllTime: number;
+    fullCount: number;
+    partialCount: number;
+  };
+  savings: {
+    monthlyTrend: Array<{ month: string; total: number }>;
+    totalBalance: number;
+    averagePerStudent: number;
+    pendingWithdrawals: number;
+  };
+  fraud: {
+    byType: Array<{ type: string; count: number }>;
+    total: number;
+    resolved: number;
+    resolutionRate: number;
+    mostCommon: string | null;
+  };
 };
 
 export type PendingKYCRow = User & { documents: AcademicDocument[]; hasResubmitted: boolean };

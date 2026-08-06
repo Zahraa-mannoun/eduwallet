@@ -391,7 +391,19 @@ export type SystemStats = {
   fraudAlerts: { active: number };
   kyc: { pending: number };
   wallets: { total: number; balanceByCurrency: Record<string, number> };
+  withdrawals: { totalCompleted: number };
+  reportRequests: { pending: number };
+  emailChangeRequests: { pending: number };
+  personalSavings: { totalBalance: number };
+  scholarships: { totalThisMonth: number };
 };
+
+function getCurrentMonthRange(): { start: Date; end: Date } {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  return { start, end };
+}
 
 export async function getSystemStats(): Promise<SystemStats> {
   const [usersByType, totalUsers, transactionsByStatus, totalTransactions, volumeResult] =
@@ -413,6 +425,29 @@ export async function getSystemStats(): Promise<SystemStats> {
     }),
     prisma.wallet.groupBy({ by: ['currency'], _sum: { balance: true } }),
     prisma.wallet.count(),
+  ]);
+
+  const { start: monthStart, end: monthEnd } = getCurrentMonthRange();
+
+  const [
+    totalCompletedWithdrawals,
+    pendingReportRequests,
+    pendingEmailChangeRequests,
+    personalSavingsSum,
+    scholarshipsThisMonth,
+  ] = await Promise.all([
+    prisma.withdrawalRequest.count({ where: { status: 'COMPLETED' } }),
+    prisma.reportRequest.count({ where: { status: 'PENDING' } }),
+    prisma.emailChangeRequest.count({ where: { status: 'PENDING' } }),
+    prisma.personalSavings.aggregate({ _sum: { balance: true } }),
+    prisma.transaction.aggregate({
+      where: {
+        status: { in: ['AUTO_APPROVED', 'APPROVED'] },
+        fromWallet: { user: { userType: 'INSTITUTION' } },
+        createdAt: { gte: monthStart, lt: monthEnd },
+      },
+      _sum: { amount: true },
+    }),
   ]);
 
   const byType = Object.fromEntries(usersByType.map((row) => [row.userType, row._count]));
@@ -437,6 +472,249 @@ export async function getSystemStats(): Promise<SystemStats> {
       balanceByCurrency: Object.fromEntries(
         walletsByCurrency.map((row) => [row.currency, Number(row._sum.balance ?? 0)])
       ),
+    },
+    withdrawals: { totalCompleted: totalCompletedWithdrawals },
+    reportRequests: { pending: pendingReportRequests },
+    emailChangeRequests: { pending: pendingEmailChangeRequests },
+    personalSavings: { totalBalance: Number(personalSavingsSum._sum.balance ?? 0) },
+    scholarships: { totalThisMonth: Number(scholarshipsThisMonth._sum.amount ?? 0) },
+  };
+}
+
+export type AnalyticsResult = {
+  spending: {
+    byCategory: Array<{ category: string; total: number }>;
+    dailyVolume: Array<{ date: string; total: number }>;
+  };
+  withdrawals: {
+    byCategory: Array<{ category: string; total: number }>;
+    totalThisMonth: number;
+    verificationSuccessRate: number;
+  };
+  scholarships: {
+    byCategory: Array<{ category: string; total: number }>;
+    totalInstitutions: number;
+    totalAllTime: number;
+    fullCount: number;
+    partialCount: number;
+  };
+  savings: {
+    monthlyTrend: Array<{ month: string; total: number }>;
+    totalBalance: number;
+    averagePerStudent: number;
+    pendingWithdrawals: number;
+  };
+  fraud: {
+    byType: Array<{ type: string; count: number }>;
+    total: number;
+    resolved: number;
+    resolutionRate: number;
+    mostCommon: string | null;
+  };
+};
+
+function dateKey(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+export async function getAnalytics(): Promise<AnalyticsResult> {
+  const { start: monthStart, end: monthEnd } = getCurrentMonthRange();
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
+  thirtyDaysAgo.setHours(0, 0, 0, 0);
+
+  // --- Spending analytics ---
+  const [spendingByCategory, spendingTransactions] = await Promise.all([
+    prisma.transaction.groupBy({
+      by: ['category'],
+      where: {
+        status: { in: ['AUTO_APPROVED', 'APPROVED'] },
+        fromWalletId: { not: null },
+        createdAt: { gte: monthStart, lt: monthEnd },
+      },
+      _sum: { amount: true },
+    }),
+    prisma.transaction.findMany({
+      where: {
+        status: { in: ['AUTO_APPROVED', 'APPROVED'] },
+        fromWalletId: { not: null },
+        createdAt: { gte: thirtyDaysAgo },
+      },
+      select: { amount: true, createdAt: true },
+    }),
+  ]);
+
+  const dailyVolumeMap = new Map<string, number>();
+  for (const tx of spendingTransactions) {
+    const key = dateKey(tx.createdAt);
+    dailyVolumeMap.set(key, (dailyVolumeMap.get(key) ?? 0) + Number(tx.amount));
+  }
+  const dailyVolume: Array<{ date: string; total: number }> = [];
+  for (let i = 0; i < 30; i++) {
+    const d = new Date(thirtyDaysAgo);
+    d.setDate(d.getDate() + i);
+    const key = dateKey(d);
+    dailyVolume.push({ date: key, total: dailyVolumeMap.get(key) ?? 0 });
+  }
+
+  // --- Withdrawal analytics ---
+  const [withdrawalsByCategory, withdrawalsThisMonth, withdrawalsWithReceipts, autoVerifiedWithdrawals] =
+    await Promise.all([
+      prisma.withdrawalRequest.groupBy({
+        by: ['category'],
+        where: { status: 'COMPLETED' },
+        _sum: { amount: true },
+      }),
+      prisma.withdrawalRequest.aggregate({
+        where: { status: 'COMPLETED', completedAt: { gte: monthStart, lt: monthEnd } },
+        _sum: { amount: true },
+      }),
+      prisma.withdrawalRequest.count({ where: { receiptPath: { not: null } } }),
+      prisma.withdrawalRequest.count({
+        where: { receiptPath: { not: null }, receiptVerificationStatus: 'AUTO_VERIFIED' },
+      }),
+    ]);
+
+  // --- Scholarship analytics ---
+  const [scholarshipsByCategory, totalInstitutions, scholarshipsAllTime, universityStudents] =
+    await Promise.all([
+      prisma.transaction.groupBy({
+        by: ['category'],
+        where: {
+          status: { in: ['AUTO_APPROVED', 'APPROVED'] },
+          fromWallet: { user: { userType: 'INSTITUTION' } },
+        },
+        _sum: { amount: true },
+      }),
+      prisma.user.count({ where: { userType: 'INSTITUTION' } }),
+      prisma.transaction.aggregate({
+        where: {
+          status: { in: ['AUTO_APPROVED', 'APPROVED'] },
+          fromWallet: { user: { userType: 'INSTITUTION' } },
+        },
+        _sum: { amount: true },
+      }),
+      prisma.universityStudent.findMany({
+        where: { userId: { not: null } },
+        select: { userId: true, totalCreditCost: true },
+      }),
+    ]);
+
+  let fullCount = 0;
+  let partialCount = 0;
+  if (universityStudents.length > 0) {
+    const studentUserIds = universityStudents
+      .map((s) => s.userId)
+      .filter((id): id is string => id !== null);
+    const wallets = await prisma.wallet.findMany({
+      where: { userId: { in: studentUserIds } },
+      select: { id: true, userId: true },
+    });
+    const walletIdsByUser = new Map<string, string[]>();
+    for (const wallet of wallets) {
+      const list = walletIdsByUser.get(wallet.userId) ?? [];
+      list.push(wallet.id);
+      walletIdsByUser.set(wallet.userId, list);
+    }
+    const allWalletIds = wallets.map((w) => w.id);
+    const receivedByWallet = await prisma.transaction.groupBy({
+      by: ['toWalletId'],
+      where: {
+        toWalletId: { in: allWalletIds },
+        status: { in: ['AUTO_APPROVED', 'APPROVED'] },
+        fromWallet: { user: { userType: 'INSTITUTION' } },
+      },
+      _sum: { amount: true },
+    });
+    const receivedByWalletId = new Map(
+      receivedByWallet.map((row) => [row.toWalletId, Number(row._sum.amount ?? 0)])
+    );
+
+    for (const student of universityStudents) {
+      if (!student.userId) continue;
+      const walletIds = walletIdsByUser.get(student.userId) ?? [];
+      const received = walletIds.reduce((sum, id) => sum + (receivedByWalletId.get(id) ?? 0), 0);
+      if (received <= 0) continue;
+      if (received >= Number(student.totalCreditCost)) {
+        fullCount++;
+      } else {
+        partialCount++;
+      }
+    }
+  }
+
+  // --- Savings analytics ---
+  const [monthlyTrendRaw, savingsSum, studentSavingsCount, pendingWithdrawalRequests] =
+    await Promise.all([
+      prisma.personalSavingsHistory.groupBy({
+        by: ['month'],
+        where: { type: 'ROLLOVER', month: { not: null } },
+        _sum: { amount: true },
+      }),
+      prisma.personalSavings.aggregate({ _sum: { balance: true } }),
+      prisma.personalSavings.count(),
+      prisma.withdrawalRequest.count({
+        where: { status: { in: ['PENDING', 'PENDING_PARENT_APPROVAL'] } },
+      }),
+    ]);
+
+  const monthlyTrend = monthlyTrendRaw
+    .filter((row): row is typeof row & { month: string } => row.month !== null)
+    .map((row) => ({ month: row.month, total: Number(row._sum.amount ?? 0) }))
+    .sort((a, b) => a.month.localeCompare(b.month));
+
+  // --- Fraud analytics ---
+  const [fraudByType, totalFraud, resolvedFraud] = await Promise.all([
+    prisma.fraudAlert.groupBy({ by: ['alertType'], _count: true }),
+    prisma.fraudAlert.count(),
+    prisma.fraudAlert.count({ where: { resolved: true } }),
+  ]);
+
+  const mostCommonFraud = fraudByType.reduce<{ type: string; count: number } | null>(
+    (best, row) => (best === null || row._count > best.count ? { type: row.alertType, count: row._count } : best),
+    null
+  );
+
+  return {
+    spending: {
+      byCategory: spendingByCategory.map((row) => ({
+        category: row.category,
+        total: Number(row._sum.amount ?? 0),
+      })),
+      dailyVolume,
+    },
+    withdrawals: {
+      byCategory: withdrawalsByCategory.map((row) => ({
+        category: row.category,
+        total: Number(row._sum.amount ?? 0),
+      })),
+      totalThisMonth: Number(withdrawalsThisMonth._sum.amount ?? 0),
+      verificationSuccessRate:
+        withdrawalsWithReceipts > 0 ? autoVerifiedWithdrawals / withdrawalsWithReceipts : 0,
+    },
+    scholarships: {
+      byCategory: scholarshipsByCategory.map((row) => ({
+        category: row.category,
+        total: Number(row._sum.amount ?? 0),
+      })),
+      totalInstitutions,
+      totalAllTime: Number(scholarshipsAllTime._sum.amount ?? 0),
+      fullCount,
+      partialCount,
+    },
+    savings: {
+      monthlyTrend,
+      totalBalance: Number(savingsSum._sum.balance ?? 0),
+      averagePerStudent:
+        studentSavingsCount > 0 ? Number(savingsSum._sum.balance ?? 0) / studentSavingsCount : 0,
+      pendingWithdrawals: pendingWithdrawalRequests,
+    },
+    fraud: {
+      byType: fraudByType.map((row) => ({ type: row.alertType, count: row._count })),
+      total: totalFraud,
+      resolved: resolvedFraud,
+      resolutionRate: totalFraud > 0 ? resolvedFraud / totalFraud : 0,
+      mostCommon: mostCommonFraud?.type ?? null,
     },
   };
 }
