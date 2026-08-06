@@ -141,3 +141,32 @@ export const TRANSACTION_STATUSES: TransactionStatus[] = [
 
 export const FRAUD_TYPES: FraudAlertType[] = ['CIRCULAR', 'VELOCITY', 'DUPLICATE', 'UNUSUAL_AMOUNT'];
 export const FRAUD_SEVERITIES: FraudSeverity[] = ['LOW', 'MEDIUM', 'HIGH'];
+
+export type ReportPeriod = 'LAST_WEEK' | 'LAST_MONTH' | 'LAST_YEAR' | 'LAST_2_YEARS';
+export type ReportStatus = 'PENDING' | 'GENERATED';
+
+export type ReportRequestRow = {
+  id: string;
+  parentUserId: string;
+  studentUserId: string;
+  period: ReportPeriod;
+  includeCardPurchases: boolean;
+  includeTransfers: boolean;
+  includeWithdrawals: boolean;
+  includeFlagged: boolean;
+  includePending: boolean;
+  includeSavings: boolean;
+  status: ReportStatus;
+  pdfPath: string | null;
+  createdAt: string;
+  generatedAt: string | null;
+  parent: { id: string; fullName: string; email: string };
+  student: { id: string; fullName: string; email: string };
+};
+
+export const REPORT_PERIOD_LABELS: Record<ReportPeriod, string> = {
+  LAST_WEEK: 'Last Week',
+  LAST_MONTH: 'Last Month',
+  LAST_YEAR: 'Last Year',
+  LAST_2_YEARS: 'Last 2 Years',
+};

@@ -16,6 +16,7 @@ import { Resubmissions } from './pages/Resubmissions';
 import { SupportMessages } from './pages/SupportMessages';
 import { Fraud } from './pages/Fraud';
 import { Scholarships } from './pages/Scholarships';
+import { Reports } from './pages/Reports';
 import { Settings } from './pages/Settings';
 
 function ProtectedPage({ children }: { children: ReactNode }) {
@@ -125,6 +126,14 @@ export function App() {
           element={
             <ProtectedPage>
               <Scholarships />
+            </ProtectedPage>
+          }
+        />
+        <Route
+          path="/reports"
+          element={
+            <ProtectedPage>
+              <Reports />
             </ProtectedPage>
           }
         />

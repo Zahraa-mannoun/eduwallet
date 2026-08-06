@@ -237,7 +237,7 @@ export async function useCard(input: UseCardInput): Promise<{ transaction: Trans
       throw new AppError(400, 'INSUFFICIENT_BALANCE', 'Insufficient wallet balance');
     }
 
-    return tx.transaction.create({
+    const createdTransaction = await tx.transaction.create({
       data: {
         fromWalletId: wallet.id,
         toWalletId: null,
@@ -249,6 +249,22 @@ export async function useCard(input: UseCardInput): Promise<{ transaction: Trans
         receiverName: input.merchantName,
       },
     });
+
+    // Feeds the Parent History Report's Card Purchases section (reports.service.ts) — the
+    // only place a card's last 4 digits are recorded, since Transaction itself has no link
+    // back to the VirtualCard that paid it.
+    await tx.cardHistory.create({
+      data: {
+        walletId: wallet.id,
+        lastFourDigits: card.cardNumber.slice(-4),
+        categoryLock: input.category,
+        merchantLock: card.merchantLock,
+        amountPaid: input.amount,
+        merchantName: input.merchantName,
+      },
+    });
+
+    return createdTransaction;
   });
 
   await updateSpent(wallet.id, transaction.category, Number(transaction.amount));

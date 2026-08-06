@@ -144,6 +144,16 @@ export function IconAnalytics({ className = base }: IconProps) {
   );
 }
 
+export function IconReports({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>
+      <path d="M7 3.5h7l4 4v13a1 1 0 01-1 1H7a1 1 0 01-1-1v-16a1 1 0 011-1z" />
+      <path d="M14 3.5v4h4" />
+      <path d="M9 12.5h6M9 15.5h6M9 9.5h2" />
+    </svg>
+  );
+}
+
 export function IconSettings({ className = base }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>

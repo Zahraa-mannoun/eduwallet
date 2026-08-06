@@ -53,6 +53,8 @@ export type RootStackParamList = {
   ApprovalRequest: { transaction: Transaction; studentName: string };
   KYC: undefined;
   PersonalSavings: undefined;
+  ReportRequest: undefined;
+  ReportHistory: undefined;
   UniversityStudents: undefined;
   BlockchainVault: undefined;
   AIAssistant: undefined;

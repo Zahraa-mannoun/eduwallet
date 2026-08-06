@@ -55,6 +55,10 @@ export type WithdrawalStatus =
 
 export type ReceiptVerificationStatus = 'PENDING' | 'AUTO_VERIFIED' | 'FLAGGED' | 'MANUALLY_VERIFIED';
 
+export type ReportPeriod = 'LAST_WEEK' | 'LAST_MONTH' | 'LAST_YEAR' | 'LAST_2_YEARS';
+
+export type ReportStatus = 'PENDING' | 'GENERATED';
+
 export type User = {
   id: string;
   email: string;
@@ -211,6 +215,25 @@ export type WithdrawalRequestWithStudent = WithdrawalRequest & {
     userId: string;
     user: { id: string; fullName: string; email: string };
   };
+};
+
+export type ReportRequest = {
+  id: string;
+  parentUserId: string;
+  studentUserId: string;
+  period: ReportPeriod;
+  includeCardPurchases: boolean;
+  includeTransfers: boolean;
+  includeWithdrawals: boolean;
+  includeFlagged: boolean;
+  includePending: boolean;
+  includeSavings: boolean;
+  status: ReportStatus;
+  pdfPath: string | null;
+  createdAt: string;
+  generatedAt: string | null;
+  parent: { id: string; fullName: string; email: string };
+  student: { id: string; fullName: string; email: string };
 };
 
 export type UniversityStudentCourse = {

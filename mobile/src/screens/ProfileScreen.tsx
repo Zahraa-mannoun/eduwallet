@@ -95,6 +95,20 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
       icon: 'history',
       onPress: () => navigation.navigate('TransactionHistory'),
     },
+    ...(user?.userType === 'PARENT'
+      ? [
+          {
+            title: 'Request History Report',
+            icon: 'file-chart-outline',
+            onPress: () => navigation.navigate('ReportRequest'),
+          },
+          {
+            title: 'My Reports',
+            icon: 'file-document-multiple-outline',
+            onPress: () => navigation.navigate('ReportHistory'),
+          },
+        ]
+      : []),
     ...(user?.userType === 'STUDENT'
       ? [
           {
