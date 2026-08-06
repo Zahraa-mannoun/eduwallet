@@ -38,7 +38,8 @@ enum TransactionCategory {
   TRANSPORT
   SOFTWARE
   RENT
-  PERSONAL
+  LIFESTYLE
+  PERSONAL_SAVINGS
   GENERAL
 }
 
@@ -68,27 +69,80 @@ enum FraudSeverity {
   HIGH
 }
 
+enum SavingsHistoryType {
+  ROLLOVER
+  WITHDRAWAL_REQUEST
+  WITHDRAWAL_APPROVED
+  WITHDRAWAL_REJECTED
+}
+
+enum SavingsHistoryStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+enum ReceiptVerificationStatus {
+  PENDING
+  AUTO_VERIFIED
+  FLAGGED
+  MANUALLY_VERIFIED
+}
+
+enum EmailChangeStatus {
+  PENDING
+  ACCEPTED
+}
+
+enum ReportPeriod {
+  LAST_WEEK
+  LAST_MONTH
+  LAST_YEAR
+  LAST_2_YEARS
+}
+
+enum ReportStatus {
+  PENDING
+  GENERATED
+}
+
+enum MerchantType {
+  RESTAURANT
+  SHOPPING_CENTER
+  SOFTWARE_STORE
+  BOOKSTORE
+  PHARMACY
+  TRANSPORT
+}
+
 model User {
-  id        String    @id @default(uuid())
-  email     String    @unique
-  password  String
-  fullName  String
-  userType  UserType
-  kycStatus KYCStatus @default(PENDING)
+  id                 String    @id @default(uuid())
+  email              String    @unique
+  password           String
+  fullName           String
+  userType           UserType
+  kycStatus          KYCStatus @default(PENDING)
   // Set together on a REJECTED review decision, cleared together on APPROVED. While set,
   // getKYCStatus() hides any KYC document uploaded before this timestamp (so the retry
   // screen shows fresh "re-upload" buttons instead of the old rejected files), and this
   // student is surfaced on the admin Resubmissions page once they upload something newer.
   kycRejectionReason String?
   kycRejectedAt      DateTime?
-  suspended Boolean   @default(false)
+  suspended          Boolean   @default(false)
   // Set on suspend, cleared on unsuspend — describes the CURRENT suspension only (unlike
   // kycRejectionReason above, this is not a permanent history field).
-  suspensionReason String?
+  suspensionReason   String?
   // Global card-payment setting (Profile > Account Settings > Card Settings), read at
   // card-use time in cards.service.ts — not a per-card field.
-  cardAutoRenew Boolean @default(false)
-  createdAt DateTime  @default(now())
+  cardAutoRenew      Boolean   @default(false)
+  createdAt          DateTime  @default(now())
 
   wallets           Wallet[]
   academicDocuments AcademicDocument[]
@@ -98,6 +152,16 @@ model User {
 
   parentalControlsAsParent  ParentalControl[] @relation("ParentControls")
   parentalControlsAsStudent ParentalControl[] @relation("StudentControls")
+
+  parentalControlHistoryAsParent  ParentalControlHistory[] @relation("ParentControlHistoryAsParent")
+  parentalControlHistoryAsStudent ParentalControlHistory[] @relation("ParentControlHistoryAsStudent")
+
+  emailChangeRequests EmailChangeRequest[]
+
+  reportRequestsAsParent  ReportRequest[] @relation("ReportRequestAsParent")
+  reportRequestsAsStudent ReportRequest[] @relation("ReportRequestAsStudent")
+
+  universityStudent UniversityStudent[]
 
   @@map("users")
 }
@@ -129,6 +193,13 @@ model Wallet {
 
   outgoingTransactions Transaction[] @relation("FromWallet")
   incomingTransactions Transaction[] @relation("ToWallet")
+
+  cardHistory            CardHistory[]
+  monthlyBudgetHistory   MonthlyBudgetHistory[]
+  personalSavings        PersonalSavings?
+  personalSavingsHistory PersonalSavingsHistory[]
+  withdrawalRequests     WithdrawalRequest[]
+  withdrawalHistory      WithdrawalHistory[]
 
   @@unique([userId, currency])
   @@index([userId])
@@ -285,4 +356,223 @@ model AdminAuditLog {
 
   @@index([adminId])
   @@map("admin_audit_logs")
+}
+
+model CardHistory {
+  id             String               @id @default(uuid())
+  walletId       String
+  lastFourDigits String
+  categoryLock   TransactionCategory?
+  merchantLock   String?
+  amountPaid     Decimal              @db.Decimal(12, 2)
+  merchantName   String?
+  usedAt         DateTime             @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id])
+
+  @@index([walletId])
+  @@map("card_history")
+}
+
+model ParentalControlHistory {
+  id                String                @id @default(uuid())
+  parentUserId      String
+  studentUserId     String
+  linkedAt          DateTime
+  unlinkedAt        DateTime              @default(now())
+  categoriesAllowed TransactionCategory[]
+  approvalThreshold Decimal               @db.Decimal(12, 2)
+  totalAmountSent   Decimal               @default(0) @db.Decimal(12, 2)
+
+  parent  User @relation("ParentControlHistoryAsParent", fields: [parentUserId], references: [id])
+  student User @relation("ParentControlHistoryAsStudent", fields: [studentUserId], references: [id])
+
+  @@index([parentUserId])
+  @@index([studentUserId])
+  @@map("parental_control_history")
+}
+
+model MonthlyBudgetHistory {
+  id           String              @id @default(uuid())
+  walletId     String
+  category     TransactionCategory
+  monthlyLimit Decimal             @db.Decimal(12, 2)
+  totalSpent   Decimal             @db.Decimal(12, 2)
+  month        String
+  archivedAt   DateTime            @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id])
+
+  @@index([walletId])
+  @@map("monthly_budget_history")
+}
+
+model PersonalSavings {
+  id        String   @id @default(uuid())
+  walletId  String   @unique
+  balance   Decimal  @default(0) @db.Decimal(12, 2)
+  updatedAt DateTime @updatedAt
+
+  wallet Wallet @relation(fields: [walletId], references: [id])
+
+  @@map("personal_savings")
+}
+
+model PersonalSavingsHistory {
+  id        String               @id @default(uuid())
+  walletId  String
+  type      SavingsHistoryType
+  amount    Decimal              @db.Decimal(12, 2)
+  month     String?
+  reason    String?
+  status    SavingsHistoryStatus @default(PENDING)
+  createdAt DateTime             @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id])
+
+  @@index([walletId])
+  @@map("personal_savings_history")
+}
+
+model WithdrawalRequest {
+  id                        String                    @id @default(uuid())
+  walletId                  String
+  amount                    Decimal                   @db.Decimal(12, 2)
+  category                  TransactionCategory
+  status                    WithdrawalStatus          @default(PENDING)
+  receiptPath               String?
+  receiptVerificationStatus ReceiptVerificationStatus @default(PENDING)
+  receiptVerificationNote   String?
+  merchantName              String?
+  detectedCategory          TransactionCategory?
+  agentId                   String?
+  createdAt                 DateTime                  @default(now())
+  completedAt               DateTime?
+
+  wallet            Wallet              @relation(fields: [walletId], references: [id])
+  withdrawalHistory WithdrawalHistory[]
+
+  @@index([walletId])
+  @@map("withdrawal_requests")
+}
+
+model WithdrawalHistory {
+  id                        String                    @id @default(uuid())
+  walletId                  String
+  withdrawalRequestId       String
+  amount                    Decimal                   @db.Decimal(12, 2)
+  category                  TransactionCategory
+  merchantName              String?
+  receiptVerificationStatus ReceiptVerificationStatus
+  completedAt               DateTime                  @default(now())
+
+  wallet            Wallet            @relation(fields: [walletId], references: [id])
+  withdrawalRequest WithdrawalRequest @relation(fields: [withdrawalRequestId], references: [id])
+
+  @@index([walletId])
+  @@index([withdrawalRequestId])
+  @@map("withdrawal_history")
+}
+
+model EmailChangeRequest {
+  id             String            @id @default(uuid())
+  userId         String
+  currentEmail   String
+  requestedEmail String
+  reason         String
+  proofImagePath String?
+  status         EmailChangeStatus @default(PENDING)
+  createdAt      DateTime          @default(now())
+  resolvedAt     DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("email_change_requests")
+}
+
+model ReportRequest {
+  id                   String       @id @default(uuid())
+  parentUserId         String
+  studentUserId        String
+  period               ReportPeriod
+  includeCardPurchases Boolean      @default(false)
+  includeTransfers     Boolean      @default(false)
+  includeWithdrawals   Boolean      @default(false)
+  includeFlagged       Boolean      @default(false)
+  includePending       Boolean      @default(false)
+  includeSavings       Boolean      @default(false)
+  status               ReportStatus @default(PENDING)
+  pdfPath              String?
+  createdAt            DateTime     @default(now())
+  generatedAt          DateTime?
+
+  parent  User @relation("ReportRequestAsParent", fields: [parentUserId], references: [id])
+  student User @relation("ReportRequestAsStudent", fields: [studentUserId], references: [id])
+
+  @@index([parentUserId])
+  @@index([studentUserId])
+  @@map("report_requests")
+}
+
+model Merchant {
+  id        String              @id @default(uuid())
+  name      String
+  category  TransactionCategory
+  city      String
+  country   String
+  address   String?
+  type      MerchantType
+  isActive  Boolean             @default(true)
+  createdAt DateTime            @default(now())
+
+  @@map("merchants")
+}
+
+model University {
+  id       String  @id @default(uuid())
+  name     String
+  city     String
+  country  String
+  isActive Boolean @default(true)
+
+  courses  UniversityCourse[]
+  students UniversityStudent[]
+
+  @@map("universities")
+}
+
+model UniversityCourse {
+  id            String  @id @default(uuid())
+  universityId  String
+  courseName    String
+  credits       Int
+  costPerCredit Decimal @db.Decimal(12, 2)
+  totalCost     Decimal @db.Decimal(12, 2)
+  semester      String
+
+  university University          @relation(fields: [universityId], references: [id])
+  students   UniversityStudent[]
+
+  @@index([universityId])
+  @@map("university_courses")
+}
+
+model UniversityStudent {
+  id              String   @id @default(uuid())
+  universityId    String
+  userId          String?
+  studentNumber   String
+  fullName        String
+  email           String
+  totalCreditCost Decimal  @db.Decimal(12, 2)
+  createdAt       DateTime @default(now())
+
+  university      University         @relation(fields: [universityId], references: [id])
+  user            User?              @relation(fields: [userId], references: [id])
+  enrolledCourses UniversityCourse[]
+
+  @@index([universityId])
+  @@index([userId])
+  @@map("university_students")
 }

@@ -1,5 +1,6 @@
 import bcrypt from 'bcrypt';
 import type { FastifyInstance } from 'fastify';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { redis } from '../../config/redis';
 import { AppError } from '../../utils/AppError';
@@ -13,6 +14,9 @@ import { toSafeUser } from './auth.types';
 import type { AccessTokenPayload, RefreshTokenPayload, SafeUser } from './auth.types';
 
 const SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS ?? 12);
+// Every registered student is enrolled at this single demo university, all sharing the
+// same static course list — there is no university-selection step in the thesis prototype.
+const DEFAULT_UNIVERSITY_NAME = 'Université de Montréal';
 const ACCESS_TOKEN_EXPIRES_IN = process.env.JWT_ACCESS_EXPIRES_IN ?? '15m';
 const REFRESH_TOKEN_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN ?? '7d';
 const REFRESH_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -25,6 +29,39 @@ const blacklistKey = (token: string) => `auth:blacklist:${token}`;
 const loginAttemptsKey = (email: string) => `auth:login_attempts:${email}`;
 const loginLockoutKey = (email: string) => `auth:login_lockout:${email}`;
 
+// Every UniversityStudent shares the same static course list from the default university,
+// so total credit cost is identical across all students — there's no per-student enrollment.
+async function createUniversityStudentRecord(
+  tx: Prisma.TransactionClient,
+  user: { id: string; email: string; fullName: string }
+): Promise<void> {
+  const university = await tx.university.findFirst({ where: { name: DEFAULT_UNIVERSITY_NAME } });
+  if (!university) {
+    throw new AppError(
+      500,
+      'DEFAULT_UNIVERSITY_NOT_FOUND',
+      'Default university is not configured'
+    );
+  }
+
+  const courses = await tx.universityCourse.findMany({ where: { universityId: university.id } });
+  const totalCreditCost = courses.reduce((sum, course) => sum + Number(course.totalCost), 0);
+  const studentCount = await tx.universityStudent.count({ where: { universityId: university.id } });
+  const studentNumber = `UDM-2026-${String(studentCount + 1).padStart(4, '0')}`;
+
+  await tx.universityStudent.create({
+    data: {
+      universityId: university.id,
+      userId: user.id,
+      studentNumber,
+      fullName: user.fullName,
+      email: user.email,
+      totalCreditCost,
+      enrolledCourses: { connect: courses.map((course) => ({ id: course.id })) },
+    },
+  });
+}
+
 export async function registerUser(input: RegisterInput): Promise<SafeUser> {
   const existing = await prisma.user.findUnique({ where: { email: input.email } });
   if (existing) {
@@ -33,18 +70,26 @@ export async function registerUser(input: RegisterInput): Promise<SafeUser> {
 
   const hashedPassword = await bcrypt.hash(input.password, SALT_ROUNDS);
 
-  const user = await prisma.user.create({
-    data: {
-      email: input.email,
-      password: hashedPassword,
-      fullName: input.fullName,
-      userType: input.userType,
-      wallets: {
-        create: {
-          balance: 0,
+  const user = await prisma.$transaction(async (tx) => {
+    const createdUser = await tx.user.create({
+      data: {
+        email: input.email,
+        password: hashedPassword,
+        fullName: input.fullName,
+        userType: input.userType,
+        wallets: {
+          create: {
+            balance: 0,
+          },
         },
       },
-    },
+    });
+
+    if (createdUser.userType === 'STUDENT') {
+      await createUniversityStudentRecord(tx, createdUser);
+    }
+
+    return createdUser;
   });
 
   return toSafeUser(user);
