@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, TextInput as NativeTextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { ActivityIndicator, Avatar, Button, Card, Checkbox, Chip, Snackbar, Text } from 'react-native-paper';
+import { ActivityIndicator, Avatar, Button, Card, Checkbox, Chip, IconButton, Snackbar, Text } from 'react-native-paper';
 import type { Transaction, TransactionCategory, User } from '../types/api';
 import CategorySelectorGrid from '../components/CategorySelectorGrid';
 import IconBadge from '../components/IconBadge';
@@ -13,6 +13,7 @@ import { getInitials } from '../utils/getInitials';
 import * as scholarshipService from '../services/scholarshipService';
 import * as walletService from '../services/walletService';
 import { ApiError } from '../services/api';
+import type { InstitutionTabScreenProps } from '../navigation/types';
 
 const categoryLookup = new Map(BUDGET_CATEGORIES.map((category) => [category.key, category]));
 
@@ -32,20 +33,41 @@ const DISBURSEMENT_LOCK_CATEGORIES = BUDGET_CATEGORIES.filter((category) =>
 const formatDate = (isoDate: string) =>
   new Date(isoDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 
-export default function ScholarshipPortalScreen() {
+export default function ScholarshipPortalScreen({
+  navigation,
+  route,
+}: Readonly<InstitutionTabScreenProps<'Portal'>>) {
+  // Arriving from UniversityStudentsScreen's "Proceed to Send" — restricts the visible
+  // roster to just these students and pre-fills the shared amount, per-student category
+  // selection still happens manually here (it isn't computable from credit-cost data alone).
+  const preselectedStudents = route.params?.preselectedStudents;
+  const hasPreselection = Boolean(preselectedStudents && preselectedStudents.length > 0);
+
   const [students, setStudents] = useState<User[]>([]);
   const [disbursements, setDisbursements] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [amount, setAmount] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(
+    () => new Set(preselectedStudents?.map((student) => student.userId) ?? [])
+  );
+  const [amount, setAmount] = useState(() =>
+    route.params?.amountPerStudent !== undefined ? String(route.params.amountPerStudent) : ''
+  );
   const [category, setCategory] = useState<BudgetCategoryDefinition | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
 
   const parsedAmount = Number(amount);
   const canSend = selectedIds.size > 0 && parsedAmount > 0 && Boolean(category) && !isSending;
+
+  const preselectedIds = useMemo(
+    () => new Set(preselectedStudents?.map((student) => student.userId) ?? []),
+    [preselectedStudents]
+  );
+  const displayStudents = hasPreselection
+    ? students.filter((student) => preselectedIds.has(student.id))
+    : students;
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -132,6 +154,11 @@ export default function ScholarshipPortalScreen() {
         <Text variant="headlineSmall" style={styles.headerTitle}>
           Scholarship Portal
         </Text>
+        <IconButton
+          icon="school-outline"
+          iconColor={colors.primary}
+          onPress={() => navigation.navigate('UniversityStudents')}
+        />
       </View>
 
       <ScrollView
@@ -140,15 +167,26 @@ export default function ScholarshipPortalScreen() {
       >
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
+        {hasPreselection ? (
+          <View style={styles.preselectionBanner}>
+            <Text style={styles.preselectionBannerText}>
+              Showing {preselectedStudents?.length ?? 0} student
+              {(preselectedStudents?.length ?? 0) === 1 ? '' : 's'} selected from University
+              Students. Amount and selection are pre-filled — choose a category to continue.
+            </Text>
+          </View>
+        ) : null}
+
         <Text style={styles.sectionLabel}>
-          Registered Students {selectedIds.size > 0 ? `(${selectedIds.size} selected)` : ''}
+          {hasPreselection ? 'Selected Students' : 'Registered Students'}{' '}
+          {selectedIds.size > 0 ? `(${selectedIds.size} selected)` : ''}
         </Text>
         <Card style={styles.card} mode="elevated">
           <Card.Content>
-            {isLoading && students.length === 0 ? (
+            {isLoading && displayStudents.length === 0 ? (
               <ActivityIndicator color={colors.primary} />
-            ) : students.length > 0 ? (
-              students.map((student) => {
+            ) : displayStudents.length > 0 ? (
+              displayStudents.map((student) => {
                 const checked = selectedIds.has(student.id);
                 return (
                   <TouchableOpacity
@@ -175,7 +213,11 @@ export default function ScholarshipPortalScreen() {
                 );
               })
             ) : (
-              <Text style={styles.emptySubtitle}>No students registered yet.</Text>
+              <Text style={styles.emptySubtitle}>
+                {hasPreselection
+                  ? 'None of the selected students matched an eligible scholarship recipient.'
+                  : 'No students registered yet.'}
+              </Text>
             )}
           </Card.Content>
         </Card>
@@ -312,6 +354,17 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingBottom: 32,
+  },
+  preselectionBanner: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  preselectionBannerText: {
+    fontSize: 12,
+    color: colors.label,
+    lineHeight: 18,
   },
   errorText: {
     color: colors.danger,

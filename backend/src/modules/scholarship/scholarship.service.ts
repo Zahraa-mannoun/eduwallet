@@ -134,5 +134,45 @@ export async function bulkDisburse(
     )
   );
 
+  // Only fires for students who are actually university-enrolled (have a UniversityStudent
+  // record) — a plain STUDENT disbursed to outside that flow has no totalCreditCost to compare
+  // against, so there's no funding-gap message to send. "Fully funded" is judged against just
+  // this disbursement (matching the same math university.service.ts prepareDisbursement()
+  // already showed the institution before they confirmed), not the student's all-time total.
+  await Promise.all(
+    students.map(async (student) => {
+      const universityStudent = await prisma.universityStudent.findFirst({
+        where: { userId: student.id },
+      });
+      if (!universityStudent) return;
+
+      const parentalControls = await prisma.parentalControl.findMany({
+        where: { studentUserId: student.id },
+      });
+      if (parentalControls.length === 0) return;
+
+      const totalCreditCost = Number(universityStudent.totalCreditCost);
+      const fullyFunded = input.amountPerStudent >= totalCreditCost;
+      const remainingGap = Math.max(0, totalCreditCost - input.amountPerStudent);
+      const institutionName = institution?.fullName ?? 'Your institution';
+      const amountLabel = input.amountPerStudent.toFixed(2);
+
+      const message = fullyFunded
+        ? `${institutionName} has fully funded your child ${student.fullName}'s semester ($${amountLabel})`
+        : `${institutionName} has partially funded your child ${student.fullName}'s semester ($${amountLabel}). Remaining gap: $${remainingGap.toFixed(2)}`;
+
+      await Promise.all(
+        parentalControls.map((link) =>
+          createNotification(
+            link.parentUserId,
+            'Scholarship Disbursement',
+            message,
+            'SCHOLARSHIP_DISBURSEMENT'
+          )
+        )
+      );
+    })
+  );
+
   return { transactions, totalDisbursed, skipped };
 }

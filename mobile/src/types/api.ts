@@ -213,6 +213,40 @@ export type WithdrawalRequestWithStudent = WithdrawalRequest & {
   };
 };
 
+export type UniversityStudentCourse = {
+  id: string;
+  courseName: string;
+  credits: number;
+  costPerCredit: string;
+  totalCost: string;
+  semester: string;
+};
+
+export type UniversityStudentSummary = {
+  id: string;
+  userId: string;
+  studentNumber: string;
+  fullName: string;
+  email: string;
+  totalCreditCost: string;
+  courses: UniversityStudentCourse[];
+  received: string;
+  fundingGap: string;
+};
+
+export type FundingStatus = 'FULL' | 'PARTIAL';
+
+export type DisbursementPreviewEntry = {
+  universityStudentId: string;
+  userId: string;
+  fullName: string;
+  email: string;
+  totalCreditCost: string;
+  amountPerStudent: string;
+  fundingStatus: FundingStatus;
+  fundingGap: string;
+};
+
 export type FraudAlert = {
   id: string;
   transactionId: string;
