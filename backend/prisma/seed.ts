@@ -96,47 +96,28 @@ async function seedUniversity(): Promise<void> {
     { courseName: 'Academic Writing', credits: 2, costPerCredit: 250, semester: 'Fall 2026' },
   ];
 
-  const courses =
-    existingCourses.length > 0
-      ? existingCourses
-      : await Promise.all(
-          courseData.map((c) =>
-            prisma.universityCourse.create({
-              data: {
-                universityId: university.id,
-                courseName: c.courseName,
-                credits: c.credits,
-                costPerCredit: c.costPerCredit,
-                totalCost: c.credits * c.costPerCredit,
-                semester: c.semester,
-              },
-            })
-          )
-        );
-
-  const existingStudents = await prisma.universityStudent.count({ where: { universityId: university.id } });
-  if (existingStudents === 0) {
-    for (let i = 1; i <= 10; i += 1) {
-      const enrolledCourses = courses.slice(0, 2 + (i % 3));
-      const totalCreditCost = enrolledCourses.reduce(
-        (sum, c) => sum + Number(c.totalCost),
-        0
-      );
-
-      await prisma.universityStudent.create({
-        data: {
-          universityId: university.id,
-          studentNumber: `UDM-2026-${String(i).padStart(4, '0')}`,
-          fullName: `Student ${i}`,
-          email: `student${i}@udm-demo.ca`,
-          totalCreditCost,
-          enrolledCourses: { connect: enrolledCourses.map((c) => ({ id: c.id })) },
-        },
-      });
-    }
+  if (existingCourses.length === 0) {
+    await Promise.all(
+      courseData.map((c) =>
+        prisma.universityCourse.create({
+          data: {
+            universityId: university.id,
+            courseName: c.courseName,
+            credits: c.credits,
+            costPerCredit: c.costPerCredit,
+            totalCost: c.credits * c.costPerCredit,
+            semester: c.semester,
+          },
+        })
+      )
+    );
   }
 
-  console.log('Seeded 1 university with 5 courses and 10 enrolled students');
+  // No seeded UniversityStudent rows here — real students are created automatically on
+  // registration by auth.service.ts's createUniversityStudentRecord(), which sums every
+  // course's totalCost (currently 3750) so totalCreditCost always stays in sync with
+  // whatever courses actually exist, instead of a second hardcoded copy drifting from it.
+  console.log('Seeded 1 university with 5 courses');
 }
 
 async function main(): Promise<void> {
