@@ -165,6 +165,8 @@ model User {
 
   universityStudent UniversityStudent[]
 
+  institutionStudentSelections InstitutionStudentSelection[]
+
   @@map("users")
 }
 
@@ -579,8 +581,38 @@ model UniversityStudent {
   university      University         @relation(fields: [universityId], references: [id])
   user            User?              @relation(fields: [userId], references: [id])
   enrolledCourses UniversityCourse[]
+  selection       InstitutionStudentSelection?
 
   @@index([universityId])
   @@index([userId])
   @@map("university_students")
+}
+
+enum InstitutionSelectionStatus {
+  // Selected in Tab 1 ("Notify & Proceed"), awaiting a Tab 2 bulk send — cleared (row
+  // deleted) once that send succeeds, freeing the student back up in Tab 1 and Tab 3.
+  PENDING
+  // Funded directly via Tab 3 ("Fund This Student") — stays hidden from Tab 1 and Tab 3
+  // indefinitely, unlike PENDING which is only a temporary queue state.
+  FUNDED
+}
+
+// Tracks "no double funding" across the Institution dashboard's 3 tabs: at most one row per
+// UniversityStudent (enforced by the unique constraint on universityStudentId below) means a
+// student can only ever be in one of {selected for Tab 2, individually funded via Tab 3} at a
+// time. GET /university/students filters out any student with a row here (see
+// university.service.ts getVerifiedUniversityStudents()).
+model InstitutionStudentSelection {
+  id                  String                      @id @default(uuid())
+  institutionUserId   String
+  universityStudentId String                      @unique
+  amount              Decimal                     @db.Decimal(12, 2)
+  status              InstitutionSelectionStatus  @default(PENDING)
+  createdAt           DateTime                    @default(now())
+
+  institution       User              @relation(fields: [institutionUserId], references: [id])
+  universityStudent UniversityStudent @relation(fields: [universityStudentId], references: [id])
+
+  @@index([institutionUserId])
+  @@map("institution_student_selections")
 }

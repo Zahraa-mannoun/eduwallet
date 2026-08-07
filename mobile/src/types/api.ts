@@ -284,6 +284,28 @@ export type DisbursementPreviewEntry = {
   fundingGap: string;
 };
 
+export type SelectedStudentSummary = {
+  selectionId: string;
+  universityStudentId: string;
+  userId: string;
+  studentNumber: string;
+  fullName: string;
+  totalCreditCost: string;
+  amount: string;
+  fundingStatus: FundingStatus;
+};
+
+export type DisburseSelectedResult = {
+  disbursedCount: number;
+  totalDisbursed: number;
+  stillPending: number;
+};
+
+export type FundIndividualResult = {
+  fundingStatus: FundingStatus;
+  amount: string;
+};
+
 export type FraudAlert = {
   id: string;
   transactionId: string;

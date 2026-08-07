@@ -3,15 +3,6 @@ import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { CompositeScreenProps, NavigatorScreenParams } from '@react-navigation/native';
 import type { Transaction } from '../types/api';
 
-// Handed from UniversityStudentsScreen to the Portal tab so it can pre-fill and filter down
-// to just the students the institution picked, without needing a fresh cross-reference
-// lookup — see ScholarshipPortalScreen's `hasPreselection` handling.
-export type PreselectedUniversityStudent = {
-  userId: string;
-  fullName: string;
-  email: string;
-};
-
 export type StudentTabParamList = {
   Home: undefined;
   Cards: undefined;
@@ -28,9 +19,7 @@ export type ParentTabParamList = {
 };
 
 export type InstitutionTabParamList = {
-  Portal:
-    | { preselectedStudents?: PreselectedUniversityStudent[]; amountPerStudent?: number }
-    | undefined;
+  Portal: undefined;
   Notifications: undefined;
   Profile: undefined;
 };
@@ -56,7 +45,6 @@ export type RootStackParamList = {
   ReportRequest: undefined;
   ReportHistory: undefined;
   EmailChangeRequest: undefined;
-  UniversityStudents: undefined;
   BlockchainVault: undefined;
   AIAssistant: undefined;
   Notifications: undefined;

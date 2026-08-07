@@ -1,336 +1,61 @@
-import { useCallback, useMemo, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, TextInput as NativeTextInput, TouchableOpacity, View } from 'react-native';
+import { useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
-import { ActivityIndicator, Avatar, Button, Card, Checkbox, Chip, IconButton, Snackbar, Text } from 'react-native-paper';
-import type { Transaction, TransactionCategory, User } from '../types/api';
-import CategorySelectorGrid from '../components/CategorySelectorGrid';
-import IconBadge from '../components/IconBadge';
-import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
-import type { BudgetCategoryDefinition, BudgetCategoryKey } from '../constants/budgetCategories';
+import { Text, TouchableRipple } from 'react-native-paper';
 import { colors } from '../theme/colors';
-import { getInitials } from '../utils/getInitials';
-import * as scholarshipService from '../services/scholarshipService';
-import * as walletService from '../services/walletService';
-import { ApiError } from '../services/api';
-import type { InstitutionTabScreenProps } from '../navigation/types';
+import UniversityStudentsTab from './UniversityStudentsTab';
+import ScholarshipPortalTab from './ScholarshipPortalTab';
+import IndividualFundingTab from './IndividualFundingTab';
 
-const categoryLookup = new Map(BUDGET_CATEGORIES.map((category) => [category.key, category]));
+type DashboardTab = 'students' | 'portal' | 'individual';
 
-// Scholarship disbursements only make sense against academic/institutional spending —
-// Food, Transport, Rent, Lifestyle, and Personal Savings are a parent's discretionary-spending
-// categories, not something an institution should be locking a disbursement to.
-const DISBURSEMENT_LOCK_KEYS: ReadonlySet<BudgetCategoryKey> = new Set([
-  'tuition',
-  'books',
-  'software',
-  'general',
-]);
-const DISBURSEMENT_LOCK_CATEGORIES = BUDGET_CATEGORIES.filter((category) =>
-  DISBURSEMENT_LOCK_KEYS.has(category.key)
-);
+const TABS: ReadonlyArray<{ key: DashboardTab; label: string }> = [
+  { key: 'students', label: 'University Students' },
+  { key: 'portal', label: 'Scholarship Portal' },
+  { key: 'individual', label: 'Individual Funding' },
+];
 
-const formatDate = (isoDate: string) =>
-  new Date(isoDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
-
-export default function ScholarshipPortalScreen({
-  navigation,
-  route,
-}: Readonly<InstitutionTabScreenProps<'Portal'>>) {
-  // Arriving from UniversityStudentsScreen's "Proceed to Send" — restricts the visible
-  // roster to just these students and pre-fills the shared amount, per-student category
-  // selection still happens manually here (it isn't computable from credit-cost data alone).
-  const preselectedStudents = route.params?.preselectedStudents;
-  const hasPreselection = Boolean(preselectedStudents && preselectedStudents.length > 0);
-
-  const [students, setStudents] = useState<User[]>([]);
-  const [disbursements, setDisbursements] = useState<Transaction[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(
-    () => new Set(preselectedStudents?.map((student) => student.userId) ?? [])
-  );
-  const [amount, setAmount] = useState(() =>
-    route.params?.amountPerStudent !== undefined ? String(route.params.amountPerStudent) : ''
-  );
-  const [category, setCategory] = useState<BudgetCategoryDefinition | null>(null);
-  const [isSending, setIsSending] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
-
-  const parsedAmount = Number(amount);
-  const canSend = selectedIds.size > 0 && parsedAmount > 0 && Boolean(category) && !isSending;
-
-  const preselectedIds = useMemo(
-    () => new Set(preselectedStudents?.map((student) => student.userId) ?? []),
-    [preselectedStudents]
-  );
-  const displayStudents = hasPreselection
-    ? students.filter((student) => preselectedIds.has(student.id))
-    : students;
-
-  const load = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const [studentsResult, transactionsResult] = await Promise.all([
-        scholarshipService.getStudents(),
-        walletService.getTransactions({ limit: 100 }),
-      ]);
-      setStudents(studentsResult);
-      setDisbursements(transactionsResult.transactions.filter((tx) => tx.fromWalletId !== null));
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to load the scholarship portal.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      void load();
-    }, [load])
-  );
-
-  const toggleStudent = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
-
-  const handleSendDisbursement = async () => {
-    if (!category || !canSend) return;
-    setIsSending(true);
-    try {
-      await scholarshipService.bulkDisburse({
-        studentIds: [...selectedIds],
-        amountPerStudent: parsedAmount,
-        currency: 'USD',
-        category: category.key.toUpperCase() as TransactionCategory,
-      });
-      setSnackbarMessage(`Disbursement sent to ${selectedIds.size} student${selectedIds.size === 1 ? '' : 's'}.`);
-      setSelectedIds(new Set());
-      setAmount('');
-      setCategory(null);
-      await load();
-    } catch (err) {
-      setSnackbarMessage(err instanceof ApiError ? err.message : 'Could not send that disbursement.');
-    } finally {
-      setIsSending(false);
-    }
-  };
-
-  const reports = useMemo(() => {
-    const totalDisbursed = disbursements.reduce((sum, tx) => sum + Number(tx.amount), 0);
-    const studentsFunded = new Set(disbursements.map((tx) => tx.toWalletId)).size;
-    const totalsByCategory = new Map<string, number>();
-    disbursements.forEach((tx) => {
-      const key = tx.category.toLowerCase();
-      totalsByCategory.set(key, (totalsByCategory.get(key) ?? 0) + Number(tx.amount));
-    });
-    const topCategory = [...totalsByCategory.entries()].reduce<{
-      category: BudgetCategoryDefinition | null;
-      amount: number;
-    }>(
-      (best, [key, total]) => {
-        if (total <= best.amount) return best;
-        return { category: categoryLookup.get(key as BudgetCategoryKey) ?? null, amount: total };
-      },
-      { category: null, amount: 0 }
-    ).category;
-
-    return { totalDisbursed, studentsFunded, topCategory };
-  }, [disbursements]);
+// The Institution dashboard's single bottom tab ("Portal"), split into 3 internal tabs. Each
+// tab is a plain child component (not a separate navigator route) so switching between them
+// is just local state — conditionally rendering only the active one also means it remounts
+// fresh every time it becomes active, which is what keeps each tab's own useFocusEffect-driven
+// data load correct without any extra cross-tab refresh wiring.
+export default function ScholarshipPortalScreen() {
+  const [activeTab, setActiveTab] = useState<DashboardTab>('students');
 
   return (
     <SafeAreaView style={styles.flex} edges={['top']}>
       <View style={styles.header}>
         <Text variant="headlineSmall" style={styles.headerTitle}>
-          Scholarship Portal
+          Institution Dashboard
         </Text>
-        <IconButton
-          icon="school-outline"
-          iconColor={colors.primary}
-          onPress={() => navigation.navigate('UniversityStudents')}
-        />
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={load} />}
-      >
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-        {hasPreselection ? (
-          <View style={styles.preselectionBanner}>
-            <Text style={styles.preselectionBannerText}>
-              Showing {preselectedStudents?.length ?? 0} student
-              {(preselectedStudents?.length ?? 0) === 1 ? '' : 's'} selected from University
-              Students. Amount and selection are pre-filled — choose a category to continue.
-            </Text>
-          </View>
-        ) : null}
-
-        <Text style={styles.sectionLabel}>
-          {hasPreselection ? 'Selected Students' : 'Registered Students'}{' '}
-          {selectedIds.size > 0 ? `(${selectedIds.size} selected)` : ''}
-        </Text>
-        <Card style={styles.card} mode="elevated">
-          <Card.Content>
-            {isLoading && displayStudents.length === 0 ? (
-              <ActivityIndicator color={colors.primary} />
-            ) : displayStudents.length > 0 ? (
-              displayStudents.map((student) => {
-                const checked = selectedIds.has(student.id);
-                return (
-                  <TouchableOpacity
-                    key={student.id}
-                    style={styles.studentRow}
-                    onPress={() => toggleStudent(student.id)}
-                  >
-                    <Checkbox
-                      status={checked ? 'checked' : 'unchecked'}
-                      onPress={() => toggleStudent(student.id)}
-                      color={colors.primary}
-                    />
-                    <Avatar.Text
-                      size={36}
-                      label={getInitials(student.fullName)}
-                      style={styles.studentAvatar}
-                      color={colors.onPrimary}
-                    />
-                    <View style={styles.studentMiddle}>
-                      <Text style={styles.studentName}>{student.fullName}</Text>
-                      <Text style={styles.studentUniversity}>{student.email}</Text>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })
-            ) : (
-              <Text style={styles.emptySubtitle}>
-                {hasPreselection
-                  ? 'None of the selected students matched an eligible scholarship recipient.'
-                  : 'No students registered yet.'}
-              </Text>
-            )}
-          </Card.Content>
-        </Card>
-
-        <Text style={styles.sectionLabel}>Bulk Disbursement</Text>
-        <Card style={styles.card} mode="elevated">
-          <Card.Content>
-            <Text style={styles.fieldLabel}>Amount per Student</Text>
-            <View style={styles.amountContainer}>
-              <Text style={styles.currencySymbol}>$</Text>
-              <NativeTextInput
-                style={styles.amountInput}
-                value={amount}
-                onChangeText={(text: string) => setAmount(text.replace(/[^0-9.]/g, ''))}
-                placeholder="0.00"
-                placeholderTextColor={colors.placeholder}
-                keyboardType="decimal-pad"
-              />
-            </View>
-
-            <Text style={styles.fieldLabel}>Category Lock</Text>
-            <CategorySelectorGrid
-              value={category}
-              onChange={setCategory}
-              categories={DISBURSEMENT_LOCK_CATEGORIES}
-            />
-
-            <Button
-              mode="contained"
-              buttonColor={colors.primary}
-              icon="send-outline"
-              disabled={!canSend}
-              loading={isSending}
-              style={styles.sendButton}
-              contentStyle={styles.sendButtonContent}
-              onPress={handleSendDisbursement}
+      <View style={styles.tabBar}>
+        {TABS.map((tab) => {
+          const active = activeTab === tab.key;
+          return (
+            <TouchableRipple
+              key={tab.key}
+              onPress={() => setActiveTab(tab.key)}
+              style={[styles.tabItem, active && styles.tabItemActive]}
             >
-              Send Disbursement
-            </Button>
-          </Card.Content>
-        </Card>
+              <Text
+                style={[styles.tabLabel, active && styles.tabLabelActive]}
+                numberOfLines={2}
+              >
+                {tab.label}
+              </Text>
+            </TouchableRipple>
+          );
+        })}
+      </View>
 
-        <Text style={styles.sectionLabel}>Disbursement History</Text>
-        {disbursements.length > 0 ? (
-          disbursements.map((tx) => {
-            const cat = categoryLookup.get(tx.category.toLowerCase() as BudgetCategoryKey);
-            return (
-              <View key={tx.id} style={styles.historyRow}>
-                <IconBadge icon={cat?.icon ?? 'wallet-outline'} color={cat?.color ?? colors.primary} size={40} />
-                <View style={styles.historyMiddle}>
-                  <Text style={styles.historyTitle}>
-                    {cat?.label ?? 'Payment'} • ${Number(tx.amount).toFixed(2)}
-                  </Text>
-                  <Text style={styles.historySubtitle}>
-                    {tx.receiverName ? `To: ${tx.receiverName} • ` : ''}
-                    {formatDate(tx.createdAt)}
-                  </Text>
-                </View>
-                <Text style={styles.historyAmount}>${Number(tx.amount).toFixed(2)}</Text>
-              </View>
-            );
-          })
-        ) : (
-          <Card style={styles.card} mode="elevated">
-            <Card.Content style={styles.emptyState}>
-              <Avatar.Icon
-                icon="send-outline"
-                size={48}
-                style={styles.emptyIcon}
-                color={colors.primary}
-              />
-              <Text style={styles.emptyTitle}>No disbursements yet</Text>
-              <Text style={styles.emptySubtitle}>Sent disbursements will show up here.</Text>
-            </Card.Content>
-          </Card>
-        )}
-
-        <Text style={styles.sectionLabel}>Reports</Text>
-        <Card style={styles.card} mode="elevated">
-          <Card.Content>
-            <View style={styles.reportRow}>
-              <Text style={styles.reportLabel}>Total Disbursed</Text>
-              <Text style={styles.reportValue}>${reports.totalDisbursed.toFixed(2)}</Text>
-            </View>
-            <View style={styles.reportRow}>
-              <Text style={styles.reportLabel}>Students Funded</Text>
-              <Text style={styles.reportValue}>{reports.studentsFunded}</Text>
-            </View>
-            <View style={styles.reportRow}>
-              <Text style={styles.reportLabel}>Top Category</Text>
-              {reports.topCategory ? (
-                <Chip
-                  compact
-                  style={[styles.reportChip, { backgroundColor: `${reports.topCategory.color}1F` }]}
-                  textStyle={{ color: reports.topCategory.color, fontWeight: '700', fontSize: 11 }}
-                >
-                  {reports.topCategory.label}
-                </Chip>
-              ) : (
-                <Text style={styles.reportValue}>—</Text>
-              )}
-            </View>
-          </Card.Content>
-        </Card>
-      </ScrollView>
-
-      <Snackbar
-        visible={snackbarMessage !== null}
-        onDismiss={() => setSnackbarMessage(null)}
-        duration={2500}
-      >
-        {snackbarMessage ?? ''}
-      </Snackbar>
+      {activeTab === 'students' && (
+        <UniversityStudentsTab onProceedToPortal={() => setActiveTab('portal')} />
+      )}
+      {activeTab === 'portal' && <ScholarshipPortalTab />}
+      {activeTab === 'individual' && <IndividualFundingTab />}
     </SafeAreaView>
   );
 }
@@ -341,163 +66,39 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingTop: 12,
+    paddingBottom: 4,
   },
   headerTitle: {
     fontWeight: '700',
     color: colors.heading,
   },
-  content: {
-    paddingHorizontal: 20,
-    paddingBottom: 32,
-  },
-  preselectionBanner: {
+  tabBar: {
+    flexDirection: 'row',
+    marginHorizontal: 20,
+    marginTop: 12,
     backgroundColor: colors.surface,
     borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
+    padding: 4,
   },
-  preselectionBannerText: {
-    fontSize: 12,
-    color: colors.label,
-    lineHeight: 18,
-  },
-  errorText: {
-    color: colors.danger,
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.label,
-    marginBottom: 10,
-  },
-  card: {
-    borderRadius: 16,
-    marginBottom: 24,
-  },
-  studentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-  },
-  studentAvatar: {
-    backgroundColor: colors.primary,
-    marginLeft: 4,
-  },
-  studentMiddle: {
+  tabItem: {
     flex: 1,
-    marginLeft: 12,
-  },
-  studentName: {
-    fontWeight: '700',
-    color: colors.heading,
-    fontSize: 14,
-  },
-  studentUniversity: {
-    fontSize: 12,
-    color: colors.muted,
-    marginTop: 2,
-  },
-  fieldLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.label,
-    marginBottom: 10,
-    marginTop: 4,
-  },
-  amountContainer: {
-    flexDirection: 'row',
+    borderRadius: 9,
+    paddingVertical: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    marginBottom: 8,
   },
-  currencySymbol: {
-    fontSize: 28,
+  tabItemActive: {
+    backgroundColor: colors.primary,
+  },
+  tabLabel: {
+    fontSize: 11,
     fontWeight: '700',
-    color: colors.heading,
-    marginRight: 4,
-  },
-  amountInput: {
-    fontSize: 36,
-    fontWeight: '800',
-    color: colors.heading,
-    minWidth: 100,
+    color: colors.muted,
     textAlign: 'center',
-    padding: 0,
   },
-  sendButton: {
-    borderRadius: 10,
-    marginTop: 8,
-  },
-  sendButtonContent: {
-    paddingVertical: 6,
-  },
-  historyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 10,
-  },
-  historyMiddle: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  historyTitle: {
-    fontWeight: '700',
-    color: colors.heading,
-    fontSize: 13,
-  },
-  historySubtitle: {
-    fontSize: 12,
-    color: colors.muted,
-    marginTop: 2,
-  },
-  historyAmount: {
-    fontWeight: '700',
-    color: colors.heading,
-    fontSize: 14,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 20,
-  },
-  emptyIcon: {
-    backgroundColor: colors.background,
-    marginBottom: 10,
-  },
-  emptyTitle: {
-    fontWeight: '700',
-    color: colors.heading,
-    marginBottom: 4,
-  },
-  emptySubtitle: {
-    color: colors.muted,
-  },
-  reportRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  reportLabel: {
-    fontSize: 13,
-    color: colors.muted,
-  },
-  reportValue: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.heading,
-  },
-  reportChip: {
-    height: 26,
+  tabLabelActive: {
+    color: colors.onPrimary,
   },
 });

@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useToast } from '../context/ToastContext';
+import { ProductThumbnail } from '../components/ProductThumbnail';
 
 export function CartPage() {
   const { items, subtotal, removeFromCart, updateQuantity } = useCart();
@@ -46,9 +47,11 @@ export function CartPage() {
               key={item.id}
               className="flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
             >
-              <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary-100 to-primary-50 text-3xl">
-                📦
-              </div>
+              <ProductThumbnail
+                src={item.image}
+                alt={item.name}
+                className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-primary-100 to-primary-50 text-3xl"
+              />
               <div className="flex-1">
                 <h3 className="font-semibold text-slate-900">{item.name}</h3>
                 <p className="text-sm text-slate-500">{item.description}</p>

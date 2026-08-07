@@ -163,6 +163,12 @@ export default function RegisterScreen({ navigation }: RootStackScreenProps<'Reg
             importantForAutofill="no"
             textContentType="oneTimeCode"
             left={<TextInput.Icon icon="lock-check-outline" />}
+            right={
+              <TextInput.Icon
+                icon={secure ? 'eye-off-outline' : 'eye-outline'}
+                onPress={() => setSecure((v) => !v)}
+              />
+            }
             outlineColor={colors.border}
             activeOutlineColor={colors.primary}
             style={styles.input}

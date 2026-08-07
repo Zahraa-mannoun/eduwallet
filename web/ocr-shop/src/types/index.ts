@@ -9,6 +9,9 @@ export interface Product {
   name: string;
   description: string;
   price: number;
+  // Path under public/images/ — falls back to a 📦 placeholder (ProductThumbnail) if the
+  // file isn't there yet.
+  image: string;
 }
 
 export interface CartItem extends Product {
