@@ -37,9 +37,11 @@ export type UniversityStudentSummary = {
 };
 
 // Sums every completed transfer into this student's wallet(s) sent by a user of the given
-// role — "received" (INSTITUTION) and "parentSent" (PARENT) both funnel through this, since
-// the only thing distinguishing scholarship money from a parent's locked transfer is who sent
-// it (fromWallet.user.userType), not anything recorded on the wallet/LockedFund itself.
+// role — "received" (INSTITUTION) funnels through this, since institution scholarships can
+// legitimately cover any category. Not used for "parentSent" (see getParentEducationSent
+// below) — a parent's locked transfers include everyday categories (FOOD, TRANSPORT,
+// LIFESTYLE, RENT, ...) that have nothing to do with covering tuition, so counting all of
+// them would overstate how much of totalCreditCost the parent has actually funded.
 async function getTransfersFromRole(
   userId: string,
   senderRole: 'INSTITUTION' | 'PARENT'
@@ -55,6 +57,35 @@ async function getTransfersFromRole(
       toWalletId: { in: walletIds },
       status: { in: ['AUTO_APPROVED', 'APPROVED'] },
       fromWallet: { user: { userType: senderRole } },
+    },
+    _sum: { amount: true },
+  });
+
+  return Number(aggregate._sum.amount ?? 0);
+}
+
+// The education categories an institution scholarship can also fund — TUITION/BOOKS/SOFTWARE
+// only, deliberately excluding FOOD/TRANSPORT/LIFESTYLE/RENT/GENERAL/PERSONAL_SAVINGS.
+const EDUCATION_CATEGORIES = ['TUITION', 'BOOKS', 'SOFTWARE'] as const;
+
+// "Parent sent" toward this student's funding gap — unlike getTransfersFromRole(), this only
+// counts transfers in an education category. LockedFund itself carries no record of who
+// locked it (parent transfer and institution disbursement both upsert the same row, see
+// schema.prisma's LockedFund comment), so Transaction — which does record the sender — is the
+// only place this can be computed from.
+async function getParentEducationSent(userId: string): Promise<number> {
+  const wallets = await prisma.wallet.findMany({ where: { userId }, select: { id: true } });
+  const walletIds = wallets.map((wallet) => wallet.id);
+  if (walletIds.length === 0) {
+    return 0;
+  }
+
+  const aggregate = await prisma.transaction.aggregate({
+    where: {
+      toWalletId: { in: walletIds },
+      status: { in: ['AUTO_APPROVED', 'APPROVED'] },
+      category: { in: [...EDUCATION_CATEGORIES] },
+      fromWallet: { user: { userType: 'PARENT' } },
     },
     _sum: { amount: true },
   });
@@ -80,7 +111,7 @@ export async function getVerifiedUniversityStudents(): Promise<UniversityStudent
       const totalCreditCost = Number(student.totalCreditCost);
       const [received, parentSent] = await Promise.all([
         getTransfersFromRole(userId, 'INSTITUTION'),
-        getTransfersFromRole(userId, 'PARENT'),
+        getParentEducationSent(userId),
       ]);
 
       return {
