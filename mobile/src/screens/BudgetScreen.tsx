@@ -13,7 +13,7 @@ import {
 } from 'react-native-paper';
 import type { BudgetCategory, TransactionCategory } from '../types/api';
 import IconBadge from '../components/IconBadge';
-import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
+import { VISIBLE_BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryDefinition, BudgetCategoryKey } from '../constants/budgetCategories';
 import { colors } from '../theme/colors';
 import { useWallet } from '../context/WalletContext';
@@ -192,7 +192,7 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        {BUDGET_CATEGORIES.map((category) => {
+        {VISIBLE_BUDGET_CATEGORIES.map((category) => {
           const { total: lockedTotal, remaining: lockedRemaining } = lockedFundFor(category);
           const budget = budgetFor(category);
           const spent = budget ? Number(budget.spent) : 0;

@@ -8,7 +8,7 @@ import type { Transaction } from '../types/api';
 import CategorySpendBarRow from '../components/CategorySpendBarRow';
 import CircularProgress from '../components/CircularProgress';
 import IconBadge from '../components/IconBadge';
-import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
+import { BUDGET_CATEGORIES, VISIBLE_BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryKey } from '../constants/budgetCategories';
 import { useWallet } from '../context/WalletContext';
 import { colors } from '../theme/colors';
@@ -97,7 +97,7 @@ export default function AIAssistantScreen({ navigation }: RootStackScreenProps<'
   const scoreMeta = getHealthScoreMeta(healthScore);
 
   const predictedSpending = useMemo(() => {
-    const withPredictions = BUDGET_CATEGORIES.map((category) => {
+    const withPredictions = VISIBLE_BUDGET_CATEGORIES.map((category) => {
       const current = spendTotals.get(category.key) ?? 0;
       return { ...category, predicted: current * PREDICTION_GROWTH_RATE };
     });

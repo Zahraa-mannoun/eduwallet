@@ -1,7 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 import { Text, TouchableRipple } from 'react-native-paper';
 import IconBadge from './IconBadge';
-import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
+import { VISIBLE_BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryDefinition } from '../constants/budgetCategories';
 import { colors } from '../theme/colors';
 
@@ -14,7 +14,7 @@ type CategorySelectorGridProps = Readonly<{
 export default function CategorySelectorGrid({
   value,
   onChange,
-  categories = BUDGET_CATEGORIES,
+  categories = VISIBLE_BUDGET_CATEGORIES,
 }: CategorySelectorGridProps) {
   return (
     <View style={styles.grid}>

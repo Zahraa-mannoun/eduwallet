@@ -6,7 +6,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, Avatar, Badge, Button, Card, IconButton, Text } from 'react-native-paper';
 import type { Transaction, TransactionCategory } from '../types/api';
 import IconBadge from '../components/IconBadge';
-import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
+import { BUDGET_CATEGORIES, VISIBLE_BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryDefinition, BudgetCategoryKey } from '../constants/budgetCategories';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationsContext';
@@ -86,7 +86,12 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
   );
 
   const lockedCategoryRows = lockedFunds
-    .filter((fund) => fund.category !== 'GENERAL' && Number(fund.amount) > 0)
+    .filter(
+      (fund) =>
+        fund.category !== 'GENERAL' &&
+        fund.category !== 'PERSONAL_SAVINGS' &&
+        Number(fund.amount) > 0
+    )
     .map((fund) => ({
       category: categoryLookup.get(fund.category.toLowerCase() as BudgetCategoryKey),
       amount: Number(fund.amount),
@@ -271,7 +276,7 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
                 Spending Permissions
               </Text>
 
-              {BUDGET_CATEGORIES.filter((category) => category.key !== 'general').map(
+              {VISIBLE_BUDGET_CATEGORIES.filter((category) => category.key !== 'general').map(
                 (category) => {
                   const txCategory = category.key.toUpperCase() as TransactionCategory;
                   const isAllowed = myPermissions.allowedCategories.includes(txCategory);
