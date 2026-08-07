@@ -5,6 +5,7 @@ import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { AddFundsModal } from '../components/AddFundsModal';
 import { SuspendModal } from '../components/SuspendModal';
+import { UnsuspendModal } from '../components/UnsuspendModal';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { formatDate } from '../lib/format';
 import type { AdminUser } from '../types/admin';
@@ -17,9 +18,9 @@ export function Parents() {
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [busyUserId, setBusyUserId] = useState<string | null>(null);
   const [fundsUser, setFundsUser] = useState<AdminUser | null>(null);
   const [suspendTarget, setSuspendTarget] = useState<AdminUser | null>(null);
+  const [unsuspendTarget, setUnsuspendTarget] = useState<AdminUser | null>(null);
 
   const limit = 20;
 
@@ -59,19 +60,11 @@ export function Parents() {
     void loadUsers();
   };
 
-  const toggleSuspend = async (user: AdminUser) => {
-    if (!user.suspended) {
+  const handleSuspendToggleClick = (user: AdminUser) => {
+    if (user.suspended) {
+      setUnsuspendTarget(user);
+    } else {
       setSuspendTarget(user);
-      return;
-    }
-    setBusyUserId(user.id);
-    try {
-      await api.patch(`/admin/users/${user.id}/unsuspend`);
-      await loadUsers();
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setBusyUserId(null);
     }
   };
 
@@ -151,8 +144,7 @@ export function Parents() {
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        disabled={busyUserId === user.id}
-                        onClick={() => void toggleSuspend(user)}
+                        onClick={() => handleSuspendToggleClick(user)}
                         className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                       >
                         {user.suspended ? 'Unsuspend' : 'Suspend'}
@@ -215,6 +207,17 @@ export function Parents() {
           onClose={() => setSuspendTarget(null)}
           onDone={() => {
             setSuspendTarget(null);
+            void loadUsers();
+          }}
+        />
+      )}
+
+      {unsuspendTarget && (
+        <UnsuspendModal
+          user={unsuspendTarget}
+          onClose={() => setUnsuspendTarget(null)}
+          onDone={() => {
+            setUnsuspendTarget(null);
             void loadUsers();
           }}
         />

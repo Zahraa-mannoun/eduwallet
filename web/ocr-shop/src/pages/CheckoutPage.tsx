@@ -18,13 +18,32 @@ interface CategoryGroup {
 // unrelated later checkout.
 const PAID_CATEGORIES_KEY = 'ocrshop_checkout_paid_categories';
 
-function loadPaidCategories(): Set<Category> {
+// Identifies the exact cart contents a stored "paid" record applies to. If the cart changes
+// (items added/removed, quantities changed) between an abandoned partial checkout and a
+// later visit, the signature won't match and the stale record is discarded — otherwise a
+// category paid for in one cart would incorrectly be treated as already paid in a
+// different, later cart that happens to reuse the same category.
+function cartSignature(items: CartItem[]): string {
+  return items
+    .map((item) => `${item.id}:${item.quantity}`)
+    .sort()
+    .join('|');
+}
+
+function loadPaidCategories(signature: string): Set<Category> {
   try {
     const raw = sessionStorage.getItem(PAID_CATEGORIES_KEY);
     if (!raw) return new Set();
     const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return new Set();
-    return new Set(parsed as Category[]);
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      (parsed as { signature?: unknown }).signature !== signature ||
+      !Array.isArray((parsed as { categories?: unknown }).categories)
+    ) {
+      return new Set();
+    }
+    return new Set((parsed as { categories: Category[] }).categories);
   } catch {
     return new Set();
   }
@@ -61,7 +80,10 @@ export function CheckoutPage() {
   // Snapshot the cart at entry so clearing it on final success doesn't blank this page mid-flow.
   const [checkoutItems] = useState<CartItem[]>(items);
   const groups = useMemo(() => groupByDetectedCategory(checkoutItems), [checkoutItems]);
-  const [paidCategories, setPaidCategories] = useState<Set<Category>>(loadPaidCategories);
+  const signature = useMemo(() => cartSignature(checkoutItems), [checkoutItems]);
+  const [paidCategories, setPaidCategories] = useState<Set<Category>>(() =>
+    loadPaidCategories(signature)
+  );
 
   if (checkoutItems.length === 0) {
     return <Navigate to="/cart" replace />;
@@ -78,7 +100,10 @@ export function CheckoutPage() {
       clearCart();
       sessionStorage.removeItem(PAID_CATEGORIES_KEY);
     } else {
-      sessionStorage.setItem(PAID_CATEGORIES_KEY, JSON.stringify([...next]));
+      sessionStorage.setItem(
+        PAID_CATEGORIES_KEY,
+        JSON.stringify({ signature, categories: [...next] })
+      );
     }
   }
 

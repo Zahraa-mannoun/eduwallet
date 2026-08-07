@@ -4,6 +4,7 @@ import path from 'path';
 import type { EmailChangeRequest, Prisma } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
+import { isUniqueConstraintError } from '../../utils/prismaErrors';
 import { revokeRefreshToken } from '../auth/auth.service';
 import { createNotification } from '../notifications/notifications.service';
 import type { CreateEmailChangeRequestInput } from './email-change.schema';
@@ -63,16 +64,35 @@ export async function requestEmailChange(
   await fs.writeFile(absoluteFilePath, fileBuffer);
   const proofImagePath = path.relative(BACKEND_ROOT, absoluteFilePath);
 
-  const request = await prisma.emailChangeRequest.create({
-    data: {
-      userId,
-      currentEmail: user.email,
-      requestedEmail: input.requestedEmail,
-      reason: input.reason,
-      proofImagePath,
-    },
-    include: requestInclude,
-  });
+  let request: EmailChangeRequestRow;
+  try {
+    // The findFirst check above is a fast-path only — it can't stop two concurrent
+    // submissions from both passing it before either writes. The database-level partial
+    // unique index (email_change_requests_one_pending_per_user — see migration
+    // 20260807120000) is what actually closes that race: a second concurrent create() for
+    // the same still-PENDING user fails with a unique constraint violation, caught below.
+    request = await prisma.$transaction(async (tx) =>
+      tx.emailChangeRequest.create({
+        data: {
+          userId,
+          currentEmail: user.email,
+          requestedEmail: input.requestedEmail,
+          reason: input.reason,
+          proofImagePath,
+        },
+        include: requestInclude,
+      })
+    );
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      throw new AppError(
+        409,
+        'REQUEST_ALREADY_PENDING',
+        'You already have a pending email change request'
+      );
+    }
+    throw error;
+  }
 
   const admins = await prisma.user.findMany({ where: { userType: 'ADMIN' }, select: { id: true } });
   await Promise.all(
@@ -133,6 +153,21 @@ async function getPendingRequestOrThrow(requestId: string): Promise<EmailChangeR
 
 export async function approveRequest(requestId: string): Promise<EmailChangeRequest> {
   const request = await getPendingRequestOrThrow(requestId);
+
+  const user = await prisma.user.findUnique({ where: { id: request.userId } });
+  if (!user) {
+    throw new AppError(404, 'USER_NOT_FOUND', 'User not found');
+  }
+  // Guards against approving a request whose currentEmail snapshot is now stale — e.g. a
+  // second once-concurrent PENDING request for the same user (see requestEmailChange's
+  // race-closing unique index) that was created against an email that has since changed.
+  if (request.currentEmail !== user.email) {
+    throw new AppError(
+      409,
+      'REQUEST_STALE',
+      "This request no longer matches the user's current email and can't be approved"
+    );
+  }
 
   const emailTaken = await prisma.user.findUnique({ where: { email: request.requestedEmail } });
   if (emailTaken) {

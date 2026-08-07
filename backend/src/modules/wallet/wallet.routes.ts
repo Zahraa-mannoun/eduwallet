@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { authenticate } from '../../middleware/authenticate';
+import { requireRole } from '../../middleware/requireRole';
 import { requireVerifiedKYC } from '../../middleware/requireVerifiedKYC';
 import {
   getTransactionByIdHandler,
@@ -18,7 +19,7 @@ export default async function walletRoutes(fastify: FastifyInstance): Promise<vo
   fastify.addHook('preHandler', authenticate);
 
   fastify.get('/', { config: { rateLimit: READ_RATE_LIMIT } }, getWalletHandler);
-  fastify.post('/topup', topUpHandler);
+  fastify.post('/topup', { preHandler: requireRole('ADMIN') }, topUpHandler);
   fastify.post('/transfer', { preHandler: requireVerifiedKYC }, transferHandler);
   fastify.get('/transactions', { config: { rateLimit: READ_RATE_LIMIT } }, getTransactionsHandler);
   fastify.get(

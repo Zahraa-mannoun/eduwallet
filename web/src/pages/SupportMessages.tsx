@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
+import { UnsuspendModal } from '../components/UnsuspendModal';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { formatDateTime } from '../lib/format';
 import type { SupportMessageRow } from '../types/admin';
@@ -19,6 +20,7 @@ export function SupportMessages() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [busyMessageId, setBusyMessageId] = useState<string | null>(null);
+  const [unsuspendTarget, setUnsuspendTarget] = useState<SupportMessageRow | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -50,18 +52,6 @@ export function SupportMessages() {
     setBusyMessageId(message.id);
     try {
       await api.patch(`/support/messages/${message.id}/read`);
-      await load();
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setBusyMessageId(null);
-    }
-  };
-
-  const unsuspend = async (message: SupportMessageRow) => {
-    setBusyMessageId(message.id);
-    try {
-      await api.patch(`/admin/users/${message.user.id}/unsuspend`);
       await load();
     } catch (err) {
       setError(getErrorMessage(err));
@@ -176,8 +166,7 @@ export function SupportMessages() {
                         {message.user.suspended ? (
                           <button
                             type="button"
-                            disabled={busyMessageId === message.id}
-                            onClick={() => void unsuspend(message)}
+                            onClick={() => setUnsuspendTarget(message)}
                             className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-40"
                           >
                             Unsuspend
@@ -193,6 +182,17 @@ export function SupportMessages() {
           </tbody>
         </table>
       </div>
+      )}
+
+      {unsuspendTarget && (
+        <UnsuspendModal
+          user={unsuspendTarget.user}
+          onClose={() => setUnsuspendTarget(null)}
+          onDone={() => {
+            setUnsuspendTarget(null);
+            void load();
+          }}
+        />
       )}
     </div>
   );

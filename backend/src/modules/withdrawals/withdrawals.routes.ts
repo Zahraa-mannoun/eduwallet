@@ -16,6 +16,8 @@ import {
 // Read-only endpoints are polled by useFocusEffect on tab-switch — same allowance as
 // budget/wallet/savings.
 const READ_RATE_LIMIT = { max: 60, timeWindow: '1 minute' };
+// Financial write endpoint (dispenses real cash) — tighter than the global 100/min default.
+const PROCESS_RATE_LIMIT = { max: 10, timeWindow: '1 minute' };
 
 export default async function withdrawalsRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.addHook('preHandler', authenticate);
@@ -57,7 +59,11 @@ export default async function withdrawalsRoutes(fastify: FastifyInstance): Promi
       { config: { rateLimit: READ_RATE_LIMIT } },
       lookupStudentHandler
     );
-    agentScope.post('/process', processWithdrawalHandler);
+    agentScope.post(
+      '/process',
+      { config: { rateLimit: PROCESS_RATE_LIMIT } },
+      processWithdrawalHandler
+    );
     // Finishes a request that already cleared the parent-approval exception (status
     // APPROVED) — the normal case is dispensed directly by POST /process instead.
     agentScope.patch('/:id/complete', completeWithdrawalHandler);

@@ -1,6 +1,6 @@
-import { randomUUID } from 'crypto';
-import { promises as fs } from 'fs';
-import path from 'path';
+import { randomUUID } from 'node:crypto';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import type {
   ReceiptVerificationStatus,
   TransactionCategory,
@@ -11,6 +11,7 @@ import type {
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
 import { createNotification } from '../notifications/notifications.service';
+import { runAllChecks } from '../wallet/fraud.service';
 import type { ProcessWithdrawalInput } from './withdrawals.schema';
 
 // backend/src/modules/withdrawals -> backend (three levels up), same resolution as
@@ -163,7 +164,7 @@ async function disburse(
   amount: number,
   existingRequestId?: string
 ): Promise<{ request: WithdrawalRequest; newBalance: string }> {
-  const { request, newBalance } = await prisma.$transaction(async (tx) => {
+  const { request, newBalance, transaction } = await prisma.$transaction(async (tx) => {
     // Same guarded decrement pattern as cards.service.ts useCard() — GENERAL never has a
     // LockedFund row, so only locked categories touch it.
     if (category !== 'GENERAL') {
@@ -217,9 +218,30 @@ async function disburse(
       },
     });
 
+    // Feeds fraud monitoring the same way card payments and transfers do — cash leaving the
+    // wallet with no toWalletId, mirroring a merchant card payment (cards.service.ts useCard()).
+    const createdTransaction = await tx.transaction.create({
+      data: {
+        fromWalletId: wallet.id,
+        toWalletId: null,
+        amount,
+        currency: wallet.currency,
+        category,
+        status: 'AUTO_APPROVED',
+        note: 'Cash withdrawal',
+        receiverName: 'Cash Withdrawal',
+      },
+    });
+
     const updatedWallet = await tx.wallet.findUniqueOrThrow({ where: { id: wallet.id } });
-    return { request: completedRequest, newBalance: formatMoney(updatedWallet.balance) };
+    return {
+      request: completedRequest,
+      newBalance: formatMoney(updatedWallet.balance),
+      transaction: createdTransaction,
+    };
   });
+
+  await runAllChecks(transaction);
 
   await createNotification(
     wallet.userId,
@@ -262,6 +284,18 @@ export async function processWithdrawal(
   input: ProcessWithdrawalInput
 ): Promise<ProcessWithdrawalResult> {
   const student = await findStudentUser(input);
+
+  // Same gate as every other spend path (cards.service.ts createCard/useCard, wallet.service.ts
+  // transfer()) — cash withdrawal is real money leaving the wallet and shouldn't be reachable
+  // before the student's university KYC is verified.
+  if (student.kycStatus !== 'VERIFIED') {
+    throw new AppError(
+      403,
+      'KYC_REQUIRED',
+      'This student must complete university KYC verification before cash can be withdrawn'
+    );
+  }
+
   const wallet = await getPrimaryWallet(student.id);
   const parentalControl = await prisma.parentalControl.findFirst({
     where: { studentUserId: student.id },
