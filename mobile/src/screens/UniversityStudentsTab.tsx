@@ -108,6 +108,10 @@ export default function UniversityStudentsTab({
       >
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
+        {students.length > 0 ? (
+          <Text style={styles.universityHeader}>{students[0].universityName} — Verified Students</Text>
+        ) : null}
+
         <Text style={styles.sectionLabel}>
           Verified Students {selectedIds.size > 0 ? `(${selectedIds.size} selected)` : ''}
         </Text>
@@ -131,9 +135,21 @@ export default function UniversityStudentsTab({
                     <Text style={styles.studentName}>{student.fullName}</Text>
                     <Text style={styles.studentSubtitle}>#{student.studentNumber}</Text>
                     <Text style={styles.studentStat}>
-                      Total Credit Cost:{' '}
+                      Total Cost:{' '}
                       <Text style={styles.studentStatValue}>
                         ${Number(student.totalCreditCost).toFixed(2)}
+                      </Text>
+                      {'  ·  '}Parent:{' '}
+                      <Text style={styles.studentStatValue}>
+                        ${Number(student.parentSent).toFixed(2)}
+                      </Text>
+                      {'  ·  '}Institution:{' '}
+                      <Text style={styles.studentStatValue}>
+                        ${Number(student.received).toFixed(2)}
+                      </Text>
+                      {'  ·  '}Gap:{' '}
+                      <Text style={styles.studentStatValue}>
+                        ${Number(student.fundingGap).toFixed(2)}
                       </Text>
                     </Text>
                     {status ? (
@@ -233,6 +249,12 @@ const styles = StyleSheet.create({
     color: colors.danger,
     textAlign: 'center',
     marginBottom: 12,
+  },
+  universityHeader: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.heading,
+    marginBottom: 4,
   },
   sectionLabel: {
     fontSize: 13,

@@ -28,17 +28,22 @@ export type UniversityStudentSummary = {
   studentNumber: string;
   fullName: string;
   email: string;
+  universityName: string;
   totalCreditCost: string;
   courses: UniversityStudentCourse[];
   received: string;
+  parentSent: string;
   fundingGap: string;
 };
 
-// "Received" is the running total of every institution-to-student transfer that ever landed
-// in this wallet — a transaction counts as scholarship money by virtue of who sent it
-// (fromWallet.user.userType === 'INSTITUTION'), since disbursements are the only path an
-// institution has to move money to a student at all (scholarship.service.ts bulkDisburse()).
-async function getScholarshipReceived(userId: string): Promise<number> {
+// Sums every completed transfer into this student's wallet(s) sent by a user of the given
+// role — "received" (INSTITUTION) and "parentSent" (PARENT) both funnel through this, since
+// the only thing distinguishing scholarship money from a parent's locked transfer is who sent
+// it (fromWallet.user.userType), not anything recorded on the wallet/LockedFund itself.
+async function getTransfersFromRole(
+  userId: string,
+  senderRole: 'INSTITUTION' | 'PARENT'
+): Promise<number> {
   const wallets = await prisma.wallet.findMany({ where: { userId }, select: { id: true } });
   const walletIds = wallets.map((wallet) => wallet.id);
   if (walletIds.length === 0) {
@@ -49,7 +54,7 @@ async function getScholarshipReceived(userId: string): Promise<number> {
     where: {
       toWalletId: { in: walletIds },
       status: { in: ['AUTO_APPROVED', 'APPROVED'] },
-      fromWallet: { user: { userType: 'INSTITUTION' } },
+      fromWallet: { user: { userType: senderRole } },
     },
     _sum: { amount: true },
   });
@@ -63,7 +68,7 @@ async function getScholarshipReceived(userId: string): Promise<number> {
 export async function getVerifiedUniversityStudents(): Promise<UniversityStudentSummary[]> {
   const students = await prisma.universityStudent.findMany({
     where: { userId: { not: null }, user: { kycStatus: 'VERIFIED' }, selection: null },
-    include: { enrolledCourses: true },
+    include: { enrolledCourses: true, university: true },
     orderBy: { fullName: 'asc' },
   });
 
@@ -73,7 +78,10 @@ export async function getVerifiedUniversityStudents(): Promise<UniversityStudent
       // type still widens it to string | null since the filter isn't visible to the type system.
       const userId = student.userId as string;
       const totalCreditCost = Number(student.totalCreditCost);
-      const received = await getScholarshipReceived(userId);
+      const [received, parentSent] = await Promise.all([
+        getTransfersFromRole(userId, 'INSTITUTION'),
+        getTransfersFromRole(userId, 'PARENT'),
+      ]);
 
       return {
         id: student.id,
@@ -81,6 +89,7 @@ export async function getVerifiedUniversityStudents(): Promise<UniversityStudent
         studentNumber: student.studentNumber,
         fullName: student.fullName,
         email: student.email,
+        universityName: student.university.name,
         totalCreditCost: formatMoney(totalCreditCost),
         courses: student.enrolledCourses.map((course) => ({
           id: course.id,
@@ -91,7 +100,8 @@ export async function getVerifiedUniversityStudents(): Promise<UniversityStudent
           semester: course.semester,
         })),
         received: formatMoney(received),
-        fundingGap: formatMoney(Math.max(0, totalCreditCost - received)),
+        parentSent: formatMoney(parentSent),
+        fundingGap: formatMoney(Math.max(0, totalCreditCost - received - parentSent)),
       };
     })
   );

@@ -34,7 +34,7 @@ export const categoryTone: Record<string, BadgeTone> = {
   TRANSPORT: 'orange',
   SOFTWARE: 'blue',
   RENT: 'red',
-  LIFESTYLE: 'gray',
+  LIFESTYLE: 'pink',
   PERSONAL_SAVINGS: 'yellow',
   GENERAL: 'gray',
 };

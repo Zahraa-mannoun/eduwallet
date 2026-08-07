@@ -72,8 +72,9 @@ export default function IndividualFundingTab() {
 
   const parsedAmount = Number(amount);
   const received = selected ? Number(selected.received) : 0;
+  const parentSent = selected ? Number(selected.parentSent) : 0;
   const totalCreditCost = selected ? Number(selected.totalCreditCost) : 0;
-  const projectedTotal = received + parsedAmount;
+  const projectedTotal = received + parentSent + parsedAmount;
   const fundingStatus =
     selected && parsedAmount > 0
       ? projectedTotal >= totalCreditCost
@@ -159,20 +160,28 @@ export default function IndividualFundingTab() {
 
             <View style={styles.profileCard}>
               <Text style={styles.studentName}>{selected.fullName}</Text>
-              <Text style={styles.studentSubtitle}>#{selected.studentNumber}</Text>
+              <Text style={styles.studentSubtitle}>
+                #{selected.studentNumber} · {selected.universityName}
+              </Text>
 
-              <View style={styles.profileStatsRow}>
-                <View style={styles.profileStat}>
-                  <Text style={styles.profileStatLabel}>Total Cost</Text>
-                  <Text style={styles.profileStatValue}>${totalCreditCost.toFixed(2)}</Text>
+              <View style={styles.fundingBreakdown}>
+                <View style={styles.breakdownRow}>
+                  <Text style={styles.breakdownLabel}>Total Cost</Text>
+                  <Text style={styles.breakdownValue}>${totalCreditCost.toFixed(2)}</Text>
                 </View>
-                <View style={styles.profileStat}>
-                  <Text style={styles.profileStatLabel}>Received</Text>
-                  <Text style={styles.profileStatValue}>${received.toFixed(2)}</Text>
+                <View style={styles.breakdownRow}>
+                  <Text style={styles.breakdownLabel}>Parent sent</Text>
+                  <Text style={styles.breakdownValue}>${parentSent.toFixed(2)}</Text>
                 </View>
-                <View style={styles.profileStat}>
-                  <Text style={styles.profileStatLabel}>Gap</Text>
-                  <Text style={styles.profileStatValue}>${Number(selected.fundingGap).toFixed(2)}</Text>
+                <View style={styles.breakdownRow}>
+                  <Text style={styles.breakdownLabel}>Institution</Text>
+                  <Text style={styles.breakdownValue}>${received.toFixed(2)}</Text>
+                </View>
+                <View style={[styles.breakdownRow, styles.breakdownRowLast]}>
+                  <Text style={[styles.breakdownLabel, styles.breakdownGapLabel]}>Gap</Text>
+                  <Text style={[styles.breakdownValue, styles.breakdownGapValue]}>
+                    ${Number(selected.fundingGap).toFixed(2)}
+                  </Text>
                 </View>
               </View>
 
@@ -319,23 +328,36 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 20,
   },
-  profileStatsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  fundingBreakdown: {
     marginTop: 14,
     marginBottom: 4,
   },
-  profileStat: {
-    alignItems: 'flex-start',
+  breakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
-  profileStatLabel: {
-    fontSize: 11,
+  breakdownRowLast: {
+    borderBottomWidth: 0,
+  },
+  breakdownLabel: {
+    fontSize: 12,
     color: colors.muted,
   },
-  profileStatValue: {
+  breakdownValue: {
     fontSize: 14,
     fontWeight: '700',
     color: colors.heading,
+  },
+  breakdownGapLabel: {
+    fontWeight: '700',
+    color: colors.heading,
+  },
+  breakdownGapValue: {
+    color: colors.primary,
     marginTop: 2,
   },
   coursesLabel: {

@@ -269,9 +269,11 @@ export type UniversityStudentSummary = {
   studentNumber: string;
   fullName: string;
   email: string;
+  universityName: string;
   totalCreditCost: string;
   courses: UniversityStudentCourse[];
   received: string;
+  parentSent: string;
   fundingGap: string;
 };
 
