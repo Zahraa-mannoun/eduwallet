@@ -38,6 +38,8 @@ export type FraudSeverity = 'LOW' | 'MEDIUM' | 'HIGH';
 
 export type SupportMessageStatus = 'UNREAD' | 'READ';
 
+export type SupportMessageType = 'SUSPENSION_APPEAL' | 'GENERAL';
+
 export type SavingsHistoryType =
   | 'ROLLOVER'
   | 'WITHDRAWAL_REQUEST'
@@ -80,7 +82,9 @@ export type User = {
 export type SupportMessage = {
   id: string;
   userId: string;
+  subject: string | null;
   message: string;
+  type: SupportMessageType;
   status: SupportMessageStatus;
   createdAt: string;
 };

@@ -81,6 +81,10 @@ export default function WithdrawalScreen({
     }, [load])
   );
 
+  const receiptsNeeded = withdrawals.filter(
+    (request) => request.status === 'COMPLETED' && !request.receiptPath
+  );
+
   const openReceiptDialog = (request: WithdrawalRequest) => {
     setReceiptTarget(request);
     setReceiptMerchantName('');
@@ -193,6 +197,31 @@ export default function WithdrawalScreen({
       >
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
+        {receiptsNeeded.length > 0 ? (
+          <View style={styles.receiptReminderBanner}>
+            <IconBadge icon="receipt" color={colors.primary} size={36} />
+            <View style={styles.receiptReminderTextBlock}>
+              <Text style={styles.receiptReminderTitle}>
+                {receiptsNeeded.length === 1
+                  ? 'Upload your receipt'
+                  : `Upload ${receiptsNeeded.length} receipts`}
+              </Text>
+              <Text style={styles.receiptReminderSubtitle}>
+                Your agent withdrawal is complete. Upload the receipt so it can be verified.
+              </Text>
+            </View>
+            <Button
+              mode="contained"
+              compact
+              buttonColor={colors.primary}
+              style={styles.receiptReminderButton}
+              onPress={() => openReceiptDialog(receiptsNeeded[0])}
+            >
+              Upload
+            </Button>
+          </View>
+        ) : null}
+
         <View style={styles.infoBanner}>
           <Text style={styles.infoBannerText}>
             Visit an agent in person to withdraw cash from your locked or free balance. Your
@@ -294,6 +323,35 @@ const styles = StyleSheet.create({
     padding: 12,
     marginTop: 12,
     marginBottom: 20,
+  },
+  receiptReminderBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: `${colors.primary}14`,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: `${colors.primary}40`,
+    padding: 12,
+    marginTop: 12,
+  },
+  receiptReminderTextBlock: {
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 8,
+  },
+  receiptReminderTitle: {
+    fontWeight: '700',
+    color: colors.heading,
+    fontSize: 13,
+  },
+  receiptReminderSubtitle: {
+    fontSize: 11,
+    color: colors.label,
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  receiptReminderButton: {
+    borderRadius: 20,
   },
   infoBannerText: {
     fontSize: 12,

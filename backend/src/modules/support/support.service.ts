@@ -2,7 +2,7 @@ import type { SupportMessage } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
 import { createNotification } from '../notifications/notifications.service';
-import type { SendSupportMessageInput } from './support.schema';
+import type { SendGeneralSupportMessageInput, SendSupportMessageInput } from './support.schema';
 
 const supportMessageUserSelect = {
   select: { id: true, fullName: true, email: true, userType: true, suspended: true },
@@ -19,7 +19,7 @@ export async function sendSupportMessage(input: SendSupportMessageInput): Promis
   }
 
   const message = await prisma.supportMessage.create({
-    data: { userId: sender.id, message: input.message },
+    data: { userId: sender.id, message: input.message, type: 'SUSPENSION_APPEAL' },
   });
 
   const admins = await prisma.user.findMany({
@@ -32,6 +32,39 @@ export async function sendSupportMessage(input: SendSupportMessageInput): Promis
         admin.id,
         'New Support Message',
         `${sender.fullName} sent a support message.`,
+        'SUPPORT_MESSAGE'
+      )
+    )
+  );
+
+  return message;
+}
+
+// Authenticated, any role — reached from Profile > Help & Support, unlike sendSupportMessage
+// above which exists specifically for suspended users with no session at all.
+export async function sendGeneralSupportMessage(
+  userId: string,
+  input: SendGeneralSupportMessageInput
+): Promise<SupportMessage> {
+  const sender = await prisma.user.findUnique({ where: { id: userId } });
+  if (!sender) {
+    throw new AppError(404, 'USER_NOT_FOUND', 'User not found');
+  }
+
+  const message = await prisma.supportMessage.create({
+    data: { userId: sender.id, subject: input.subject, message: input.message, type: 'GENERAL' },
+  });
+
+  const admins = await prisma.user.findMany({
+    where: { userType: 'ADMIN' },
+    select: { id: true },
+  });
+  await Promise.all(
+    admins.map((admin) =>
+      createNotification(
+        admin.id,
+        'New Support Message',
+        `${sender.fullName} sent a support message: ${input.subject}`,
         'SUPPORT_MESSAGE'
       )
     )

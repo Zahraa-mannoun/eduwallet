@@ -61,6 +61,17 @@ export async function linkStudent(
     throw new AppError(409, 'ALREADY_LINKED', 'You are already linked to this student');
   }
 
+  const existingLinkToAnyParent = await prisma.parentalControl.findFirst({
+    where: { studentUserId: student.id },
+  });
+  if (existingLinkToAnyParent) {
+    throw new AppError(
+      409,
+      'STUDENT_ALREADY_LINKED',
+      'This student is already linked to a parent.'
+    );
+  }
+
   let link: ParentalControl;
   try {
     link = await prisma.parentalControl.create({

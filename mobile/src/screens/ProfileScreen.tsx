@@ -39,7 +39,6 @@ const renderRightWithBadge = (badge?: { label: string; color: string }) => (prop
 const STATIC_PROFILE_MENU_ITEMS = [
   { title: 'Security & 2FA', icon: 'shield-check-outline' },
   { title: 'Notifications', icon: 'bell-outline' },
-  { title: 'Help & Support', icon: 'help-circle-outline' },
 ] as const;
 
 const KYC_BADGES: Record<EffectiveKYCStatus, { label: string; color: string }> = {
@@ -143,6 +142,11 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
       onPress: () => navigation.navigate('AccountSettings'),
     },
     ...STATIC_PROFILE_MENU_ITEMS,
+    {
+      title: 'Help & Support',
+      icon: 'help-circle-outline',
+      onPress: () => navigation.navigate('HelpSupport'),
+    },
   ] as const;
 
   return (

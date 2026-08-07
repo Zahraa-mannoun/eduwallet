@@ -25,6 +25,11 @@ enum SupportMessageStatus {
   READ
 }
 
+enum SupportMessageType {
+  SUSPENSION_APPEAL
+  GENERAL
+}
+
 enum Currency {
   USD
   EUR
@@ -173,7 +178,9 @@ model User {
 model SupportMessage {
   id        String               @id @default(uuid())
   userId    String
+  subject   String?
   message   String
+  type      SupportMessageType   @default(SUSPENSION_APPEAL)
   status    SupportMessageStatus @default(UNREAD)
   createdAt DateTime             @default(now())
 

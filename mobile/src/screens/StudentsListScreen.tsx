@@ -17,7 +17,7 @@ import {
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { TransactionCategory } from '../types/api';
-import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
+import { BUDGET_CATEGORIES, LOCKABLE_BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import { colors } from '../theme/colors';
 import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
 import * as parentalService from '../services/parentalService';
@@ -64,7 +64,7 @@ type CategoryChipsSelectorProps = Readonly<{
 function CategoryChipsSelector({ selected, onToggle }: CategoryChipsSelectorProps) {
   return (
     <View style={styles.categoryChipsRow}>
-      {BUDGET_CATEGORIES.map((category) => {
+      {LOCKABLE_BUDGET_CATEGORIES.map((category) => {
         const txCategory = category.key.toUpperCase() as TransactionCategory;
         const isSelected = selected.has(txCategory);
         return (

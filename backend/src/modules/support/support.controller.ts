@@ -1,8 +1,17 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { AppError } from '../../utils/AppError';
 import { errorResponse, successResponse } from '../../utils/apiResponse';
-import { sendSupportMessageSchema, supportMessageIdParamsSchema } from './support.schema';
-import { getSupportMessages, markSupportMessageRead, sendSupportMessage } from './support.service';
+import {
+  sendGeneralSupportMessageSchema,
+  sendSupportMessageSchema,
+  supportMessageIdParamsSchema,
+} from './support.schema';
+import {
+  getSupportMessages,
+  markSupportMessageRead,
+  sendGeneralSupportMessage,
+  sendSupportMessage,
+} from './support.service';
 
 function handleSupportError(request: FastifyRequest, reply: FastifyReply, error: unknown) {
   if (error instanceof AppError) {
@@ -32,6 +41,26 @@ export async function sendSupportMessageHandler(request: FastifyRequest, reply: 
   try {
     // Public route — no request.authUser here, the email in the body identifies the sender.
     const message = await sendSupportMessage(parsed.data);
+    return reply.status(201).send(successResponse(message));
+  } catch (error) {
+    return handleSupportError(request, reply, error);
+  }
+}
+
+export async function sendGeneralSupportMessageHandler(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  const parsed = sendGeneralSupportMessageSchema.safeParse(request.body);
+  if (!parsed.success) {
+    return reply
+      .status(400)
+      .send(errorResponse(parsed.error.issues[0]?.message ?? 'Invalid input', 'VALIDATION_ERROR'));
+  }
+
+  try {
+    const authUser = requireAuthUser(request);
+    const message = await sendGeneralSupportMessage(authUser.id, parsed.data);
     return reply.status(201).send(successResponse(message));
   } catch (error) {
     return handleSupportError(request, reply, error);

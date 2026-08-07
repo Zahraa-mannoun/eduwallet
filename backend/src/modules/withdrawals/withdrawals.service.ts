@@ -128,6 +128,7 @@ export async function getPendingApprovalsForParent(
 export type StudentLookup = {
   user: { id: string; fullName: string; email: string };
   wallet: { id: string; balance: string; currency: string };
+  freeBalance: string;
   lockedFunds: Array<{ category: TransactionCategory; amount: string }>;
   approvalThreshold: string | null;
   allowedCategories: TransactionCategory[] | null;
@@ -141,9 +142,16 @@ export async function lookupStudent(query: string): Promise<StudentLookup> {
     where: { studentUserId: user.id },
   });
 
+  // GENERAL only ever draws from money that isn't locked to a category — the rest of
+  // wallet.balance is already earmarked (LockedFund rows), same distinction disburse() relies
+  // on to keep GENERAL withdrawals from silently dipping into locked funds.
+  const totalLocked = lockedFunds.reduce((sum, fund) => sum + Number(fund.amount), 0);
+  const freeBalance = Math.max(0, Number(wallet.balance) - totalLocked);
+
   return {
     user: { id: user.id, fullName: user.fullName, email: user.email },
     wallet: { id: wallet.id, balance: formatMoney(wallet.balance), currency: wallet.currency },
+    freeBalance: formatMoney(freeBalance),
     lockedFunds: lockedFunds.map((fund) => ({
       category: fund.category,
       amount: formatMoney(fund.amount),
@@ -246,7 +254,7 @@ async function disburse(
   await createNotification(
     wallet.userId,
     'Cash Withdrawal',
-    `You withdrew $${formatMoney(amount)} cash from ${category.toLowerCase()} at agent`,
+    `You withdrew $${formatMoney(amount)} cash from ${category.toLowerCase()} at agent. Don't forget to upload your receipt so it can be verified.`,
     'WITHDRAWAL_COMPLETED'
   );
 
@@ -302,11 +310,17 @@ export async function processWithdrawal(
   });
 
   if (input.category === 'GENERAL') {
-    if (input.amount > Number(wallet.balance)) {
+    // GENERAL must never dip into money already locked to a category — only the free
+    // (unlocked) portion of the wallet balance is eligible here.
+    const lockedFunds = await prisma.lockedFund.findMany({ where: { walletId: wallet.id } });
+    const totalLocked = lockedFunds.reduce((sum, fund) => sum + Number(fund.amount), 0);
+    const freeBalance = Math.max(0, Number(wallet.balance) - totalLocked);
+
+    if (input.amount > freeBalance) {
       throw new AppError(
         400,
         'INSUFFICIENT_BALANCE',
-        'Withdrawal amount exceeds the student wallet balance'
+        'Withdrawal amount exceeds the student\'s free (unlocked) wallet balance'
       );
     }
 

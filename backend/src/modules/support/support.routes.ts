@@ -4,6 +4,7 @@ import { requireRole } from '../../middleware/requireRole';
 import {
   getSupportMessagesHandler,
   markSupportMessageReadHandler,
+  sendGeneralSupportMessageHandler,
   sendSupportMessageHandler,
 } from './support.controller';
 
@@ -17,6 +18,14 @@ export default async function supportRoutes(fastify: FastifyInstance): Promise<v
     '/message',
     { config: { rateLimit: PUBLIC_SUBMIT_RATE_LIMIT } },
     sendSupportMessageHandler
+  );
+
+  // Authenticated, any role — Profile > Help & Support, for users who already have a
+  // session (unlike the public /message route above, which exists for suspended users).
+  fastify.post(
+    '/general-message',
+    { preHandler: [authenticate], config: { rateLimit: PUBLIC_SUBMIT_RATE_LIMIT } },
+    sendGeneralSupportMessageHandler
   );
 
   // Admin-only, so the normal authenticate() is fine here (admins are never suspended).

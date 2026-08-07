@@ -10,3 +10,15 @@ export async function sendSupportMessage(email: string, message: string): Promis
     auth: false,
   });
 }
+
+// Profile > Help & Support — the user already has a session here, unlike
+// sendSupportMessage above (reachable while logged out, e.g. a suspended account).
+export async function sendGeneralSupportMessage(
+  subject: string,
+  message: string
+): Promise<SupportMessage> {
+  return apiRequest<SupportMessage>('/support/general-message', {
+    method: 'POST',
+    body: { subject, message },
+  });
+}

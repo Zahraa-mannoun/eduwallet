@@ -127,12 +127,12 @@ export function ProcessWithdrawal() {
     }
   };
 
-  // GENERAL is always selectable (it draws from the free wallet balance, not a LockedFund
-  // row) — every other category only shows up once the parent has actually locked money
-  // into it.
+  // GENERAL is always selectable (it draws from the free/unlocked wallet balance, not a
+  // LockedFund row) — every other category only shows up once the parent has actually locked
+  // money into it.
   const categoryOptions: Array<{ category: TransactionCategory; available: number }> = student
     ? [
-        { category: 'GENERAL' as TransactionCategory, available: Number(student.wallet.balance) },
+        { category: 'GENERAL' as TransactionCategory, available: Number(student.freeBalance) },
         ...student.lockedFunds
           .filter((fund) => Number(fund.amount) > 0)
           .map((fund) => ({ category: fund.category, available: Number(fund.amount) })),
@@ -220,6 +220,8 @@ export function ProcessWithdrawal() {
             <div className="text-right">
               <p className="text-xs text-slate-500">Wallet Balance</p>
               <p className="text-lg font-semibold text-slate-900">{formatMoney(student.wallet.balance)}</p>
+              <p className="mt-1 text-xs text-slate-500">Free (unlocked)</p>
+              <p className="text-sm font-medium text-slate-700">{formatMoney(student.freeBalance)}</p>
             </div>
           </div>
 

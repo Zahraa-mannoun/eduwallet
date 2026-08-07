@@ -9,6 +9,13 @@ export const sendSupportMessageSchema = z.object({
 
 export type SendSupportMessageInput = z.infer<typeof sendSupportMessageSchema>;
 
+export const sendGeneralSupportMessageSchema = z.object({
+  subject: z.string().trim().min(1, 'subject is required').max(200),
+  message: z.string().trim().min(1, 'message is required').max(2000),
+});
+
+export type SendGeneralSupportMessageInput = z.infer<typeof sendGeneralSupportMessageSchema>;
+
 export const supportMessageIdParamsSchema = z.object({
   id: z.string().uuid('id must be a valid UUID'),
 });

@@ -49,6 +49,7 @@ export type RootStackParamList = {
   AIAssistant: undefined;
   Notifications: undefined;
   AccountSettings: undefined;
+  HelpSupport: undefined;
 };
 
 export type RootStackScreenProps<Screen extends keyof RootStackParamList> =

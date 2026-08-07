@@ -71,6 +71,7 @@ export type WithdrawalRequest = {
 export type StudentLookup = {
   user: { id: string; fullName: string; email: string };
   wallet: { id: string; balance: string; currency: string };
+  freeBalance: string;
   lockedFunds: Array<{ category: TransactionCategory; amount: string }>;
   approvalThreshold: string | null;
   allowedCategories: TransactionCategory[] | null;
