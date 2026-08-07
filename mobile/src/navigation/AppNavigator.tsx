@@ -18,6 +18,7 @@ import AIAssistantScreen from '../screens/AIAssistantScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import AccountSettingsScreen from '../screens/AccountSettingsScreen';
 import HelpSupportScreen from '../screens/HelpSupportScreen';
+import InstitutionWalletScreen from '../screens/InstitutionWalletScreen';
 import SplashScreen from '../screens/SplashScreen';
 import SupportMessageScreen from '../screens/SupportMessageScreen';
 import StudentMainNavigator from './StudentMainNavigator';
@@ -78,6 +79,7 @@ export default function AppNavigator() {
           <Stack.Screen name="Notifications" component={NotificationsScreen} />
           <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
           <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
+          <Stack.Screen name="InstitutionWallet" component={InstitutionWalletScreen} />
         </>
       )}
     </Stack.Navigator>

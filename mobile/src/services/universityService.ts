@@ -12,6 +12,12 @@ export async function getVerifiedStudents(): Promise<UniversityStudentSummary[]>
   return apiRequest<UniversityStudentSummary[]>('/university/students');
 }
 
+// The read-only "Students" bottom tab — every verified student, funded or not (unlike
+// getVerifiedStudents() above, which excludes anyone currently selected or already funded).
+export async function getAllStudents(): Promise<UniversityStudentSummary[]> {
+  return apiRequest<UniversityStudentSummary[]>('/university/students/all');
+}
+
 export type PrepareDisbursementInput = {
   studentIds: string[];
   amountPerStudent: number;

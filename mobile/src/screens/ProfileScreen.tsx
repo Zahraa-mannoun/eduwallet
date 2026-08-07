@@ -89,6 +89,15 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
   };
 
   const ACCOUNT_LINKS = [
+    ...(user?.userType === 'INSTITUTION'
+      ? [
+          {
+            title: 'My Wallet',
+            icon: 'wallet-outline',
+            onPress: () => navigation.navigate('InstitutionWallet'),
+          },
+        ]
+      : []),
     {
       title: 'Transaction History',
       icon: 'history',

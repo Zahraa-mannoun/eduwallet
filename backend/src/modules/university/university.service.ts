@@ -1,3 +1,4 @@
+import type { Prisma, TransactionCategory } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
 import { createNotification } from '../notifications/notifications.service';
@@ -36,15 +37,27 @@ export type UniversityStudentSummary = {
   fundingGap: string;
 };
 
-// Sums every completed transfer into this student's wallet(s) sent by a user of the given
-// role — "received" (INSTITUTION) funnels through this, since institution scholarships can
-// legitimately cover any category. Not used for "parentSent" (see getParentEducationSent
-// below) — a parent's locked transfers include everyday categories (FOOD, TRANSPORT,
-// LIFESTYLE, RENT, ...) that have nothing to do with covering tuition, so counting all of
-// them would overstate how much of totalCreditCost the parent has actually funded.
-async function getTransfersFromRole(
+// Institution scholarships can fund any of the 3 academic categories the disbursement flow
+// allows (university.schema.ts's academicCategoryEnum) — TUITION, BOOKS, or SOFTWARE.
+const INSTITUTION_FUNDABLE_CATEGORIES: readonly TransactionCategory[] = [
+  'TUITION',
+  'BOOKS',
+  'SOFTWARE',
+];
+
+// A parent locking BOOKS or SOFTWARE money is a separate spending allowance, not a tuition
+// payment — only a parent's TUITION lock actually offsets the university funding gap.
+const PARENT_TUITION_CATEGORIES: readonly TransactionCategory[] = ['TUITION'];
+
+// Sums completed transfers into this student's wallet(s) sent by a user of the given role,
+// restricted to the given categories. LockedFund itself carries no record of who locked it —
+// a parent's transfer and an institution's disbursement both upsert the exact same row (see
+// schema.prisma's LockedFund comment) — so Transaction, which does record the sender, is the
+// only place either "received" or "parentSent" can be computed from.
+async function getEducationTransfersFromRole(
   userId: string,
-  senderRole: 'INSTITUTION' | 'PARENT'
+  senderRole: 'INSTITUTION' | 'PARENT',
+  categories: readonly TransactionCategory[]
 ): Promise<number> {
   const wallets = await prisma.wallet.findMany({ where: { userId }, select: { id: true } });
   const walletIds = wallets.map((wallet) => wallet.id);
@@ -56,6 +69,7 @@ async function getTransfersFromRole(
     where: {
       toWalletId: { in: walletIds },
       status: { in: ['AUTO_APPROVED', 'APPROVED'] },
+      category: { in: [...categories] },
       fromWallet: { user: { userType: senderRole } },
     },
     _sum: { amount: true },
@@ -64,38 +78,61 @@ async function getTransfersFromRole(
   return Number(aggregate._sum.amount ?? 0);
 }
 
-// The education categories an institution scholarship can also fund — TUITION/BOOKS/SOFTWARE
-// only, deliberately excluding FOOD/TRANSPORT/LIFESTYLE/RENT/GENERAL/PERSONAL_SAVINGS.
-const EDUCATION_CATEGORIES = ['TUITION', 'BOOKS', 'SOFTWARE'] as const;
+// The full received/parentSent/fundingGap breakdown for one student — shared by every place
+// that needs to know how much of totalCreditCost is still uncovered (the student list, the
+// Tab 1 "Notify & Proceed" notification, Tab 2's selected-students list), so they can never
+// drift out of sync with each other.
+async function getFundingBreakdown(
+  userId: string,
+  totalCreditCost: number
+): Promise<{ received: number; parentSent: number; fundingGap: number }> {
+  const [received, parentSent] = await Promise.all([
+    getEducationTransfersFromRole(userId, 'INSTITUTION', INSTITUTION_FUNDABLE_CATEGORIES),
+    getEducationTransfersFromRole(userId, 'PARENT', PARENT_TUITION_CATEGORIES),
+  ]);
+  return { received, parentSent, fundingGap: Math.max(0, totalCreditCost - received - parentSent) };
+}
 
-// "Parent sent" toward this student's funding gap — unlike getTransfersFromRole(), this only
-// counts transfers in an education category. LockedFund itself carries no record of who
-// locked it (parent transfer and institution disbursement both upsert the same row, see
-// schema.prisma's LockedFund comment), so Transaction — which does record the sender — is the
-// only place this can be computed from.
-async function getParentEducationSent(userId: string): Promise<number> {
-  const wallets = await prisma.wallet.findMany({ where: { userId }, select: { id: true } });
-  const walletIds = wallets.map((wallet) => wallet.id);
-  if (walletIds.length === 0) {
-    return 0;
-  }
+type UniversityStudentWithRelations = Prisma.UniversityStudentGetPayload<{
+  include: { enrolledCourses: true; university: true };
+}>;
 
-  const aggregate = await prisma.transaction.aggregate({
-    where: {
-      toWalletId: { in: walletIds },
-      status: { in: ['AUTO_APPROVED', 'APPROVED'] },
-      category: { in: [...EDUCATION_CATEGORIES] },
-      fromWallet: { user: { userType: 'PARENT' } },
-    },
-    _sum: { amount: true },
-  });
+async function buildStudentSummary(
+  student: UniversityStudentWithRelations
+): Promise<UniversityStudentSummary> {
+  // Guaranteed non-null by both callers' `userId: { not: null }` filter — Prisma's generated
+  // type still widens it to string | null since the filter isn't visible to the type system.
+  const userId = student.userId as string;
+  const totalCreditCost = Number(student.totalCreditCost);
+  const { received, parentSent, fundingGap } = await getFundingBreakdown(userId, totalCreditCost);
 
-  return Number(aggregate._sum.amount ?? 0);
+  return {
+    id: student.id,
+    userId,
+    studentNumber: student.studentNumber,
+    fullName: student.fullName,
+    email: student.email,
+    universityName: student.university.name,
+    totalCreditCost: formatMoney(totalCreditCost),
+    courses: student.enrolledCourses.map((course) => ({
+      id: course.id,
+      courseName: course.courseName,
+      credits: course.credits,
+      costPerCredit: formatMoney(course.costPerCredit),
+      totalCost: formatMoney(course.totalCost),
+      semester: course.semester,
+    })),
+    received: formatMoney(received),
+    parentSent: formatMoney(parentSent),
+    fundingGap: formatMoney(fundingGap),
+  };
 }
 
 // Excludes any student currently selected for Tab 2 (PENDING) or already individually funded
 // via Tab 3 (FUNDED) — the InstitutionStudentSelection row is what enforces "no double
-// funding" across the Institution dashboard's 3 tabs (see schema.prisma's model comment).
+// funding" across the Institution dashboard's 3 tabs (see schema.prisma's model comment). Feeds
+// Tab 1 (select students to fund) and Tab 3 (individual funding search) — both need only the
+// students still eligible for a new disbursement.
 export async function getVerifiedUniversityStudents(): Promise<UniversityStudentSummary[]> {
   const students = await prisma.universityStudent.findMany({
     where: { userId: { not: null }, user: { kycStatus: 'VERIFIED' }, selection: null },
@@ -103,39 +140,21 @@ export async function getVerifiedUniversityStudents(): Promise<UniversityStudent
     orderBy: { fullName: 'asc' },
   });
 
-  return Promise.all(
-    students.map(async (student) => {
-      // Guaranteed non-null by the `userId: { not: null }` filter above — Prisma's generated
-      // type still widens it to string | null since the filter isn't visible to the type system.
-      const userId = student.userId as string;
-      const totalCreditCost = Number(student.totalCreditCost);
-      const [received, parentSent] = await Promise.all([
-        getTransfersFromRole(userId, 'INSTITUTION'),
-        getParentEducationSent(userId),
-      ]);
+  return Promise.all(students.map(buildStudentSummary));
+}
 
-      return {
-        id: student.id,
-        userId,
-        studentNumber: student.studentNumber,
-        fullName: student.fullName,
-        email: student.email,
-        universityName: student.university.name,
-        totalCreditCost: formatMoney(totalCreditCost),
-        courses: student.enrolledCourses.map((course) => ({
-          id: course.id,
-          courseName: course.courseName,
-          credits: course.credits,
-          costPerCredit: formatMoney(course.costPerCredit),
-          totalCost: formatMoney(course.totalCost),
-          semester: course.semester,
-        })),
-        received: formatMoney(received),
-        parentSent: formatMoney(parentSent),
-        fundingGap: formatMoney(Math.max(0, totalCreditCost - received - parentSent)),
-      };
-    })
-  );
+// Every verified student regardless of selection/funded state — the read-only "Students" bottom
+// tab, unlike getVerifiedUniversityStudents() above, deliberately does NOT hide students who are
+// currently selected (Tab 2, PENDING) or already funded (Tab 3, FUNDED): it's a roster view, not
+// a picker, so there's no "no double funding" exclusion to enforce here.
+export async function getAllUniversityStudents(): Promise<UniversityStudentSummary[]> {
+  const students = await prisma.universityStudent.findMany({
+    where: { userId: { not: null }, user: { kycStatus: 'VERIFIED' } },
+    include: { enrolledCourses: true, university: true },
+    orderBy: { fullName: 'asc' },
+  });
+
+  return Promise.all(students.map(buildStudentSummary));
 }
 
 export type FundingStatus = 'FULL' | 'PARTIAL';
@@ -200,6 +219,7 @@ export type SelectedStudentSummary = {
   totalCreditCost: string;
   amount: string;
   fundingStatus: FundingStatus;
+  fundingGap: string;
 };
 
 // Tab 1's "Notify & Proceed" — declares intent (creates a PENDING selection row per student,
@@ -241,16 +261,35 @@ export async function selectStudents(
     )
   );
 
+  const institution = await prisma.user.findUnique({
+    where: { id: institutionUserId },
+    select: { fullName: true },
+  });
+  const institutionName = institution?.fullName ?? 'Your institution';
+
+  const fundingGaps = await Promise.all(
+    students.map((student) =>
+      getFundingBreakdown(student.userId as string, Number(student.totalCreditCost))
+    )
+  );
+
   await Promise.all(
-    students.map(async (student) => {
+    students.map(async (student, index) => {
       const parentalControls = await prisma.parentalControl.findMany({
         where: { studentUserId: student.userId as string },
       });
       if (parentalControls.length === 0) return;
 
-      const totalCreditCost = Number(student.totalCreditCost);
-      const status = computeFundingStatus(input.amountPerStudent, totalCreditCost);
-      const message = `Your child ${student.fullName} has been selected for a $${input.amountPerStudent.toFixed(2)} scholarship — ${status === 'FULL' ? 'Fully' : 'Partially'} funded`;
+      // fundingGap is what's outstanding BEFORE this selection's amount is applied — the same
+      // basis the funding-status badges use (ScholarshipPortalTab.tsx, UniversityStudentsTab.tsx)
+      // — not just totalCreditCost, which ignores money the parent or a prior disbursement
+      // already covered and would otherwise report "still partial" on an already-funded student.
+      const { fundingGap } = fundingGaps[index];
+      const amountLabel = input.amountPerStudent.toFixed(2);
+      const message =
+        input.amountPerStudent >= fundingGap
+          ? `${institutionName} has fully funded your child ${student.fullName}'s semester ($${amountLabel})`
+          : `${institutionName} has partially funded your child ${student.fullName}'s semester ($${amountLabel}). Remaining gap: $${(fundingGap - input.amountPerStudent).toFixed(2)}`;
 
       await Promise.all(
         parentalControls.map((link) =>
@@ -269,6 +308,7 @@ export async function selectStudents(
     totalCreditCost: formatMoney(student.totalCreditCost),
     amount: formatMoney(input.amountPerStudent),
     fundingStatus: computeFundingStatus(input.amountPerStudent, Number(student.totalCreditCost)),
+    fundingGap: formatMoney(fundingGaps[index].fundingGap),
   }));
 }
 
@@ -281,21 +321,25 @@ export async function getSelectedStudents(institutionUserId: string): Promise<Se
     orderBy: { createdAt: 'asc' },
   });
 
-  return selections.map((selection) => {
-    const student = selection.universityStudent;
-    const totalCreditCost = Number(student.totalCreditCost);
-    const amount = Number(selection.amount);
-    return {
-      selectionId: selection.id,
-      universityStudentId: student.id,
-      userId: student.userId as string,
-      studentNumber: student.studentNumber,
-      fullName: student.fullName,
-      totalCreditCost: formatMoney(totalCreditCost),
-      amount: formatMoney(amount),
-      fundingStatus: computeFundingStatus(amount, totalCreditCost),
-    };
-  });
+  return Promise.all(
+    selections.map(async (selection) => {
+      const student = selection.universityStudent;
+      const totalCreditCost = Number(student.totalCreditCost);
+      const amount = Number(selection.amount);
+      const { fundingGap } = await getFundingBreakdown(student.userId as string, totalCreditCost);
+      return {
+        selectionId: selection.id,
+        universityStudentId: student.id,
+        userId: student.userId as string,
+        studentNumber: student.studentNumber,
+        fullName: student.fullName,
+        totalCreditCost: formatMoney(totalCreditCost),
+        amount: formatMoney(amount),
+        fundingStatus: computeFundingStatus(amount, totalCreditCost),
+        fundingGap: formatMoney(fundingGap),
+      };
+    })
+  );
 }
 
 export type DisburseSelectedResult = {

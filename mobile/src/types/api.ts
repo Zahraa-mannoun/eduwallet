@@ -299,6 +299,7 @@ export type SelectedStudentSummary = {
   totalCreditCost: string;
   amount: string;
   fundingStatus: FundingStatus;
+  fundingGap: string;
 };
 
 export type DisburseSelectedResult = {

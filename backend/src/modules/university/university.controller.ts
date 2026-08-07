@@ -10,6 +10,7 @@ import {
 import {
   disburseSelected,
   fundIndividual,
+  getAllUniversityStudents,
   getSelectedStudents,
   getVerifiedUniversityStudents,
   prepareDisbursement,
@@ -39,6 +40,19 @@ export async function getVerifiedUniversityStudentsHandler(
 ) {
   try {
     const students = await getVerifiedUniversityStudents();
+    return reply.status(200).send(successResponse(students));
+  } catch (error) {
+    return handleUniversityError(request, reply, error);
+  }
+}
+
+// The read-only "Students" bottom tab — every verified student, funded or not.
+export async function getAllUniversityStudentsHandler(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  try {
+    const students = await getAllUniversityStudents();
     return reply.status(200).send(successResponse(students));
   } catch (error) {
     return handleUniversityError(request, reply, error);

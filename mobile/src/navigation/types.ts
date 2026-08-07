@@ -20,7 +20,7 @@ export type ParentTabParamList = {
 
 export type InstitutionTabParamList = {
   Portal: undefined;
-  Notifications: undefined;
+  Students: undefined;
   Profile: undefined;
 };
 
@@ -50,6 +50,7 @@ export type RootStackParamList = {
   Notifications: undefined;
   AccountSettings: undefined;
   HelpSupport: undefined;
+  InstitutionWallet: undefined;
 };
 
 export type RootStackScreenProps<Screen extends keyof RootStackParamList> =

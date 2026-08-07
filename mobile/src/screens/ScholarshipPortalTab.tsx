@@ -18,6 +18,29 @@ const ACADEMIC_CATEGORIES = BUDGET_CATEGORIES.filter((category) =>
   ACADEMIC_CATEGORY_KEYS.has(category.key)
 );
 
+const PARTIAL_COLOR = '#F59E0B';
+const WILL_BE_FUNDED_COLOR = '#EC4899';
+
+// student.amount is what's already selected for this student from Tab 1 — this screen has no
+// separate "entered amount" field, so the badge previews what sending that stored amount would
+// do to their (received + parentSent - aware) fundingGap.
+// - fundingGap === 0: already fully covered before this disbursement — always green.
+// - remaining = fundingGap - amount <= 0: this disbursement would close the gap — pink.
+// - remaining > 0: still short after this disbursement — orange "Partial".
+function fundingBadgeFor(
+  fundingGap: number,
+  amount: number
+): { label: string; color: string; icon: string } {
+  if (fundingGap === 0) {
+    return { label: 'Fully funded', color: colors.accent, icon: 'check-circle-outline' };
+  }
+  const remaining = fundingGap - amount;
+  if (remaining <= 0) {
+    return { label: 'Fully funded', color: WILL_BE_FUNDED_COLOR, icon: 'check-circle-outline' };
+  }
+  return { label: 'Partial', color: PARTIAL_COLOR, icon: 'alert-outline' };
+}
+
 export default function ScholarshipPortalTab() {
   const [students, setStudents] = useState<SelectedStudentSummary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -82,40 +105,34 @@ export default function ScholarshipPortalTab() {
         {isLoading && students.length === 0 ? (
           <ActivityIndicator color={colors.primary} style={styles.loading} />
         ) : students.length > 0 ? (
-          students.map((student) => (
-            <View key={student.selectionId} style={styles.studentRow}>
-              <Avatar.Text
-                size={36}
-                label={getInitials(student.fullName)}
-                style={styles.studentAvatar}
-                color={colors.onPrimary}
-              />
-              <View style={styles.studentMiddle}>
-                <Text style={styles.studentName}>{student.fullName}</Text>
-                <Text style={styles.studentSubtitle}>#{student.studentNumber}</Text>
+          students.map((student) => {
+            const badge = fundingBadgeFor(Number(student.fundingGap), Number(student.amount));
+            return (
+              <View key={student.selectionId} style={styles.studentRow}>
+                <Avatar.Text
+                  size={36}
+                  label={getInitials(student.fullName)}
+                  style={styles.studentAvatar}
+                  color={colors.onPrimary}
+                />
+                <View style={styles.studentMiddle}>
+                  <Text style={styles.studentName}>{student.fullName}</Text>
+                  <Text style={styles.studentSubtitle}>#{student.studentNumber}</Text>
+                </View>
+                <View style={styles.studentRight}>
+                  <Text style={styles.studentAmount}>${Number(student.amount).toFixed(2)}</Text>
+                  <Chip
+                    compact
+                    icon={badge.icon}
+                    style={[styles.statusChip, { backgroundColor: `${badge.color}1F` }]}
+                    textStyle={{ color: badge.color, fontSize: 10, fontWeight: '700' }}
+                  >
+                    {badge.label}
+                  </Chip>
+                </View>
               </View>
-              <View style={styles.studentRight}>
-                <Text style={styles.studentAmount}>${Number(student.amount).toFixed(2)}</Text>
-                <Chip
-                  compact
-                  style={[
-                    styles.statusChip,
-                    {
-                      backgroundColor:
-                        student.fundingStatus === 'FULL' ? `${colors.accent}1F` : '#F59E0B1F',
-                    },
-                  ]}
-                  textStyle={{
-                    color: student.fundingStatus === 'FULL' ? colors.accent : '#F59E0B',
-                    fontSize: 10,
-                    fontWeight: '700',
-                  }}
-                >
-                  {student.fundingStatus === 'FULL' ? 'Full' : 'Partial'}
-                </Chip>
-              </View>
-            </View>
-          ))
+            );
+          })
         ) : (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyText}>

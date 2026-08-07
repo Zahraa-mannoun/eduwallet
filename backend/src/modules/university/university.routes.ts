@@ -4,6 +4,7 @@ import { requireRole } from '../../middleware/requireRole';
 import {
   disburseSelectedHandler,
   fundIndividualHandler,
+  getAllUniversityStudentsHandler,
   getSelectedStudentsHandler,
   getVerifiedUniversityStudentsHandler,
   prepareDisbursementHandler,
@@ -15,6 +16,7 @@ export default async function universityRoutes(fastify: FastifyInstance): Promis
   fastify.addHook('preHandler', requireRole('INSTITUTION'));
 
   fastify.get('/students', getVerifiedUniversityStudentsHandler);
+  fastify.get('/students/all', getAllUniversityStudentsHandler);
   fastify.post('/prepare-disbursement', prepareDisbursementHandler);
   fastify.post('/select-students', selectStudentsHandler);
   fastify.get('/selected-students', getSelectedStudentsHandler);

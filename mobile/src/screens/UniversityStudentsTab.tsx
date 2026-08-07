@@ -1,5 +1,12 @@
 import { useCallback, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, TextInput as NativeTextInput, TouchableOpacity, View } from 'react-native';
+import {
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  TextInput as NativeTextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ActivityIndicator, Checkbox, Snackbar, Text } from 'react-native-paper';
@@ -8,18 +15,37 @@ import { colors } from '../theme/colors';
 import * as universityService from '../services/universityService';
 import { ApiError } from '../services/api';
 
+const PARTIAL_COLOR = '#F59E0B';
+const WILL_BE_FUNDED_COLOR = '#EC4899';
+
+// Per-student, not per-cost — fundingGap already nets out what this specific student's parent
+// and institution have covered so far (university.service.ts). Every student rendered here has
+// fundingGap > 0 (load() filters out anyone already fully funded — they're only shown, read
+// only, in the "Students" bottom tab), so there's no "already fully funded" case to handle.
+// - Checked: the typed amount is about to be sent to THIS student, so show what disbursing it
+//   would do — pink "Fully funded" (this disbursement would close the gap) or orange "Partial"
+//   with what's still short.
+// - Unchecked: the typed amount isn't going to this student at all, so show their real,
+//   unmodified gap instead of implying money that was never selected for them.
 function fundingStatusFor(
-  amount: number,
-  totalCreditCost: number
-): { label: string; color: string; icon: string } | null {
-  if (amount <= 0) return null;
-  if (amount >= totalCreditCost) {
-    return { label: 'Fully funded', color: colors.accent, icon: 'check-circle-outline' };
+  fundingGap: number,
+  checked: boolean,
+  amount: number
+): { label: string; color: string; icon: string } {
+  if (checked) {
+    const remaining = fundingGap - amount;
+    if (remaining <= 0) {
+      return { label: 'Fully funded', color: WILL_BE_FUNDED_COLOR, icon: 'check-circle-outline' };
+    }
+    return {
+      label: `Partial — $${remaining.toFixed(2)} still needed`,
+      color: PARTIAL_COLOR,
+      icon: 'alert-outline',
+    };
   }
-  const gap = totalCreditCost - amount;
   return {
-    label: `Partial — $${gap.toFixed(2)} still needed`,
-    color: '#F59E0B',
+    label: `Partial — $${fundingGap.toFixed(2)} still needed`,
+    color: PARTIAL_COLOR,
     icon: 'alert-outline',
   };
 }
@@ -42,11 +68,15 @@ export default function UniversityStudentsTab({
     setError(null);
     try {
       const result = await universityService.getVerifiedStudents();
-      setStudents(result);
+      // Fully-funded students (parent + institution already covering totalCreditCost) have
+      // nothing left to disburse — this tab is a funding picker, not a roster, so they're only
+      // shown read-only in the "Students" bottom tab instead.
+      const fundable = result.filter((student) => Number(student.fundingGap) > 0);
+      setStudents(fundable);
       // Anyone no longer in the (already-selected/funded students excluded) list can't stay
       // checked — most commonly because this exact selection just succeeded.
       setSelectedIds((prev) => {
-        const stillPresent = new Set(result.map((student) => student.id));
+        const stillPresent = new Set(fundable.map((student) => student.id));
         return new Set([...prev].filter((id) => stillPresent.has(id)));
       });
     } catch (err) {
@@ -122,7 +152,7 @@ export default function UniversityStudentsTab({
           students.map((student) => {
             const checked = selectedIds.has(student.id);
             const expanded = expandedId === student.id;
-            const status = fundingStatusFor(parsedAmount, Number(student.totalCreditCost));
+            const status = fundingStatusFor(Number(student.fundingGap), checked, parsedAmount);
             return (
               <View key={student.id} style={styles.studentCard}>
                 <TouchableOpacity style={styles.studentRow} onPress={() => toggleStudent(student.id)}>
@@ -152,17 +182,15 @@ export default function UniversityStudentsTab({
                         ${Number(student.fundingGap).toFixed(2)}
                       </Text>
                     </Text>
-                    {status ? (
-                      <View style={styles.statusRow}>
-                        <MaterialCommunityIcons
-                          name={status.icon as keyof typeof MaterialCommunityIcons.glyphMap}
-                          size={14}
-                          color={status.color}
-                          style={styles.statusIcon}
-                        />
-                        <Text style={[styles.statusText, { color: status.color }]}>{status.label}</Text>
-                      </View>
-                    ) : null}
+                    <View style={styles.statusRow}>
+                      <MaterialCommunityIcons
+                        name={status.icon as keyof typeof MaterialCommunityIcons.glyphMap}
+                        size={14}
+                        color={status.color}
+                        style={styles.statusIcon}
+                      />
+                      <Text style={[styles.statusText, { color: status.color }]}>{status.label}</Text>
+                    </View>
                   </View>
                   <TouchableOpacity
                     style={styles.expandButton}
