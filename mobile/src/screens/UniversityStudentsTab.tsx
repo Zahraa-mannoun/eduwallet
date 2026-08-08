@@ -29,12 +29,15 @@ const NO_COVERAGE_COLOR = '#EF4444';
 // - Checked: the typed amount is about to be sent to THIS student, so show what disbursing it
 //   would do — pink "Fully funded" (this disbursement would close the gap) or orange "Partial"
 //   with what's still short.
-// - Unchecked: the typed amount isn't going to this student at all — red "No coverage yet"
-//   instead of a number, since nothing has actually been allocated to them.
+// - Unchecked: the typed amount isn't going to this student at all. Red "No coverage yet" if
+//   neither the parent nor the institution has sent anything yet, orange "Partially covered" if
+//   one of them has but a gap remains — distinguishing "nobody's started" from "still short".
 function fundingStatusFor(
   fundingGap: number,
   checked: boolean,
-  amount: number
+  amount: number,
+  parentSent: number,
+  received: number
 ): { label: string; color: string; icon: string | null } {
   if (fundingGap <= 0) {
     return { label: 'Fully funded', color: colors.accent, icon: 'check-circle-outline' };
@@ -50,7 +53,10 @@ function fundingStatusFor(
       icon: 'alert-outline',
     };
   }
-  return { label: 'No coverage yet', color: NO_COVERAGE_COLOR, icon: null };
+  if (parentSent === 0 && received === 0) {
+    return { label: 'No coverage yet', color: NO_COVERAGE_COLOR, icon: null };
+  }
+  return { label: 'Partially covered', color: PARTIAL_COLOR, icon: null };
 }
 
 export default function UniversityStudentsTab({
@@ -155,7 +161,13 @@ export default function UniversityStudentsTab({
           students.map((student) => {
             const checked = selectedIds.has(student.id);
             const expanded = expandedId === student.id;
-            const status = fundingStatusFor(Number(student.fundingGap), checked, parsedAmount);
+            const status = fundingStatusFor(
+              Number(student.fundingGap),
+              checked,
+              parsedAmount,
+              Number(student.parentSent),
+              Number(student.received)
+            );
             return (
               <View key={student.id} style={styles.studentCard}>
                 <TouchableOpacity style={styles.studentRow} onPress={() => toggleStudent(student.id)}>

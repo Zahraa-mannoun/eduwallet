@@ -281,6 +281,18 @@ export async function addFunds(
     throw new AppError(404, 'USER_NOT_FOUND', 'User not found');
   }
 
+  // Students only ever receive money through the funding flows that actually enforce
+  // education-locking and parental oversight (parent transfers, institution scholarships,
+  // agent withdrawals) — a raw admin top-up would hand a student unlocked, unaccounted-for
+  // cash outside all of that, so it's restricted to PARENT and INSTITUTION wallets only.
+  if (user.userType !== 'PARENT' && user.userType !== 'INSTITUTION') {
+    throw new AppError(
+      400,
+      'INVALID_TOPUP_TARGET',
+      'Admin can only top up Parent or Institution wallets.'
+    );
+  }
+
   const wallet = await prisma.wallet.upsert({
     where: { userId_currency: { userId, currency: input.currency } },
     create: { userId, currency: input.currency, balance: input.amount },
