@@ -30,7 +30,7 @@ function fundingBadgeFor(
     return { label: 'No coverage yet', color: NO_COVERAGE_COLOR, icon: 'alert-circle-outline' };
   }
   return {
-    label: `Partial — $${fundingGap.toFixed(2)} still needed`,
+    label: 'Partially covered',
     color: PARTIAL_COLOR,
     icon: 'alert-outline',
   };
