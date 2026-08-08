@@ -22,9 +22,13 @@ export function ProductCard({ product }: { product: Product }) {
       <div className="flex flex-1 flex-col p-4">
         <h3 className="font-semibold text-slate-900">{product.name}</h3>
         <p className="mt-1 flex-1 text-sm text-slate-500">{product.description}</p>
+        <span className="mt-2 inline-flex w-fit items-center gap-1 rounded-full bg-primary-50 px-2 py-0.5 text-[10px] font-medium text-primary-600">
+          🔍 AI will detect category at checkout
+        </span>
         <div className="mt-3 flex items-center justify-between">
           <span className="text-lg font-bold text-primary-600">${product.price.toFixed(2)}</span>
           <button
+            type="button"
             onClick={handleAdd}
             className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-primary-700 active:scale-95"
           >

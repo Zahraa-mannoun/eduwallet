@@ -1,10 +1,16 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { useSearch } from '../context/SearchContext';
 
-export function Header() {
+interface HeaderProps {
+  onCartClick: () => void;
+}
+
+export function Header({ onCartClick }: Readonly<HeaderProps>) {
   const { user, isAuthenticated, logout } = useAuth();
   const { itemCount } = useCart();
+  const { query, setQuery } = useSearch();
   const navigate = useNavigate();
 
   function handleLogout() {
@@ -19,16 +25,23 @@ export function Header() {
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-600 text-xl">
             🔍
           </div>
-          <span className="text-xl font-bold text-primary-600">ScanMart</span>
+          <span className="flex flex-col leading-tight">
+            <span className="text-xl font-bold text-primary-600">ScanMart</span>
+            <span className="hidden text-[10px] font-medium uppercase tracking-wide text-slate-400 sm:block">
+              Powered by EduWallet AI Detection
+            </span>
+          </span>
         </Link>
 
         <div className="mx-4 hidden flex-1 md:block">
           <div className="relative">
             <input
               type="text"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
               placeholder="Search products..."
+              aria-label="Search products"
               className="w-full rounded-full border border-slate-200 bg-slate-50 py-2 pl-4 pr-10 text-sm outline-none transition focus:border-primary-400 focus:bg-white focus:ring-2 focus:ring-primary-100"
-              readOnly
             />
             <svg
               className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
@@ -47,10 +60,11 @@ export function Header() {
         </div>
 
         <div className="ml-auto flex items-center gap-4">
-          <Link
-            to="/cart"
+          <button
+            type="button"
+            onClick={onCartClick}
             className="relative flex items-center gap-1.5 rounded-lg px-2 py-2 text-slate-700 transition hover:bg-slate-100"
-            aria-label="Cart"
+            aria-label="Open cart"
           >
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path
@@ -65,7 +79,7 @@ export function Header() {
                 {itemCount}
               </span>
             )}
-          </Link>
+          </button>
 
           {isAuthenticated && (
             <div className="flex items-center gap-3">
@@ -76,6 +90,7 @@ export function Header() {
                 <span className="text-sm font-medium text-slate-700">{user?.fullName}</span>
               </div>
               <button
+                type="button"
                 onClick={handleLogout}
                 className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
               >

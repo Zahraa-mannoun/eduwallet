@@ -17,21 +17,28 @@ import { ApiError } from '../services/api';
 
 const PARTIAL_COLOR = '#F59E0B';
 const WILL_BE_FUNDED_COLOR = '#EC4899';
+const NO_COVERAGE_COLOR = '#EF4444';
 
 // Per-student, not per-cost — fundingGap already nets out what this specific student's parent
-// and institution have covered so far (university.service.ts). Every student rendered here has
-// fundingGap > 0 (load() filters out anyone already fully funded — they're only shown, read
-// only, in the "Students" bottom tab), so there's no "already fully funded" case to handle.
+// and institution have covered so far (university.service.ts). In practice every student
+// rendered here has fundingGap > 0 (load() filters out anyone already fully funded — they're
+// only shown, read only, in the "Students" bottom tab), but the fundingGap <= 0 branch is kept
+// so this function stays correct on its own even if that upstream filter ever changes.
+// - fundingGap <= 0: parent + institution already cover the full cost — always green, no
+//   matter what's checked/typed.
 // - Checked: the typed amount is about to be sent to THIS student, so show what disbursing it
 //   would do — pink "Fully funded" (this disbursement would close the gap) or orange "Partial"
 //   with what's still short.
-// - Unchecked: the typed amount isn't going to this student at all, so show their real,
-//   unmodified gap instead of implying money that was never selected for them.
+// - Unchecked: the typed amount isn't going to this student at all — red "No coverage yet"
+//   instead of a number, since nothing has actually been allocated to them.
 function fundingStatusFor(
   fundingGap: number,
   checked: boolean,
   amount: number
-): { label: string; color: string; icon: string } {
+): { label: string; color: string; icon: string | null } {
+  if (fundingGap <= 0) {
+    return { label: 'Fully funded', color: colors.accent, icon: 'check-circle-outline' };
+  }
   if (checked) {
     const remaining = fundingGap - amount;
     if (remaining <= 0) {
@@ -43,11 +50,7 @@ function fundingStatusFor(
       icon: 'alert-outline',
     };
   }
-  return {
-    label: `Partial — $${fundingGap.toFixed(2)} still needed`,
-    color: PARTIAL_COLOR,
-    icon: 'alert-outline',
-  };
+  return { label: 'No coverage yet', color: NO_COVERAGE_COLOR, icon: null };
 }
 
 export default function UniversityStudentsTab({
@@ -183,12 +186,14 @@ export default function UniversityStudentsTab({
                       </Text>
                     </Text>
                     <View style={styles.statusRow}>
-                      <MaterialCommunityIcons
-                        name={status.icon as keyof typeof MaterialCommunityIcons.glyphMap}
-                        size={14}
-                        color={status.color}
-                        style={styles.statusIcon}
-                      />
+                      {status.icon ? (
+                        <MaterialCommunityIcons
+                          name={status.icon as keyof typeof MaterialCommunityIcons.glyphMap}
+                          size={14}
+                          color={status.color}
+                          style={styles.statusIcon}
+                        />
+                      ) : null}
                       <Text style={[styles.statusText, { color: status.color }]}>{status.label}</Text>
                     </View>
                   </View>

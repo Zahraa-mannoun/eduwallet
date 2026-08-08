@@ -1,9 +1,22 @@
+import { useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useSearch } from '../context/SearchContext';
 import { ProductCard } from '../components/ProductCard';
 import { PRODUCTS } from '../data/products';
 
 export function HomePage() {
   const { user } = useAuth();
+  const { query, setQuery } = useSearch();
+
+  const filteredProducts = useMemo(() => {
+    const trimmed = query.trim().toLowerCase();
+    if (!trimmed) return PRODUCTS;
+    return PRODUCTS.filter(
+      (product) =>
+        product.name.toLowerCase().includes(trimmed) ||
+        product.description.toLowerCase().includes(trimmed)
+    );
+  }, [query]);
 
   return (
     <div>
@@ -23,12 +36,38 @@ export function HomePage() {
       </section>
 
       <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-        <h2 className="text-xl font-bold text-slate-900">All Products</h2>
-        <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {PRODUCTS.map((product) => (
-            <ProductCard key={product.id} product={product} />
-          ))}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-xl font-bold text-slate-900">All Products</h2>
+          {query.trim() && (
+            <p className="text-sm text-slate-500">
+              {filteredProducts.length} result{filteredProducts.length === 1 ? '' : 's'} for
+              &ldquo;{query.trim()}&rdquo;
+            </p>
+          )}
         </div>
+
+        {filteredProducts.length === 0 ? (
+          <div className="mt-10 flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 py-16 text-center">
+            <span className="text-4xl">🔍</span>
+            <p className="font-semibold text-slate-900">No products found</p>
+            <p className="text-sm text-slate-500">
+              We couldn&apos;t find anything matching &ldquo;{query.trim()}&rdquo;.
+            </p>
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              className="mt-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-700"
+            >
+              Clear Search
+            </button>
+          </div>
+        ) : (
+          <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            {filteredProducts.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );
