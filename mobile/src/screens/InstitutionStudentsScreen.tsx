@@ -10,14 +10,24 @@ import * as universityService from '../services/universityService';
 import { ApiError } from '../services/api';
 
 const PARTIAL_COLOR = '#F59E0B';
+const NO_COVERAGE_COLOR = '#EF4444';
 
-// Read-only, so there's only ever one thing to say about a student's funding: either it's
-// fully covered (institution + parent together met totalCreditCost) or it isn't — no
-// "will be funded by this disbursement" preview state exists here, unlike the pickers in
+// Read-only, so there's only ever one thing to say about a student's funding — no "will be
+// funded by this disbursement" preview state exists here, unlike the pickers in
 // UniversityStudentsTab.tsx / ScholarshipPortalTab.tsx.
-function fundingBadgeFor(fundingGap: number): { label: string; color: string; icon: string } {
+// - fundingGap <= 0: institution + parent together met totalCreditCost — always green.
+// - Otherwise, distinguish "nobody's sent anything yet" (red) from "something's been sent but
+//   there's still a gap" (orange) using parentSent/received, not just the gap amount alone.
+function fundingBadgeFor(
+  fundingGap: number,
+  parentSent: number,
+  received: number
+): { label: string; color: string; icon: string } {
   if (fundingGap <= 0) {
     return { label: 'Fully funded', color: colors.accent, icon: 'check-circle-outline' };
+  }
+  if (parentSent === 0 && received === 0) {
+    return { label: 'No coverage yet', color: NO_COVERAGE_COLOR, icon: 'alert-circle-outline' };
   }
   return {
     label: `Partial — $${fundingGap.toFixed(2)} still needed`,
@@ -73,7 +83,11 @@ export default function InstitutionStudentsScreen() {
         ) : students.length > 0 ? (
           students.map((student) => {
             const expanded = expandedId === student.id;
-            const badge = fundingBadgeFor(Number(student.fundingGap));
+            const badge = fundingBadgeFor(
+              Number(student.fundingGap),
+              Number(student.parentSent),
+              Number(student.received)
+            );
             return (
               <View key={student.id} style={styles.studentCard}>
                 <TouchableOpacity
