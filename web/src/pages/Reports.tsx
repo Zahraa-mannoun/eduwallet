@@ -2,10 +2,18 @@ import { useCallback, useEffect, useState } from 'react';
 import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
+import { Modal } from '../components/Modal';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { formatDate } from '../lib/format';
+import { reportStatusTone } from '../lib/badgeTones';
 import { REPORT_PERIOD_LABELS } from '../types/admin';
-import type { ReportRequestRow } from '../types/admin';
+import type { ReportRequestRow, ReportStatus } from '../types/admin';
+
+const REPORT_STATUS_LABEL: Record<ReportStatus, string> = {
+  PENDING: 'Pending',
+  GENERATED: 'Generated (Not Sent)',
+  SENT: 'Sent',
+};
 
 const INCLUDE_LABELS: Array<{ key: keyof ReportRequestRow; label: string }> = [
   { key: 'includeCardPurchases', label: 'Card Purchases' },
@@ -21,6 +29,12 @@ export function Reports() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  const [previewReport, setPreviewReport] = useState<ReportRequestRow | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [isSending, setIsSending] = useState(false);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -41,6 +55,16 @@ export function Reports() {
 
   useVisibilityRefetch(load);
 
+  // Revokes the previous blob URL whenever the preview changes or the page unmounts — same
+  // leak concern as AgentWithdrawals.tsx's receipt preview.
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
   const handleGenerate = async (report: ReportRequestRow) => {
     setBusyId(report.id);
     setError(null);
@@ -54,17 +78,41 @@ export function Reports() {
     }
   };
 
-  const handleView = async (report: ReportRequestRow) => {
-    setBusyId(report.id);
-    setError(null);
+  const openPreview = async (report: ReportRequestRow) => {
+    setPreviewReport(report);
+    setPreviewUrl(null);
+    setPreviewError(null);
+    setIsPreviewLoading(true);
     try {
       const response = await api.get(`/reports/${report.id}/download`, { responseType: 'blob' });
-      const url = URL.createObjectURL(response.data as Blob);
-      window.open(url, '_blank', 'noopener,noreferrer');
+      setPreviewUrl(URL.createObjectURL(response.data as Blob));
     } catch (err) {
-      setError(getErrorMessage(err));
+      setPreviewError(getErrorMessage(err));
     } finally {
-      setBusyId(null);
+      setIsPreviewLoading(false);
+    }
+  };
+
+  const closePreview = () => {
+    if (isSending) return;
+    setPreviewReport(null);
+    setPreviewUrl(null);
+    setPreviewError(null);
+  };
+
+  const handleSendToParent = async () => {
+    if (!previewReport) return;
+    setIsSending(true);
+    setPreviewError(null);
+    try {
+      await api.post(`/reports/${previewReport.id}/send`);
+      setPreviewReport(null);
+      setPreviewUrl(null);
+      await load();
+    } catch (err) {
+      setPreviewError(getErrorMessage(err));
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -133,12 +181,12 @@ export function Reports() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <Badge tone={report.status === 'GENERATED' ? 'green' : 'yellow'}>
-                      {report.status === 'GENERATED' ? 'Generated' : 'Pending'}
+                    <Badge tone={reportStatusTone[report.status] ?? 'gray'}>
+                      {REPORT_STATUS_LABEL[report.status]}
                     </Badge>
                   </td>
                   <td className="px-4 py-3">
-                    {report.status === 'PENDING' ? (
+                    {report.status === 'PENDING' && (
                       <button
                         type="button"
                         disabled={busyId === report.id}
@@ -147,12 +195,21 @@ export function Reports() {
                       >
                         {busyId === report.id ? 'Generating…' : 'Generate PDF'}
                       </button>
-                    ) : (
+                    )}
+                    {report.status === 'GENERATED' && (
                       <button
                         type="button"
-                        disabled={busyId === report.id}
-                        onClick={() => void handleView(report)}
-                        className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                        onClick={() => void openPreview(report)}
+                        className="rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-white hover:bg-primary-600"
+                      >
+                        Preview
+                      </button>
+                    )}
+                    {report.status === 'SENT' && (
+                      <button
+                        type="button"
+                        onClick={() => void openPreview(report)}
+                        className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
                       >
                         View PDF
                       </button>
@@ -163,6 +220,61 @@ export function Reports() {
           </tbody>
         </table>
       </div>
+
+      {previewReport && (
+        <Modal
+          title={`Report Preview — ${previewReport.student.fullName}`}
+          onClose={closePreview}
+          maxWidthClassName="max-w-4xl"
+        >
+          <div className="space-y-3">
+            <p className="text-sm text-slate-500">
+              For {previewReport.parent.fullName} · {REPORT_PERIOD_LABELS[previewReport.period]}
+            </p>
+
+            {previewError && (
+              <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{previewError}</p>
+            )}
+
+            <div className="h-[70vh] w-full overflow-hidden rounded-md border border-slate-200 bg-slate-50">
+              {isPreviewLoading && (
+                <p className="flex h-full items-center justify-center text-sm text-slate-400">
+                  Loading preview…
+                </p>
+              )}
+              {!isPreviewLoading && previewUrl && (
+                <iframe src={previewUrl} title="Report preview" className="h-full w-full" />
+              )}
+              {!isPreviewLoading && !previewUrl && !previewError && (
+                <p className="flex h-full items-center justify-center text-sm text-slate-400">
+                  Could not load the report preview.
+                </p>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closePreview}
+                disabled={isSending}
+                className="rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              {previewReport.status === 'GENERATED' && (
+                <button
+                  type="button"
+                  onClick={() => void handleSendToParent()}
+                  disabled={isSending || !previewUrl}
+                  className="rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-40"
+                >
+                  {isSending ? 'Sending…' : 'Send to Parent'}
+                </button>
+              )}
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

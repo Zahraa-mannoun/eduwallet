@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Avatar, Button, Chip, Divider, List, Text } from 'react-native-paper';
@@ -8,6 +8,8 @@ import type { NavigationProp } from '@react-navigation/native';
 import { USER_TYPES } from '../constants/userTypes';
 import { useAuth } from '../context/AuthContext';
 import * as kycService from '../services/kycService';
+import * as parentalService from '../services/parentalService';
+import { ApiError } from '../services/api';
 import { colors } from '../theme/colors';
 import { getInitials } from '../utils/getInitials';
 import { getEffectiveKYCStatus } from '../utils/kycStatus';
@@ -88,6 +90,33 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
     // AppNavigator reacts to the resulting auth state and switches back to Login on its own.
   };
 
+  const goToStudentReceipts = (studentId: string, studentName: string) => {
+    navigation.navigate('ParentStudentDetail', { studentId, studentName });
+  };
+
+  const handleStudentReceiptsPress = async () => {
+    try {
+      const students = await parentalService.getLinkedStudents();
+      if (students.length === 0) {
+        Alert.alert('No Linked Students', 'Link a student first to view their withdrawal receipts.');
+        return;
+      }
+      if (students.length === 1) {
+        goToStudentReceipts(students[0].student.id, students[0].student.fullName);
+        return;
+      }
+      Alert.alert('Select Student', 'Which student would you like to view receipts for?', [
+        ...students.map((item) => ({
+          text: item.student.fullName,
+          onPress: () => goToStudentReceipts(item.student.id, item.student.fullName),
+        })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ]);
+    } catch (err) {
+      Alert.alert('Error', err instanceof ApiError ? err.message : 'Could not load your students.');
+    }
+  };
+
   const ACCOUNT_LINKS = [
     ...(user?.userType === 'INSTITUTION'
       ? [
@@ -105,6 +134,11 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
     },
     ...(user?.userType === 'PARENT'
       ? [
+          {
+            title: 'Student Receipts',
+            icon: 'receipt-text-outline',
+            onPress: () => void handleStudentReceiptsPress(),
+          },
           {
             title: 'Request History Report',
             icon: 'file-chart-outline',

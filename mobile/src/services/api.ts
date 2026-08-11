@@ -98,6 +98,15 @@ function refreshAccessToken(): Promise<RefreshOutcome> {
   return pendingRefresh;
 }
 
+// Exposed for callers that can't go through apiRequest (e.g. reportService's File.downloadFileAsync,
+// which needs the token up front rather than as a per-fetch header apiRequest attaches itself) but
+// still need the same "access token may have expired — refresh and retry once" behavior. Returns
+// null only when the refresh token itself is invalid or missing, i.e. the session is genuinely over.
+export async function getFreshAccessToken(): Promise<string | null> {
+  const outcome = await refreshAccessToken();
+  return 'accessToken' in outcome ? outcome.accessToken : null;
+}
+
 export type ApiRequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;

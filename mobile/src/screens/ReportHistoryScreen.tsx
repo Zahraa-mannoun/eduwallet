@@ -18,9 +18,12 @@ const PERIOD_LABELS: Record<ReportPeriod, string> = {
   LAST_2_YEARS: 'Last 2 Years',
 };
 
+// GENERATED is an admin-only preview state — from the parent's perspective it's no different
+// from PENDING, since the report isn't downloadable until the admin explicitly sends it.
 const STATUS_META: Record<ReportStatus, { label: string; color: string }> = {
   PENDING: { label: 'Pending', color: '#F59E0B' },
-  GENERATED: { label: 'Ready', color: colors.accent },
+  GENERATED: { label: 'Pending', color: '#F59E0B' },
+  SENT: { label: 'Ready', color: colors.accent },
 };
 
 function formatDate(isoDate: string): string {
@@ -107,7 +110,7 @@ export default function ReportHistoryScreen({
                   >
                     {statusMeta.label}
                   </Chip>
-                  {report.status === 'GENERATED' ? (
+                  {report.status === 'SENT' ? (
                     <Button
                       mode="text"
                       compact

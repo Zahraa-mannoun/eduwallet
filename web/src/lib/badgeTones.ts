@@ -55,3 +55,9 @@ export const receiptStatusTone: Record<string, BadgeTone> = {
   FLAGGED: 'orange',
   REJECTED: 'red',
 };
+
+export const reportStatusTone: Record<string, BadgeTone> = {
+  PENDING: 'yellow',
+  GENERATED: 'blue',
+  SENT: 'green',
+};

@@ -9,6 +9,7 @@ import {
   getMyReports,
   getReportFile,
   requestReport,
+  sendReportToParent,
 } from './reports.service';
 
 function handleReportsError(request: FastifyRequest, reply: FastifyReply, error: unknown) {
@@ -92,10 +93,27 @@ export async function downloadReportHandler(request: FastifyRequest, reply: Fast
 
   try {
     const authUser = requireAuthUser(request);
-    const { absolutePath } = await getReportFile(authUser.id, parsed.data.id);
+    const { absolutePath } = await getReportFile(authUser, parsed.data.id);
     reply.header('Content-Type', 'application/pdf');
     reply.header('Content-Disposition', `attachment; filename="report-${parsed.data.id}.pdf"`);
     return reply.send(createReadStream(absolutePath));
+  } catch (error) {
+    return handleReportsError(request, reply, error);
+  }
+}
+
+export async function sendReportHandler(request: FastifyRequest, reply: FastifyReply) {
+  const parsed = reportIdParamsSchema.safeParse(request.params);
+  if (!parsed.success) {
+    return reply
+      .status(400)
+      .send(errorResponse(parsed.error.issues[0]?.message ?? 'Invalid input', 'VALIDATION_ERROR'));
+  }
+
+  try {
+    requireAuthUser(request);
+    const result = await sendReportToParent(parsed.data.id);
+    return reply.status(200).send(successResponse(result));
   } catch (error) {
     return handleReportsError(request, reply, error);
   }

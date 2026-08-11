@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
-import type { FraudAlert, Prisma, ReportRequest } from '@prisma/client';
+import type { FraudAlert, Prisma, ReportRequest, UserType } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
 import { createNotification } from '../notifications/notifications.service';
@@ -118,16 +118,31 @@ export async function getAllReports(): Promise<ReportRequestRow[]> {
   });
 }
 
+// ADMIN may preview any report as soon as it's GENERATED (that's the point of the preview
+// step); PARENT may only download their own report, and only once it's been explicitly SENT —
+// GENERATED-but-unsent is an admin-only preview state.
 export async function getReportFile(
-  parentUserId: string,
+  requester: { id: string; userType: UserType },
   reportId: string
 ): Promise<{ reportRequest: ReportRequest; absolutePath: string }> {
   const reportRequest = await prisma.reportRequest.findUnique({ where: { id: reportId } });
-  if (!reportRequest || reportRequest.parentUserId !== parentUserId) {
+  if (!reportRequest) {
     throw new AppError(404, 'REPORT_NOT_FOUND', 'Report not found');
   }
-  if (reportRequest.status !== 'GENERATED' || !reportRequest.pdfPath) {
-    throw new AppError(400, 'REPORT_NOT_READY', 'This report has not been generated yet');
+
+  if (requester.userType === 'ADMIN') {
+    if (!reportRequest.pdfPath) {
+      throw new AppError(400, 'REPORT_NOT_READY', 'This report has not been generated yet');
+    }
+  } else if (requester.userType === 'PARENT') {
+    if (reportRequest.parentUserId !== requester.id) {
+      throw new AppError(404, 'REPORT_NOT_FOUND', 'Report not found');
+    }
+    if (reportRequest.status !== 'SENT' || !reportRequest.pdfPath) {
+      throw new AppError(400, 'REPORT_NOT_READY', 'This report has not been generated yet');
+    }
+  } else {
+    throw new AppError(403, 'FORBIDDEN', 'You do not have access to this report');
   }
 
   const absolutePath = path.join(BACKEND_ROOT, reportRequest.pdfPath);
@@ -267,15 +282,46 @@ export async function generateReport(reportId: string): Promise<ReportRequest> {
   await fs.writeFile(absoluteFilePath, pdfBuffer);
   const pdfPath = path.relative(BACKEND_ROOT, absoluteFilePath);
 
+  // Status lands on GENERATED, not SENT — the PDF exists for admin preview only until
+  // sendReportToParent() below is explicitly called, so the parent isn't notified yet.
   const updated = await prisma.reportRequest.update({
     where: { id: reportRequest.id },
     data: { status: 'GENERATED', pdfPath, generatedAt: new Date() },
   });
 
+  return updated;
+}
+
+// Admin's confirmation after reviewing the PDF preview — only now does the parent learn the
+// report exists and can download it (getReportFile below still enforces SENT for a PARENT
+// requester even if this is somehow skipped).
+export async function sendReportToParent(reportId: string): Promise<ReportRequest> {
+  const reportRequest = await prisma.reportRequest.findUnique({ where: { id: reportId } });
+  if (!reportRequest) {
+    throw new AppError(404, 'REPORT_NOT_FOUND', 'Report not found');
+  }
+  if (reportRequest.status !== 'GENERATED') {
+    throw new AppError(
+      400,
+      'REPORT_NOT_GENERATED',
+      'This report must be generated and previewed before it can be sent'
+    );
+  }
+
+  const updated = await prisma.reportRequest.update({
+    where: { id: reportRequest.id },
+    data: { status: 'SENT', sentAt: new Date() },
+  });
+
+  const student = await prisma.user.findUnique({
+    where: { id: reportRequest.studentUserId },
+    select: { fullName: true },
+  });
+
   await createNotification(
     reportRequest.parentUserId,
     'Report Ready',
-    `Your history report for ${reportRequest.student.fullName} is ready to download.`,
+    `Your history report for ${student?.fullName ?? 'your student'} is ready to download.`,
     'REPORT_READY'
   );
 

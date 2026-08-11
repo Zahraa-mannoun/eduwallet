@@ -118,7 +118,11 @@ enum ReportPeriod {
 
 enum ReportStatus {
   PENDING
+  // PDF exists but is admin-preview-only — not yet visible/downloadable to the parent.
   GENERATED
+  // Admin reviewed the preview and sent it on; only now does the parent's report list treat
+  // it as ready to download.
+  SENT
 }
 
 enum MerchantType {
@@ -477,15 +481,21 @@ model WithdrawalRequest {
   @@map("withdrawal_requests")
 }
 
+// One immutable row per WithdrawalRequest.status transition — the audit trail the state
+// machine in withdrawals.service.ts is required to leave behind (PENDING_PARENT_APPROVAL ->
+// APPROVED/REJECTED -> COMPLETED, or straight to COMPLETED for an in-person agent dispense).
+// Rows are never updated after creation.
 model WithdrawalHistory {
-  id                        String                    @id @default(uuid())
+  id                        String                     @id @default(uuid())
   walletId                  String
   withdrawalRequestId       String
-  amount                    Decimal                   @db.Decimal(12, 2)
+  amount                    Decimal                    @db.Decimal(12, 2)
   category                  TransactionCategory
+  status                    WithdrawalStatus
+  note                      String?
   merchantName              String?
-  receiptVerificationStatus ReceiptVerificationStatus
-  completedAt               DateTime                  @default(now())
+  receiptVerificationStatus ReceiptVerificationStatus?
+  createdAt                 DateTime                   @default(now())
 
   wallet            Wallet            @relation(fields: [walletId], references: [id])
   withdrawalRequest WithdrawalRequest @relation(fields: [withdrawalRequestId], references: [id])
@@ -527,6 +537,7 @@ model ReportRequest {
   pdfPath              String?
   createdAt            DateTime     @default(now())
   generatedAt          DateTime?
+  sentAt               DateTime?
 
   parent  User @relation("ReportRequestAsParent", fields: [parentUserId], references: [id])
   student User @relation("ReportRequestAsStudent", fields: [studentUserId], references: [id])

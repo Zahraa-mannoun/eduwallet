@@ -146,7 +146,9 @@ export const FRAUD_TYPES: FraudAlertType[] = ['CIRCULAR', 'VELOCITY', 'DUPLICATE
 export const FRAUD_SEVERITIES: FraudSeverity[] = ['LOW', 'MEDIUM', 'HIGH'];
 
 export type ReportPeriod = 'LAST_WEEK' | 'LAST_MONTH' | 'LAST_YEAR' | 'LAST_2_YEARS';
-export type ReportStatus = 'PENDING' | 'GENERATED';
+// GENERATED = PDF exists but is admin-preview-only; SENT = admin confirmed the preview and the
+// parent can now see/download it.
+export type ReportStatus = 'PENDING' | 'GENERATED' | 'SENT';
 
 export type ReportRequestRow = {
   id: string;
@@ -163,6 +165,7 @@ export type ReportRequestRow = {
   pdfPath: string | null;
   createdAt: string;
   generatedAt: string | null;
+  sentAt: string | null;
   parent: { id: string; fullName: string; email: string };
   student: { id: string; fullName: string; email: string };
 };
@@ -198,8 +201,9 @@ export type ReceiptVerificationStatus =
   | 'MANUALLY_VERIFIED'
   | 'REJECTED';
 
+// PENDING is excluded — withdrawals go PENDING -> COMPLETED instantly while the student is
+// physically at the agent, so it's never a state an admin needs to filter for.
 export const WITHDRAWAL_STATUSES: WithdrawalStatus[] = [
-  'PENDING',
   'PENDING_PARENT_APPROVAL',
   'APPROVED',
   'REJECTED',

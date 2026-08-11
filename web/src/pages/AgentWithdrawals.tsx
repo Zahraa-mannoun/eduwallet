@@ -19,8 +19,19 @@ type Decision = 'VERIFIED' | 'FLAGGED' | 'REJECTED';
 
 const DECISION_LABEL: Record<Decision, string> = {
   VERIFIED: 'Mark as Verified',
-  FLAGGED: 'Flag Receipt',
+  FLAGGED: 'Flag',
   REJECTED: 'Reject',
+};
+
+// Which decisions make sense from each current receipt status — MANUALLY_VERIFIED/REJECTED are
+// final states with no further action, AUTO_VERIFIED only allows the rare admin override (Flag),
+// and PENDING/FLAGGED both still need a human call (Verify or Reject).
+const AVAILABLE_DECISIONS: Record<ReceiptVerificationStatus, Decision[]> = {
+  PENDING: ['VERIFIED', 'REJECTED'],
+  FLAGGED: ['VERIFIED', 'REJECTED'],
+  AUTO_VERIFIED: ['FLAGGED'],
+  MANUALLY_VERIFIED: [],
+  REJECTED: [],
 };
 
 // receiptVerificationStatus defaults to PENDING before a receipt even exists, so "no receipt
@@ -347,45 +358,46 @@ export function AgentWithdrawals() {
                                 </dl>
                               </div>
 
-                              {row.receiptPath && (
-                                <div>
-                                  <label
-                                    htmlFor={`note-${row.id}`}
-                                    className="mb-1 block text-xs font-semibold uppercase text-slate-500"
-                                  >
-                                    Review Note (optional)
-                                  </label>
-                                  <textarea
-                                    id={`note-${row.id}`}
-                                    rows={2}
-                                    value={noteDraft}
-                                    onChange={(event) => setNoteDraft(event.target.value)}
-                                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                                  />
+                              {row.receiptPath &&
+                                AVAILABLE_DECISIONS[row.receiptVerificationStatus].length > 0 && (
+                                  <div>
+                                    <label
+                                      htmlFor={`note-${row.id}`}
+                                      className="mb-1 block text-xs font-semibold uppercase text-slate-500"
+                                    >
+                                      Review Note (optional)
+                                    </label>
+                                    <textarea
+                                      id={`note-${row.id}`}
+                                      rows={2}
+                                      value={noteDraft}
+                                      onChange={(event) => setNoteDraft(event.target.value)}
+                                      className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                                    />
 
-                                  {actionError && (
-                                    <p className="mt-2 text-sm text-red-600">{actionError}</p>
-                                  )}
-
-                                  <div className="mt-2 flex flex-wrap gap-2">
-                                    {(['VERIFIED', 'FLAGGED', 'REJECTED'] as Decision[]).map(
-                                      (decision) => (
-                                        <button
-                                          key={decision}
-                                          type="button"
-                                          disabled={pendingDecision !== null}
-                                          onClick={() => void handleDecision(row, decision)}
-                                          className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
-                                        >
-                                          {pendingDecision === decision
-                                            ? 'Saving…'
-                                            : DECISION_LABEL[decision]}
-                                        </button>
-                                      )
+                                    {actionError && (
+                                      <p className="mt-2 text-sm text-red-600">{actionError}</p>
                                     )}
+
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                      {AVAILABLE_DECISIONS[row.receiptVerificationStatus].map(
+                                        (decision) => (
+                                          <button
+                                            key={decision}
+                                            type="button"
+                                            disabled={pendingDecision !== null}
+                                            onClick={() => void handleDecision(row, decision)}
+                                            className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                                          >
+                                            {pendingDecision === decision
+                                              ? 'Saving…'
+                                              : DECISION_LABEL[decision]}
+                                          </button>
+                                        )
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              )}
+                                )}
                             </div>
                           </div>
                         </td>

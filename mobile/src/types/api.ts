@@ -64,7 +64,9 @@ export type ReceiptVerificationStatus =
 
 export type ReportPeriod = 'LAST_WEEK' | 'LAST_MONTH' | 'LAST_YEAR' | 'LAST_2_YEARS';
 
-export type ReportStatus = 'PENDING' | 'GENERATED';
+// GENERATED = admin has produced the PDF but is still previewing it — not yet visible to the
+// parent as ready. Only SENT means the admin confirmed the preview and it's downloadable here.
+export type ReportStatus = 'PENDING' | 'GENERATED' | 'SENT';
 
 export type EmailChangeStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
 
@@ -254,6 +256,7 @@ export type ReportRequest = {
   pdfPath: string | null;
   createdAt: string;
   generatedAt: string | null;
+  sentAt: string | null;
   parent: { id: string; fullName: string; email: string };
   student: { id: string; fullName: string; email: string };
 };

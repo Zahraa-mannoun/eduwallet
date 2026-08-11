@@ -2,12 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type {
+  Prisma,
   ReceiptVerificationStatus,
   TransactionCategory,
   User,
   UserType,
   Wallet,
   WithdrawalRequest,
+  WithdrawalStatus,
 } from '@prisma/client';
 import cron from 'node-cron';
 import type { ScheduledTask } from 'node-cron';
@@ -253,6 +255,32 @@ export async function lookupStudent(query: string): Promise<StudentLookup> {
 // completeWithdrawal (finishing a request that already cleared the parent-approval
 // exception) — both end the same way: decrement LockedFund + wallet.balance, mark/create
 // the WithdrawalRequest as COMPLETED, log a WithdrawalHistory row, notify student + parent.
+// One immutable audit row per WithdrawalRequest.status transition — accepts either the plain
+// client or a $transaction callback's `tx`, since disburse() below needs the write to be part
+// of the same atomic transaction that moves the money.
+async function recordWithdrawalHistory(
+  db: Prisma.TransactionClient,
+  request: {
+    id: string;
+    walletId: string;
+    amount: Prisma.Decimal | number | string;
+    category: TransactionCategory;
+    status: WithdrawalStatus;
+  },
+  note: string | null
+): Promise<void> {
+  await db.withdrawalHistory.create({
+    data: {
+      walletId: request.walletId,
+      withdrawalRequestId: request.id,
+      amount: request.amount,
+      category: request.category,
+      status: request.status,
+      note,
+    },
+  });
+}
+
 async function disburse(
   adminUserId: string,
   wallet: Wallet,
@@ -304,15 +332,11 @@ async function disburse(
           },
         });
 
-    await tx.withdrawalHistory.create({
-      data: {
-        walletId: wallet.id,
-        withdrawalRequestId: completedRequest.id,
-        amount,
-        category,
-        receiptVerificationStatus: 'PENDING',
-      },
-    });
+    await recordWithdrawalHistory(
+      tx,
+      { id: completedRequest.id, walletId: wallet.id, amount, category, status: 'COMPLETED' },
+      existingRequestId ? 'Completed by agent after parent approval' : 'Dispensed by agent'
+    );
 
     // Feeds fraud monitoring the same way card payments and transfers do — cash leaving the
     // wallet with no toWalletId, mirroring a merchant card payment (cards.service.ts useCard()).
@@ -429,6 +453,12 @@ export async function processWithdrawal(
         },
       });
 
+      await recordWithdrawalHistory(
+        prisma,
+        { id: request.id, walletId: wallet.id, amount: input.amount, category: 'GENERAL', status: 'PENDING_PARENT_APPROVAL' },
+        'Requested by agent, awaiting parent approval (over threshold)'
+      );
+
       await createNotification(
         parentalControl.parentUserId,
         'Withdrawal Approval Needed',
@@ -506,6 +536,12 @@ export async function approveWithdrawal(
     data: { status: 'APPROVED' },
   });
 
+  await recordWithdrawalHistory(
+    prisma,
+    { id: updated.id, walletId: wallet.id, amount: updated.amount, category: updated.category, status: 'APPROVED' },
+    'Approved by parent'
+  );
+
   await createNotification(
     wallet.userId,
     'Withdrawal Approved',
@@ -527,6 +563,12 @@ export async function rejectWithdrawal(
     where: { id: request.id },
     data: { status: 'REJECTED' },
   });
+
+  await recordWithdrawalHistory(
+    prisma,
+    { id: updated.id, walletId: wallet.id, amount: updated.amount, category: updated.category, status: 'REJECTED' },
+    reason
+  );
 
   await createNotification(
     wallet.userId,
@@ -664,20 +706,23 @@ export async function uploadReceipt(
 
   const extractedText = [fileName, providedMerchantName ?? ''].join(' ').trim();
   const merchantMatch = extractedText ? await detectMerchant(extractedText) : null;
+  // Only ever informational once the merchant lookup below decides the status — a keyword hit
+  // alone (e.g. "cafe" in the filename) is not a merchant match and must never AUTO_VERIFY or
+  // FLAG a receipt for an unregistered business.
   const detectedCategory = merchantMatch?.category ?? (extractedText ? detectCategoryFromText(extractedText) : null);
   const merchantName = merchantMatch?.name ?? providedMerchantName ?? null;
 
   let receiptVerificationStatus: ReceiptVerificationStatus;
   let receiptVerificationNote: string | null = null;
 
-  if (!detectedCategory) {
+  if (!merchantMatch) {
     receiptVerificationStatus = 'PENDING';
-    receiptVerificationNote = 'No category could be detected from the receipt — manual review needed.';
-  } else if (detectedCategory === request.category) {
+    receiptVerificationNote = 'Merchant could not be matched to a known business — manual review needed.';
+  } else if (merchantMatch.category === request.category) {
     receiptVerificationStatus = 'AUTO_VERIFIED';
   } else {
     receiptVerificationStatus = 'FLAGGED';
-    receiptVerificationNote = `Receipt appears to be for ${detectedCategory.toLowerCase()}, but the withdrawal was declared as ${request.category.toLowerCase()}.`;
+    receiptVerificationNote = `Receipt merchant "${merchantMatch.name}" is registered for ${merchantMatch.category.toLowerCase()}, but the withdrawal was declared as ${request.category.toLowerCase()}.`;
   }
 
   const updated = await prisma.withdrawalRequest.update({
@@ -691,8 +736,12 @@ export async function uploadReceipt(
     },
   });
 
+  // Receipt review never changes WithdrawalRequest.status, so no new history row is warranted
+  // here — only refresh the receipt snapshot on the COMPLETED transition row (the audit rows
+  // for earlier transitions like PENDING_PARENT_APPROVAL predate the receipt and must stay as
+  // they were).
   await prisma.withdrawalHistory.updateMany({
-    where: { withdrawalRequestId: request.id },
+    where: { withdrawalRequestId: request.id, status: 'COMPLETED' },
     data: { receiptVerificationStatus, merchantName },
   });
 
@@ -762,10 +811,10 @@ const RECEIPT_DECISION_STATUS: Record<'VERIFIED' | 'FLAGGED' | 'REJECTED', Recei
   REJECTED: 'REJECTED',
 };
 
-const RECEIPT_DECISION_LABEL: Record<'VERIFIED' | 'FLAGGED' | 'REJECTED', string> = {
-  VERIFIED: 'verified',
-  FLAGGED: 'flagged for review',
-  REJECTED: 'rejected',
+const RECEIPT_DECISION_NOTIFICATION_MESSAGE: Record<'VERIFIED' | 'FLAGGED' | 'REJECTED', string> = {
+  VERIFIED: 'Your receipt has been verified by admin',
+  FLAGGED: 'Your receipt has been flagged for review',
+  REJECTED: 'Your receipt was rejected. Please contact support.',
 };
 
 // Admin's manual call on a receipt the rule-based auto-detection in uploadReceipt() couldn't
@@ -789,8 +838,10 @@ export async function verifyReceipt(
     data: { receiptVerificationStatus, receiptVerificationNote },
   });
 
+  // Same reasoning as uploadReceipt() above — admin's manual receipt decision doesn't move
+  // WithdrawalRequest.status, so only the COMPLETED transition row's receipt snapshot updates.
   await prisma.withdrawalHistory.updateMany({
-    where: { withdrawalRequestId: request.id },
+    where: { withdrawalRequestId: request.id, status: 'COMPLETED' },
     data: { receiptVerificationStatus },
   });
 
@@ -799,7 +850,7 @@ export async function verifyReceipt(
     await createNotification(
       wallet.userId,
       'Receipt Review Update',
-      `An admin has ${RECEIPT_DECISION_LABEL[decision]} your receipt for the $${formatMoney(request.amount)} ${request.category.toLowerCase()} withdrawal.${receiptVerificationNote ? ` Note: ${receiptVerificationNote}` : ''}`,
+      `${RECEIPT_DECISION_NOTIFICATION_MESSAGE[decision]}${receiptVerificationNote ? ` Note: ${receiptVerificationNote}` : ''}`,
       'WITHDRAWAL_RECEIPT_REVIEWED'
     );
 
