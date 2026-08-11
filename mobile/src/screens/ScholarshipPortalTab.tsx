@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, Avatar, Button, Chip, Snackbar, Text } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { SelectedStudentSummary, TransactionCategory } from '../types/api';
 import CategorySelectorGrid from '../components/CategorySelectorGrid';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
@@ -18,7 +19,7 @@ const ACADEMIC_CATEGORIES = BUDGET_CATEGORIES.filter((category) =>
   ACADEMIC_CATEGORY_KEYS.has(category.key)
 );
 
-const PARTIAL_COLOR = '#F59E0B';
+const PARTIAL_COLOR = '#D97706';
 const WILL_BE_FUNDED_COLOR = '#EC4899';
 
 // student.amount is what's already selected for this student from Tab 1 — this screen has no
@@ -123,7 +124,17 @@ export default function ScholarshipPortalTab() {
                   <Text style={styles.studentAmount}>${Number(student.amount).toFixed(2)}</Text>
                   <Chip
                     compact
-                    icon={badge.icon}
+                    // Chip's `icon` prop, given a bare string, resolves its color from the
+                    // chip's own theme — not from textStyle — which is why the icon didn't
+                    // match the label color. A render function lets us force badge.color on
+                    // both explicitly.
+                    icon={() => (
+                      <MaterialCommunityIcons
+                        name={badge.icon as keyof typeof MaterialCommunityIcons.glyphMap}
+                        size={14}
+                        color={badge.color}
+                      />
+                    )}
                     style={[styles.statusChip, { backgroundColor: `${badge.color}1F` }]}
                     textStyle={{ color: badge.color, fontSize: 10, fontWeight: '700' }}
                   >
@@ -229,6 +240,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   studentRight: {
+    flexDirection: 'column',
     alignItems: 'flex-end',
   },
   studentAmount: {
@@ -239,6 +251,8 @@ const styles = StyleSheet.create({
   statusChip: {
     height: 22,
     marginTop: 4,
+    flexShrink: 0,
+    minWidth: 96,
   },
   sendButton: {
     borderRadius: 10,

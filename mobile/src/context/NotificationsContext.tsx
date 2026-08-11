@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import type { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { Notification } from '../types/api';
 import * as notificationService from '../services/notificationService';
-import { getSocket } from '../services/socket';
+import { subscribeToNotifications } from '../services/socket';
 import { useAuth } from './AuthContext';
 
 export type AppNotification = Notification;
@@ -14,6 +14,7 @@ const DEFAULT_META: NotificationMeta = { icon: 'bell-outline', color: '#2E5FAC' 
 
 export const NOTIFICATION_META: Record<string, NotificationMeta> = {
   TRANSFER_RECEIVED: { icon: 'cash-plus', color: '#3DDC97' },
+  TRANSFER_SENT: { icon: 'arrow-up-circle-outline', color: '#2E5FAC' },
   CARD_PAYMENT: { icon: 'credit-card-outline', color: '#3DDC97' },
   STUDENT_SPENDING: { icon: 'cash-minus', color: '#2E5FAC' },
   STUDENT_CARD_PAYMENT: { icon: 'credit-card-outline', color: '#2E5FAC' },
@@ -103,18 +104,14 @@ export function NotificationsProvider({ children }: Readonly<{ children: ReactNo
 
   useEffect(() => {
     if (!isAuthenticated) return undefined;
-    const socket = getSocket();
-    if (!socket) return undefined;
 
-    const handleNewNotification = (notification: AppNotification) => {
+    // subscribeToNotifications attaches to the current socket immediately (or, if the socket
+    // hasn't been created yet, as soon as connectSocket() creates one) — no window where a
+    // notification could arrive before this listener is in place.
+    return subscribeToNotifications((notification) => {
       setNotifications((prev) => [notification, ...prev]);
       setUnreadCount((prev) => prev + 1);
-    };
-
-    socket.on('notification:new', handleNewNotification);
-    return () => {
-      socket.off('notification:new', handleNewNotification);
-    };
+    });
   }, [isAuthenticated]);
 
   const markAsRead = async (id: string) => {

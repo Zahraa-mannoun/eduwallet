@@ -242,6 +242,13 @@ export async function transfer(
       'TRANSFER_RECEIVED'
     );
 
+    await createNotification(
+      fromUserId,
+      'Money Sent',
+      `You sent ${input.amount} ${input.currency} to ${toWallet.user.fullName} for ${titleCaseCategory(input.category)}.`,
+      'TRANSFER_SENT'
+    );
+
     if (parentalControl) {
       await createNotification(
         parentalControl.parentUserId,

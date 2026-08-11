@@ -88,10 +88,8 @@ export default function ParentSendMoneyScreen(_props: Readonly<ParentTabScreenPr
   const canSend = Boolean(selectedStudent) && parsedAmount > 0 && Boolean(category) && !isSending;
 
   const availableCategories = selectedStudent
-    ? LOCK_CATEGORIES.filter(
-        (cat) =>
-          cat.key === 'general' ||
-          selectedStudent.link.categories.includes(cat.key.toUpperCase() as TransactionCategory)
+    ? LOCK_CATEGORIES.filter((cat) =>
+        selectedStudent.link.categories.includes(cat.key.toUpperCase() as TransactionCategory)
       )
     : LOCK_CATEGORIES;
 
@@ -253,11 +251,11 @@ export default function ParentSendMoneyScreen(_props: Readonly<ParentTabScreenPr
             </View>
 
             <Text style={styles.sectionLabel}>Education Lock</Text>
-            {selectedStudent && availableCategories.length === 1 ? (
+            {selectedStudent && availableCategories.length === 0 ? (
               <Text style={styles.emptyText}>
                 Your parental settings for {selectedStudent.student.fullName} don't allow any
-                locked categories yet — you can still send General funds, or add categories from
-                the Students tab.
+                spending categories yet — add categories (including General) from the Students
+                tab before sending.
               </Text>
             ) : null}
             <View style={styles.categoryGrid}>
