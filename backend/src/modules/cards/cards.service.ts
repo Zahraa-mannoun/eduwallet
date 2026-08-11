@@ -10,9 +10,6 @@ import { runAllChecks } from '../wallet/fraud.service';
 import type { CreateCardInput, UseCardInput } from './cards.schema';
 
 const MAX_CARD_NUMBER_GENERATION_ATTEMPTS = 5;
-// Auto-renewed and manually-replaced cards aren't re-issued through the create-card form,
-// so there's no expiryDays input to carry over — reuse the same default the form itself uses.
-const RENEWAL_EXPIRY_DAYS = 365;
 
 export function generateCardNumber(): string {
   let digits = '';
@@ -193,10 +190,10 @@ export async function useCard(input: UseCardInput): Promise<{ transaction: Trans
 
   const transaction = await prisma.$transaction(async (tx) => {
     if (autoRenew) {
-      // Auto-renew replaces the card outright: delete it now (a fresh replacement is issued
-      // right below, once the transaction commits) instead of leaving a used, unfrozen row
-      // behind that CardsScreen would otherwise have to filter out of the list forever. The
-      // where-clause still guards against a double-spend race on the same card.
+      // Auto-renew deletes the used card outright — no replacement is issued automatically;
+      // the student generates a new one manually when they need it. This is what keeps
+      // CardsScreen's list from accumulating used, unfrozen rows forever. The where-clause
+      // still guards against a double-spend race on the same card.
       const claimed = await tx.virtualCard.deleteMany({
         where: { id: card.id, used: false, frozen: false },
       });
@@ -275,20 +272,6 @@ export async function useCard(input: UseCardInput): Promise<{ transaction: Trans
     `Your card was charged ${input.amount} ${input.currency} at ${input.merchantName}.`,
     'CARD_PAYMENT'
   );
-
-  if (autoRenew) {
-    await issueCard(card.walletId, {
-      merchantLock: card.merchantLock,
-      categoryLock: card.categoryLock,
-      expiry: generateExpiry(RENEWAL_EXPIRY_DAYS),
-    });
-    await createNotification(
-      wallet.userId,
-      'Card Auto-Renewed',
-      `A new ${card.categoryLock ? card.categoryLock.toLowerCase() : 'general'} card was issued to replace the one you just used.`,
-      'CARD_AUTO_RENEWED'
-    );
-  }
 
   const parentalControl = await prisma.parentalControl.findFirst({
     where: { studentUserId: wallet.userId },

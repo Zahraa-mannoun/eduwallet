@@ -150,8 +150,8 @@ export default function AccountSettingsScreen({
                   <Text style={styles.settingTitle}>Auto-renew cards</Text>
                   <Text style={styles.settingDescription}>
                     {cardAutoRenew
-                      ? 'On — a new card is issued automatically in the same category right after a card is used.'
-                      : 'Off — a card freezes after it is used. Unfreeze it manually to get a new one.'}
+                      ? 'Used cards are automatically deleted after use. Generate a new card manually when needed.'
+                      : 'Used cards are frozen after use and can be reused for the same category.'}
                   </Text>
                 </View>
                 <Switch
