@@ -207,7 +207,12 @@ export default function StudentsListScreen({ navigation }: ParentTabScreenProps<
               <TouchableOpacity
                 key={student.id}
                 style={styles.studentRow}
-                onPress={() => navigation.navigate('Home')}
+                onPress={() =>
+                  navigation.navigate('ParentStudentDetail', {
+                    studentId: student.id,
+                    studentName: student.fullName,
+                  })
+                }
               >
                 <Avatar.Text
                   size={48}

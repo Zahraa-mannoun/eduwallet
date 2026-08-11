@@ -53,7 +53,7 @@ function progressColor(percentUsed: number): string {
 }
 
 export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Budget'>>) {
-  const { lockedFunds } = useWallet();
+  const { lockedFunds, refresh: refreshWallet } = useWallet();
   const [budgets, setBudgets] = useState<BudgetCategory[]>([]);
   const [permissions, setPermissions] = useState<MyPermissions | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -89,7 +89,12 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
   const load = useCallback(() => {
     void loadBudgets();
     void loadPermissions();
-  }, [loadBudgets, loadPermissions]);
+    // lockedFunds (total/remaining per category) lives in WalletContext, not fetched by
+    // loadBudgets() above — without this, the Locked Funds progress bar shows whatever was
+    // last fetched by an unrelated screen (e.g. Dashboard) instead of the latest spend, which
+    // is exactly the "always 0%" staleness this screen exists to avoid (see comment below).
+    void refreshWallet();
+  }, [loadBudgets, loadPermissions, refreshWallet]);
 
   // Unlike other screens, this deliberately skips the 30s-throttled focus hook: budget
   // progress must reflect a card payment made moments ago (e.g. at EduMart) the instant

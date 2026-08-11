@@ -1,3 +1,4 @@
+import { createReadStream } from 'node:fs';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { AppError } from '../../utils/AppError';
 import { errorResponse, successResponse } from '../../utils/apiResponse';
@@ -5,18 +6,24 @@ import {
   lookupStudentQuerySchema,
   processWithdrawalSchema,
   rejectWithdrawalSchema,
+  studentIdParamsSchema,
+  verifyReceiptSchema,
   withdrawalIdParamsSchema,
 } from './withdrawals.schema';
 import {
   approveWithdrawal,
   completeWithdrawal,
   getAllWithdrawals,
+  getAllWithdrawalsForAdmin,
   getPendingApprovalsForParent,
+  getReceiptFile,
+  getWithdrawalsForParent,
   getWithdrawalsForStudent,
   lookupStudent,
   processWithdrawal,
   rejectWithdrawal,
   uploadReceipt,
+  verifyReceipt,
 } from './withdrawals.service';
 
 const MAX_RECEIPT_FILE_SIZE_BYTES = 5 * 1024 * 1024;
@@ -225,6 +232,86 @@ export async function uploadReceiptHandler(request: FastifyRequest, reply: Fasti
       uploadedFileName,
       fileBuffer,
       fields.merchantName?.trim() || undefined
+    );
+    return reply.status(200).send(successResponse(result));
+  } catch (error) {
+    return handleWithdrawalsError(request, reply, error);
+  }
+}
+
+export async function getAllWithdrawalsForAdminHandler(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  try {
+    requireAuthUser(request);
+    const withdrawals = await getAllWithdrawalsForAdmin();
+    return reply.status(200).send(successResponse(withdrawals));
+  } catch (error) {
+    return handleWithdrawalsError(request, reply, error);
+  }
+}
+
+export async function getReceiptFileHandler(request: FastifyRequest, reply: FastifyReply) {
+  const parsed = withdrawalIdParamsSchema.safeParse(request.params);
+  if (!parsed.success) {
+    return reply
+      .status(400)
+      .send(errorResponse(parsed.error.issues[0]?.message ?? 'Invalid input', 'VALIDATION_ERROR'));
+  }
+
+  try {
+    const authUser = requireAuthUser(request);
+    const { request: withdrawal, absolutePath } = await getReceiptFile(parsed.data.id, authUser);
+    const contentType = absolutePath.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+    reply.header('Content-Type', contentType);
+    reply.header('Content-Disposition', `inline; filename="receipt-${withdrawal.id}"`);
+    return reply.send(createReadStream(absolutePath));
+  } catch (error) {
+    return handleWithdrawalsError(request, reply, error);
+  }
+}
+
+export async function getWithdrawalsForParentHandler(request: FastifyRequest, reply: FastifyReply) {
+  const parsed = studentIdParamsSchema.safeParse(request.params);
+  if (!parsed.success) {
+    return reply
+      .status(400)
+      .send(errorResponse(parsed.error.issues[0]?.message ?? 'Invalid input', 'VALIDATION_ERROR'));
+  }
+
+  try {
+    const authUser = requireAuthUser(request);
+    const withdrawals = await getWithdrawalsForParent(authUser.id, parsed.data.studentId);
+    return reply.status(200).send(successResponse(withdrawals));
+  } catch (error) {
+    return handleWithdrawalsError(request, reply, error);
+  }
+}
+
+export async function verifyReceiptHandler(request: FastifyRequest, reply: FastifyReply) {
+  const paramsParsed = withdrawalIdParamsSchema.safeParse(request.params);
+  if (!paramsParsed.success) {
+    return reply
+      .status(400)
+      .send(
+        errorResponse(paramsParsed.error.issues[0]?.message ?? 'Invalid input', 'VALIDATION_ERROR')
+      );
+  }
+
+  const bodyParsed = verifyReceiptSchema.safeParse(request.body);
+  if (!bodyParsed.success) {
+    return reply
+      .status(400)
+      .send(errorResponse(bodyParsed.error.issues[0]?.message ?? 'Invalid input', 'VALIDATION_ERROR'));
+  }
+
+  try {
+    requireAuthUser(request);
+    const result = await verifyReceipt(
+      paramsParsed.data.id,
+      bodyParsed.data.decision,
+      bodyParsed.data.note
     );
     return reply.status(200).send(successResponse(result));
   } catch (error) {

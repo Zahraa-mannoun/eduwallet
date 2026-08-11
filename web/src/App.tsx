@@ -10,6 +10,7 @@ import { Students } from './pages/Students';
 import { Parents } from './pages/Parents';
 import { Institutions } from './pages/Institutions';
 import { Transactions } from './pages/Transactions';
+import { AgentWithdrawals } from './pages/AgentWithdrawals';
 import { Relationships } from './pages/Relationships';
 import { KYC } from './pages/KYC';
 import { Resubmissions } from './pages/Resubmissions';
@@ -79,6 +80,14 @@ export function App() {
           element={
             <ProtectedPage>
               <Transactions />
+            </ProtectedPage>
+          }
+        />
+        <Route
+          path="/agent-withdrawals"
+          element={
+            <ProtectedPage>
+              <AgentWithdrawals />
             </ProtectedPage>
           }
         />

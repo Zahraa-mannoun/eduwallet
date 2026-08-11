@@ -55,7 +55,12 @@ export type WithdrawalStatus =
   | 'REJECTED'
   | 'COMPLETED';
 
-export type ReceiptVerificationStatus = 'PENDING' | 'AUTO_VERIFIED' | 'FLAGGED' | 'MANUALLY_VERIFIED';
+export type ReceiptVerificationStatus =
+  | 'PENDING'
+  | 'AUTO_VERIFIED'
+  | 'FLAGGED'
+  | 'MANUALLY_VERIFIED'
+  | 'REJECTED';
 
 export type ReportPeriod = 'LAST_WEEK' | 'LAST_MONTH' | 'LAST_YEAR' | 'LAST_2_YEARS';
 
@@ -221,6 +226,17 @@ export type WithdrawalRequestWithStudent = WithdrawalRequest & {
     userId: string;
     user: { id: string; fullName: string; email: string };
   };
+};
+
+// receiptVerificationStatus alone can't distinguish "never uploaded" from "uploaded but
+// auto-detection was inconclusive" (both start as PENDING) — receiptStatus is the derived
+// field GET /withdrawals/student/:studentId actually returns for that distinction.
+export type StudentReceiptStatus = ReceiptVerificationStatus | 'NOT_UPLOADED';
+
+export type StudentWithdrawalForParent = WithdrawalRequest & {
+  agent: { id: string; fullName: string } | null;
+  receiptStatus: StudentReceiptStatus;
+  receiptUrl: string | null;
 };
 
 export type ReportRequest = {

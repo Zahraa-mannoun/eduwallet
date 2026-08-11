@@ -20,6 +20,7 @@ import scholarshipRoutes from './modules/scholarship/scholarship.routes';
 import supportRoutes from './modules/support/support.routes';
 import savingsRoutes from './modules/savings/savings.routes';
 import { startSavingsCron, stopSavingsCron } from './modules/savings/savings.service';
+import { startWithdrawalsCron, stopWithdrawalsCron } from './modules/withdrawals/withdrawals.service';
 import withdrawalsRoutes from './modules/withdrawals/withdrawals.routes';
 import universityRoutes from './modules/university/university.routes';
 import reportsRoutes from './modules/reports/reports.routes';
@@ -108,9 +109,11 @@ async function start() {
     const server = await buildServer();
     const io = initSocket(server.server, server);
     startSavingsCron(server);
+    startWithdrawalsCron(server);
 
     server.addHook('onClose', async () => {
       stopSavingsCron();
+      stopWithdrawalsCron();
       io.close();
       await prisma.$disconnect();
       await redis.quit();

@@ -7,6 +7,7 @@ import {
   IconAlert,
   IconAnalytics,
   IconBuilding,
+  IconCash,
   IconChevronDown,
   IconDashboard,
   IconEmail,
@@ -35,6 +36,7 @@ const usersSubItems = [
 
 const trailingNavItems = [
   { to: '/transactions', label: 'Transactions', icon: IconTransactions },
+  { to: '/agent-withdrawals', label: 'Agent Withdrawals', icon: IconCash },
   { to: '/relationships', label: 'Relationships', icon: IconLink },
   { to: '/kyc', label: 'KYC Review', icon: IconShield },
   { to: '/resubmissions', label: 'Resubmissions', icon: IconRepeat },

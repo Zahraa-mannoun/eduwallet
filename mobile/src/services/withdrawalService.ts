@@ -1,4 +1,8 @@
-import type { WithdrawalRequest, WithdrawalRequestWithStudent } from '../types/api';
+import type {
+  StudentWithdrawalForParent,
+  WithdrawalRequest,
+  WithdrawalRequestWithStudent,
+} from '../types/api';
 import { apiRequest } from './api';
 
 // Completed withdrawals only — dispensed in person by an agent, not requested by the
@@ -10,6 +14,14 @@ export async function getMyWithdrawals(): Promise<WithdrawalRequest[]> {
 
 export async function getPendingApprovals(): Promise<WithdrawalRequestWithStudent[]> {
   return apiRequest<WithdrawalRequestWithStudent[]>('/withdrawals/pending-approval');
+}
+
+// A linked student's full withdrawal history (any status) — the parent's "Cash Withdrawals"
+// section on that student's detail screen.
+export async function getWithdrawalsForStudent(
+  studentId: string
+): Promise<StudentWithdrawalForParent[]> {
+  return apiRequest<StudentWithdrawalForParent[]>(`/withdrawals/student/${studentId}`);
 }
 
 export async function approveWithdrawal(id: string): Promise<WithdrawalRequest> {

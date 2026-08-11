@@ -44,3 +44,16 @@ export const withdrawalIdParamsSchema = z.object({
 });
 
 export type WithdrawalIdParams = z.infer<typeof withdrawalIdParamsSchema>;
+
+export const verifyReceiptSchema = z.object({
+  decision: z.enum(['VERIFIED', 'FLAGGED', 'REJECTED']),
+  note: z.string().trim().max(500).optional(),
+});
+
+export type VerifyReceiptInput = z.infer<typeof verifyReceiptSchema>;
+
+export const studentIdParamsSchema = z.object({
+  studentId: z.string().uuid('studentId must be a valid UUID'),
+});
+
+export type StudentIdParams = z.infer<typeof studentIdParamsSchema>;

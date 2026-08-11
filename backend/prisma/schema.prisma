@@ -100,6 +100,7 @@ enum ReceiptVerificationStatus {
   AUTO_VERIFIED
   FLAGGED
   MANUALLY_VERIFIED
+  REJECTED
 }
 
 enum EmailChangeStatus {
@@ -465,6 +466,9 @@ model WithdrawalRequest {
   agentId                   String?
   createdAt                 DateTime                  @default(now())
   completedAt               DateTime?
+  // Set once the 24h-no-receipt reminder notification fires (sendMissingReceiptReminders) —
+  // stops the hourly cron from re-notifying the same student/parent every run.
+  receiptReminderSentAt     DateTime?
 
   wallet            Wallet              @relation(fields: [walletId], references: [id])
   withdrawalHistory WithdrawalHistory[]

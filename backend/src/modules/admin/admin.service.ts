@@ -498,6 +498,9 @@ export type AnalyticsResult = {
     byCategory: Array<{ category: string; total: number }>;
     dailyVolume: Array<{ date: string; total: number }>;
   };
+  funding: {
+    byCategory: Array<{ category: string; total: number }>;
+  };
   withdrawals: {
     byCategory: Array<{ category: string; total: number }>;
     totalThisMonth: number;
@@ -536,12 +539,19 @@ export async function getAnalytics(): Promise<AnalyticsResult> {
   thirtyDaysAgo.setHours(0, 0, 0, 0);
 
   // --- Spending analytics ---
+  // Real spending is money LEAVING the system entirely — a card payment (incl. QR, which
+  // pays through the same /cards/use path) or a cash withdrawal, both of which have no
+  // toWalletId since the recipient (a merchant, or "cash in hand") isn't a wallet at all.
+  // A wallet-to-wallet transfer (toWalletId set) is money still inside the platform — a
+  // parent/institution funding transfer, or P2P — never spending, and previously got swept
+  // into this same total by mistake (see `funding` below for the split-out side).
   const [spendingByCategory, spendingTransactions] = await Promise.all([
     prisma.transaction.groupBy({
       by: ['category'],
       where: {
         status: { in: ['AUTO_APPROVED', 'APPROVED'] },
         fromWalletId: { not: null },
+        toWalletId: null,
         createdAt: { gte: monthStart, lt: monthEnd },
       },
       _sum: { amount: true },
@@ -555,6 +565,21 @@ export async function getAnalytics(): Promise<AnalyticsResult> {
       select: { amount: true, createdAt: true },
     }),
   ]);
+
+  // --- Funding analytics ---
+  // A parent locking money into a student's category, or an institution disbursing a
+  // scholarship — both wallet-to-wallet transfers INTO a student, which is what was
+  // incorrectly inflating "Total Spent per Category" above before the toWalletId split.
+  const fundingByCategory = await prisma.transaction.groupBy({
+    by: ['category'],
+    where: {
+      status: { in: ['AUTO_APPROVED', 'APPROVED'] },
+      createdAt: { gte: monthStart, lt: monthEnd },
+      fromWallet: { user: { userType: { in: ['PARENT', 'INSTITUTION'] } } },
+      toWallet: { user: { userType: 'STUDENT' } },
+    },
+    _sum: { amount: true },
+  });
 
   const dailyVolumeMap = new Map<string, number>();
   for (const tx of spendingTransactions) {
@@ -694,6 +719,12 @@ export async function getAnalytics(): Promise<AnalyticsResult> {
         total: Number(row._sum.amount ?? 0),
       })),
       dailyVolume,
+    },
+    funding: {
+      byCategory: fundingByCategory.map((row) => ({
+        category: row.category,
+        total: Number(row._sum.amount ?? 0),
+      })),
     },
     withdrawals: {
       byCategory: withdrawalsByCategory.map((row) => ({

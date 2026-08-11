@@ -4,13 +4,17 @@ import { requireRole } from '../../middleware/requireRole';
 import {
   approveWithdrawalHandler,
   completeWithdrawalHandler,
+  getAllWithdrawalsForAdminHandler,
   getAllWithdrawalsHandler,
   getMyWithdrawalsHandler,
   getPendingApprovalsHandler,
+  getReceiptFileHandler,
+  getWithdrawalsForParentHandler,
   lookupStudentHandler,
   processWithdrawalHandler,
   rejectWithdrawalHandler,
   uploadReceiptHandler,
+  verifyReceiptHandler,
 } from './withdrawals.controller';
 
 // Read-only endpoints are polled by useFocusEffect on tab-switch — same allowance as
@@ -34,6 +38,15 @@ export default async function withdrawalsRoutes(fastify: FastifyInstance): Promi
     uploadReceiptHandler
   );
 
+  // Shared across ADMIN/STUDENT/PARENT — getReceiptFile() itself enforces who may see which
+  // receipt, since the three roles' access rules (any / own-wallet-only / linked-student-only)
+  // don't map onto a single requireRole() gate.
+  fastify.get(
+    '/:id/receipt-file',
+    { config: { rateLimit: READ_RATE_LIMIT } },
+    getReceiptFileHandler
+  );
+
   await fastify.register(async (parentScope) => {
     parentScope.addHook('preHandler', requireRole('PARENT'));
 
@@ -45,6 +58,11 @@ export default async function withdrawalsRoutes(fastify: FastifyInstance): Promi
       { config: { rateLimit: READ_RATE_LIMIT } },
       getPendingApprovalsHandler
     );
+    parentScope.get(
+      '/student/:studentId',
+      { config: { rateLimit: READ_RATE_LIMIT } },
+      getWithdrawalsForParentHandler
+    );
     parentScope.patch('/:id/approve', approveWithdrawalHandler);
     parentScope.patch('/:id/reject', rejectWithdrawalHandler);
   });
@@ -54,6 +72,14 @@ export default async function withdrawalsRoutes(fastify: FastifyInstance): Promi
 
     // Agent portal — every completed withdrawal, across every student.
     agentScope.get('/', { config: { rateLimit: READ_RATE_LIMIT } }, getAllWithdrawalsHandler);
+    // Admin dashboard's Agent Withdrawals page — same rows, plus which agent dispensed each
+    // one. A separate route (not a change to GET / above) so the agent portal's own response
+    // shape never shifts under it.
+    agentScope.get(
+      '/admin',
+      { config: { rateLimit: READ_RATE_LIMIT } },
+      getAllWithdrawalsForAdminHandler
+    );
     agentScope.get(
       '/lookup-student',
       { config: { rateLimit: READ_RATE_LIMIT } },
@@ -67,5 +93,6 @@ export default async function withdrawalsRoutes(fastify: FastifyInstance): Promi
     // Finishes a request that already cleared the parent-approval exception (status
     // APPROVED) — the normal case is dispensed directly by POST /process instead.
     agentScope.patch('/:id/complete', completeWithdrawalHandler);
+    agentScope.patch('/:id/verify-receipt', verifyReceiptHandler);
   });
 }

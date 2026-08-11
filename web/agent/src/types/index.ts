@@ -38,7 +38,12 @@ export type WithdrawalStatus =
   | 'REJECTED'
   | 'COMPLETED';
 
-export type ReceiptVerificationStatus = 'PENDING' | 'AUTO_VERIFIED' | 'FLAGGED' | 'MANUALLY_VERIFIED';
+export type ReceiptVerificationStatus =
+  | 'PENDING'
+  | 'AUTO_VERIFIED'
+  | 'FLAGGED'
+  | 'MANUALLY_VERIFIED'
+  | 'REJECTED';
 
 export type WithdrawalRequest = {
   id: string;

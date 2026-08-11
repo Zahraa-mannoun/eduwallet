@@ -5,11 +5,16 @@ import type {
   ReceiptVerificationStatus,
   TransactionCategory,
   User,
+  UserType,
   Wallet,
   WithdrawalRequest,
 } from '@prisma/client';
+import cron from 'node-cron';
+import type { ScheduledTask } from 'node-cron';
+import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
+import { updateSpent } from '../budget/budget.service';
 import { createNotification } from '../notifications/notifications.service';
 import { runAllChecks } from '../wallet/fraud.service';
 import type { ProcessWithdrawalInput } from './withdrawals.schema';
@@ -89,6 +94,37 @@ export async function getAllWithdrawals(): Promise<WithdrawalRequestWithStudent[
   });
 }
 
+export type WithdrawalRequestForAdmin = WithdrawalRequestWithStudent & {
+  agent: { id: string; fullName: string; email: string } | null;
+};
+
+// The admin dashboard's Agent Withdrawals page — same rows as getAllWithdrawals() (the agent
+// portal's own history view) plus who actually dispensed each one. WithdrawalRequest.agentId
+// has no Prisma relation to User (it's just the raw id agentScope handlers stamp on at
+// dispense time), so the agent's name/email is resolved with a second batched lookup instead
+// of an `include`.
+export async function getAllWithdrawalsForAdmin(): Promise<WithdrawalRequestForAdmin[]> {
+  const requests = await prisma.withdrawalRequest.findMany({
+    orderBy: { createdAt: 'desc' },
+    include: withStudentInclude,
+  });
+
+  const agentIds = [...new Set(requests.map((r) => r.agentId).filter((id): id is string => id !== null))];
+  const agents =
+    agentIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: agentIds } },
+          select: { id: true, fullName: true, email: true },
+        })
+      : [];
+  const agentById = new Map(agents.map((agent) => [agent.id, agent]));
+
+  return requests.map((request) => ({
+    ...request,
+    agent: request.agentId ? (agentById.get(request.agentId) ?? null) : null,
+  }));
+}
+
 // Student-facing history — completed withdrawals only. A GENERAL-over-threshold request
 // still awaiting (or rejected by) the parent isn't "cash the student has received" yet, so
 // it doesn't belong in this list; the parent-approval screens are where that state is visible.
@@ -123,6 +159,58 @@ export async function getPendingApprovalsForParent(
     orderBy: { createdAt: 'desc' },
     include: withStudentInclude,
   });
+}
+
+// receiptVerificationStatus defaults to PENDING before a receipt even exists, so "no receipt
+// yet" and "receipt uploaded but auto-detection was inconclusive" are otherwise
+// indistinguishable — NOT_UPLOADED is the derived state every parent-facing surface (mobile
+// screen, this endpoint) actually keys off, same distinction the Agent Withdrawals admin page
+// makes.
+export type StudentReceiptStatus = ReceiptVerificationStatus | 'NOT_UPLOADED';
+
+export type StudentWithdrawalForParent = WithdrawalRequest & {
+  agent: { id: string; fullName: string } | null;
+  receiptStatus: StudentReceiptStatus;
+  receiptUrl: string | null;
+};
+
+// Every withdrawal (any status) for one linked student — the parent's "Cash Withdrawals"
+// section on that student's detail screen. Unlike getPendingApprovalsForParent() above (only
+// the GENERAL-over-threshold exception awaiting a decision), this is the full history so a
+// parent can see what was actually dispensed and whether the receipt still needs following up.
+export async function getWithdrawalsForParent(
+  parentUserId: string,
+  studentUserId: string
+): Promise<StudentWithdrawalForParent[]> {
+  const link = await prisma.parentalControl.findUnique({
+    where: { parentUserId_studentUserId: { parentUserId, studentUserId } },
+  });
+  if (!link) {
+    throw new AppError(403, 'NOT_LINKED', 'You are not linked to this student');
+  }
+
+  const wallet = await getPrimaryWallet(studentUserId);
+  const requests = await prisma.withdrawalRequest.findMany({
+    where: { walletId: wallet.id },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const agentIds = [...new Set(requests.map((r) => r.agentId).filter((id): id is string => id !== null))];
+  const agents =
+    agentIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: agentIds } },
+          select: { id: true, fullName: true },
+        })
+      : [];
+  const agentById = new Map(agents.map((agent) => [agent.id, agent]));
+
+  return requests.map((request) => ({
+    ...request,
+    agent: request.agentId ? (agentById.get(request.agentId) ?? null) : null,
+    receiptStatus: request.receiptPath ? request.receiptVerificationStatus : 'NOT_UPLOADED',
+    receiptUrl: request.receiptPath ? `/withdrawals/${request.id}/receipt-file` : null,
+  }));
 }
 
 export type StudentLookup = {
@@ -248,6 +336,12 @@ async function disburse(
       transaction: createdTransaction,
     };
   });
+
+  // Same as every other spend path (cards.service.ts useCard(), wallet.service.ts transfer())
+  // — cash withdrawn from a category is spending against that category's monthly budget just
+  // as much as a card payment is. Without this, BudgetCategory.spent (and GET /budget) only
+  // ever reflected card payments, undercounting anyone who withdrew cash instead.
+  await updateSpent(wallet.id, category, amount);
 
   await runAllChecks(transaction);
 
@@ -612,11 +706,196 @@ export async function uploadReceipt(
       await createNotification(
         parentalControl.parentUserId,
         'Withdrawal Receipt Flagged',
-        `${student?.fullName ?? 'Your child'}'s receipt for a $${formatMoney(request.amount)} ${request.category.toLowerCase()} withdrawal looks like it was actually spent on ${detectedCategory?.toLowerCase() ?? 'something else'}${merchantName ? ` at ${merchantName}` : ''}. Please review.`,
+        `Your student ${student?.fullName ?? ''}'s withdrawal receipt was flagged for review. Amount: $${formatMoney(request.amount)}, Category: ${request.category.toLowerCase()}`,
         'WITHDRAWAL_RECEIPT_FLAGGED'
       );
     }
   }
 
   return updated;
+}
+
+export async function getReceiptFile(
+  requestId: string,
+  requester: { id: string; userType: UserType }
+): Promise<{ request: WithdrawalRequest; absolutePath: string }> {
+  const request = await prisma.withdrawalRequest.findUnique({ where: { id: requestId } });
+  if (!request?.receiptPath) {
+    throw new AppError(404, 'RECEIPT_NOT_FOUND', 'No receipt has been uploaded for this withdrawal');
+  }
+
+  const wallet = await prisma.wallet.findUnique({ where: { id: request.walletId } });
+  if (!wallet) {
+    throw new AppError(404, 'RECEIPT_NOT_FOUND', 'No receipt has been uploaded for this withdrawal');
+  }
+
+  if (requester.userType === 'ADMIN') {
+    // allowed
+  } else if (requester.userType === 'STUDENT') {
+    if (wallet.userId !== requester.id) {
+      throw new AppError(403, 'FORBIDDEN', 'You do not have access to this receipt');
+    }
+  } else if (requester.userType === 'PARENT') {
+    const link = await prisma.parentalControl.findUnique({
+      where: { parentUserId_studentUserId: { parentUserId: requester.id, studentUserId: wallet.userId } },
+    });
+    if (!link) {
+      throw new AppError(403, 'FORBIDDEN', 'You do not have access to this receipt');
+    }
+  } else {
+    throw new AppError(403, 'FORBIDDEN', 'You do not have access to this receipt');
+  }
+
+  const absolutePath = path.join(BACKEND_ROOT, request.receiptPath);
+  try {
+    await fs.access(absolutePath);
+  } catch {
+    throw new AppError(404, 'RECEIPT_FILE_MISSING', 'Receipt file not found on disk');
+  }
+
+  return { request, absolutePath };
+}
+
+const RECEIPT_DECISION_STATUS: Record<'VERIFIED' | 'FLAGGED' | 'REJECTED', ReceiptVerificationStatus> = {
+  VERIFIED: 'MANUALLY_VERIFIED',
+  FLAGGED: 'FLAGGED',
+  REJECTED: 'REJECTED',
+};
+
+const RECEIPT_DECISION_LABEL: Record<'VERIFIED' | 'FLAGGED' | 'REJECTED', string> = {
+  VERIFIED: 'verified',
+  FLAGGED: 'flagged for review',
+  REJECTED: 'rejected',
+};
+
+// Admin's manual call on a receipt the rule-based auto-detection in uploadReceipt() couldn't
+// confidently resolve (PENDING, or an AUTO_VERIFIED/FLAGGED result the admin wants to override)
+// — Agent Withdrawals page's "Mark as Verified" / "Flag Receipt" / "Reject" actions.
+export async function verifyReceipt(
+  requestId: string,
+  decision: 'VERIFIED' | 'FLAGGED' | 'REJECTED',
+  note: string | undefined
+): Promise<WithdrawalRequest> {
+  const request = await prisma.withdrawalRequest.findUnique({ where: { id: requestId } });
+  if (!request?.receiptPath) {
+    throw new AppError(404, 'RECEIPT_NOT_FOUND', 'No receipt has been uploaded for this withdrawal');
+  }
+
+  const receiptVerificationStatus = RECEIPT_DECISION_STATUS[decision];
+  const receiptVerificationNote = note?.trim() || null;
+
+  const updated = await prisma.withdrawalRequest.update({
+    where: { id: request.id },
+    data: { receiptVerificationStatus, receiptVerificationNote },
+  });
+
+  await prisma.withdrawalHistory.updateMany({
+    where: { withdrawalRequestId: request.id },
+    data: { receiptVerificationStatus },
+  });
+
+  const wallet = await prisma.wallet.findUnique({ where: { id: request.walletId } });
+  if (wallet) {
+    await createNotification(
+      wallet.userId,
+      'Receipt Review Update',
+      `An admin has ${RECEIPT_DECISION_LABEL[decision]} your receipt for the $${formatMoney(request.amount)} ${request.category.toLowerCase()} withdrawal.${receiptVerificationNote ? ` Note: ${receiptVerificationNote}` : ''}`,
+      'WITHDRAWAL_RECEIPT_REVIEWED'
+    );
+
+    if (decision === 'FLAGGED') {
+      const parentalControl = await prisma.parentalControl.findFirst({ where: { studentUserId: wallet.userId } });
+      if (parentalControl) {
+        const student = await prisma.user.findUnique({
+          where: { id: wallet.userId },
+          select: { fullName: true },
+        });
+        await createNotification(
+          parentalControl.parentUserId,
+          'Withdrawal Receipt Flagged',
+          `Your student ${student?.fullName ?? ''}'s withdrawal receipt was flagged for review. Amount: $${formatMoney(request.amount)}, Category: ${request.category.toLowerCase()}`,
+          'WITHDRAWAL_RECEIPT_FLAGGED'
+        );
+      }
+    }
+  }
+
+  return updated;
+}
+
+const RECEIPT_REMINDER_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+
+// COMPLETED withdrawals sit in the student's history with a PENDING receiptVerificationStatus
+// forever if the student never uploads one — nothing else ever revisits them. This is the only
+// path that nudges both sides once 24h have passed, and receiptReminderSentAt makes sure the
+// hourly cron below only fires it once per withdrawal.
+export async function sendMissingReceiptReminders(): Promise<number> {
+  const cutoff = new Date(Date.now() - RECEIPT_REMINDER_THRESHOLD_MS);
+
+  const overdue = await prisma.withdrawalRequest.findMany({
+    where: {
+      status: 'COMPLETED',
+      receiptPath: null,
+      receiptReminderSentAt: null,
+      completedAt: { lte: cutoff },
+    },
+  });
+
+  for (const request of overdue) {
+    const wallet = await prisma.wallet.findUnique({ where: { id: request.walletId } });
+    if (!wallet) continue;
+
+    const student = await prisma.user.findUnique({
+      where: { id: wallet.userId },
+      select: { fullName: true },
+    });
+
+    await createNotification(
+      wallet.userId,
+      'Receipt Reminder',
+      `Reminder: you have not uploaded a receipt for your $${formatMoney(request.amount)} ${request.category.toLowerCase()} cash withdrawal`,
+      'WITHDRAWAL_RECEIPT_REMINDER'
+    );
+
+    const parentalControl = await prisma.parentalControl.findFirst({ where: { studentUserId: wallet.userId } });
+    if (parentalControl) {
+      await createNotification(
+        parentalControl.parentUserId,
+        'Receipt Reminder',
+        `Reminder: ${student?.fullName ?? 'Your student'} has not uploaded a receipt for their $${formatMoney(request.amount)} ${request.category.toLowerCase()} cash withdrawal`,
+        'WITHDRAWAL_RECEIPT_REMINDER'
+      );
+    }
+
+    await prisma.withdrawalRequest.update({
+      where: { id: request.id },
+      data: { receiptReminderSentAt: new Date() },
+    });
+  }
+
+  return overdue.length;
+}
+
+const RECEIPT_REMINDER_CRON_EXPRESSION = '0 * * * *';
+let receiptReminderTask: ScheduledTask | null = null;
+
+export function startWithdrawalsCron(app: FastifyInstance): void {
+  receiptReminderTask = cron.schedule(
+    RECEIPT_REMINDER_CRON_EXPRESSION,
+    async () => {
+      app.log.info('Running scheduled missing-receipt reminder check');
+      try {
+        const count = await sendMissingReceiptReminders();
+        app.log.info({ count }, 'Missing-receipt reminder check completed');
+      } catch (error) {
+        app.log.error({ err: error }, 'Missing-receipt reminder check failed');
+      }
+    },
+    { name: 'withdrawal-receipt-reminders', timezone: 'UTC', noOverlap: true }
+  );
+}
+
+export function stopWithdrawalsCron(): void {
+  receiptReminderTask?.stop();
+  receiptReminderTask = null;
 }

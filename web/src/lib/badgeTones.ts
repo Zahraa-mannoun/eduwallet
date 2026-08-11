@@ -38,3 +38,20 @@ export const categoryTone: Record<string, BadgeTone> = {
   PERSONAL_SAVINGS: 'yellow',
   GENERAL: 'gray',
 };
+
+export const withdrawalStatusTone: Record<string, BadgeTone> = {
+  PENDING: 'gray',
+  PENDING_PARENT_APPROVAL: 'yellow',
+  APPROVED: 'blue',
+  REJECTED: 'red',
+  COMPLETED: 'green',
+};
+
+export const receiptStatusTone: Record<string, BadgeTone> = {
+  NOT_UPLOADED: 'gray',
+  PENDING: 'yellow',
+  AUTO_VERIFIED: 'green',
+  MANUALLY_VERIFIED: 'green',
+  FLAGGED: 'orange',
+  REJECTED: 'red',
+};

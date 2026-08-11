@@ -8,6 +8,7 @@ import WithdrawalScreen from '../screens/WithdrawalScreen';
 import TransactionHistoryScreen from '../screens/TransactionHistoryScreen';
 import TransactionDetailScreen from '../screens/TransactionDetailScreen';
 import ApprovalRequestScreen from '../screens/ApprovalRequestScreen';
+import ParentStudentDetailScreen from '../screens/ParentStudentDetailScreen';
 import KYCScreen from '../screens/KYCScreen';
 import PersonalSavingsScreen from '../screens/PersonalSavingsScreen';
 import ReportRequestScreen from '../screens/ReportRequestScreen';
@@ -69,6 +70,7 @@ export default function AppNavigator() {
           <Stack.Screen name="TransactionHistory" component={TransactionHistoryScreen} />
           <Stack.Screen name="TransactionDetail" component={TransactionDetailScreen} />
           <Stack.Screen name="ApprovalRequest" component={ApprovalRequestScreen} />
+          <Stack.Screen name="ParentStudentDetail" component={ParentStudentDetailScreen} />
           <Stack.Screen name="KYC" component={KYCScreen} />
           <Stack.Screen name="PersonalSavings" component={PersonalSavingsScreen} />
           <Stack.Screen name="ReportRequest" component={ReportRequestScreen} />

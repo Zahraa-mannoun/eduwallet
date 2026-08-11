@@ -105,15 +105,30 @@ export function Analytics() {
       </div>
 
       <Section title="Spending Analytics">
+        <p className="text-sm text-slate-500">
+          Funding is money moving INTO a student's wallet from a parent or institution (locked
+          transfers, scholarships) — it&apos;s not spending until the student actually uses it.
+        </p>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <ChartCard title="Total Spent per Category (This Month)">
+          <ChartCard title="Funding Received per Category (This Month)">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data.funding.byCategory}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                <XAxis dataKey="category" tick={{ fontSize: 11 }} interval={0} angle={-25} textAnchor="end" height={60} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip formatter={(value: number) => formatMoney(value, 'USD')} />
+                <Bar dataKey="total" fill="#10B981" radius={[4, 4, 0, 0]} name="Funding Received" />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
+          <ChartCard title="Spending per Category (This Month)">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data.spending.byCategory}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
                 <XAxis dataKey="category" tick={{ fontSize: 11 }} interval={0} angle={-25} textAnchor="end" height={60} />
                 <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip formatter={(value: number) => formatMoney(value, 'USD')} />
-                <Bar dataKey="total" fill="#2E5FAC" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="total" fill="#2E5FAC" radius={[4, 4, 0, 0]} name="Spending" />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
