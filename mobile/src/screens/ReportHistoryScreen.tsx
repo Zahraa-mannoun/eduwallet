@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Sharing from 'expo-sharing';
@@ -72,11 +72,15 @@ export default function ReportHistoryScreen({
     try {
       const uri = await reportService.downloadReportPdf(report.id);
       console.log('Report downloaded to', uri);
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, { mimeType: 'application/pdf' });
-      } else {
-        console.log('Sharing is not available on this platform — file was saved but not shared');
-        setDownloadError('Downloaded, but sharing is not available on this device.');
+      // On web the browser's own download prompt already ran as part of downloadReportPdf —
+      // there's no local file to hand off to Sharing, and navigator.share can't take a blob: URI.
+      if (Platform.OS !== 'web') {
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(uri, { mimeType: 'application/pdf' });
+        } else {
+          console.log('Sharing is not available on this platform — file was saved but not shared');
+          setDownloadError('Downloaded, but sharing is not available on this device.');
+        }
       }
     } catch (err) {
       // File.downloadFileAsync throws a plain Error (not the ApiError apiRequest() produces),

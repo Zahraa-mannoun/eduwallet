@@ -708,17 +708,22 @@ async function detectMerchant(
   text: string
 ): Promise<{ name: string; category: TransactionCategory } | null> {
   const normalizedText = normalizeForMatch(text);
+  console.log(`[receipt-ocr] raw text: "${text}"`);
+  console.log(`[receipt-ocr] normalized text: "${normalizedText}"`);
   if (!normalizedText) return null;
   const merchants = await prisma.merchant.findMany({ where: { isActive: true } });
   for (const merchant of merchants) {
     const normalizedName = normalizeForMatch(merchant.name);
-    const nameWords = normalizedName.split(' ').filter((word) => word.length > 3);
-    const matches =
-      normalizedText.includes(normalizedName) || nameWords.some((word) => normalizedText.includes(word));
-    if (matches) {
+    const nameWords = normalizedName.split(' ').filter(Boolean);
+    const allWordsMatch = nameWords.length > 0 && nameWords.every((word) => normalizedText.includes(word));
+    console.log(
+      `[receipt-ocr] comparing DB merchant "${merchant.name}" -> normalized "${normalizedName}" words [${nameWords.join(', ')}] -> ${allWordsMatch ? 'MATCH' : 'no match'}`
+    );
+    if (allWordsMatch) {
       return { name: merchant.name, category: merchant.category };
     }
   }
+  console.log('[receipt-ocr] no merchant matched');
   return null;
 }
 
