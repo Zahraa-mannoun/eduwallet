@@ -23,6 +23,7 @@ const RECEIPT_STATUS_META: Record<
   StudentWithdrawalForParent['receiptStatus'],
   { label: string; emoji: string; color: string }
 > = {
+  PROCESSING: { label: 'Processing', emoji: '⏳', color: colors.primary },
   AUTO_VERIFIED: { label: 'Auto-verified', emoji: '✅', color: colors.accent },
   MANUALLY_VERIFIED: { label: 'Verified', emoji: '✅', color: colors.accent },
   PENDING: { label: 'Pending review', emoji: '🕐', color: '#F59E0B' },

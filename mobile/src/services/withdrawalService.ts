@@ -63,5 +63,9 @@ export async function uploadReceipt(input: UploadReceiptInput): Promise<Withdraw
   return apiRequest<WithdrawalRequest>(`/withdrawals/${input.withdrawalId}/upload-receipt`, {
     method: 'POST',
     formData,
+    // Real Tesseract OCR now runs server-side before this request resolves — a cold worker
+    // (first upload after a server restart) can take 5-10s on its own, on top of image upload
+    // time, so this needs more headroom than a normal JSON request.
+    timeoutMs: 60000,
   });
 }

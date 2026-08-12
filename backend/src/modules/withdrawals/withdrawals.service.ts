@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { getOcrWorker } from './ocr-worker';
 import type {
   Prisma,
   ReceiptVerificationStatus,
@@ -704,26 +705,76 @@ function normalizeForMatch(value: string): string {
     .trim();
 }
 
+// Minimum fraction of a merchant name's words that must appear in the OCR text for the fuzzy
+// fallback below to accept it once the strict "every word must appear" match has failed for
+// every merchant — catches a merchant name partially obscured or reworded on a real receipt
+// without being so loose it starts matching unrelated merchants.
+const FUZZY_MATCH_THRESHOLD = 0.6;
+
+// Real OCR — reads whatever text Tesseract can find on the receipt image already written to
+// disk, via the process-lifetime worker from ocr-worker.ts (eng+fra, pre-warmed at server
+// startup) rather than spinning up a new worker per request. Wrapped in try/catch so a corrupt
+// image or a Tesseract hiccup degrades to "no text extracted" (-> PENDING, manual review)
+// instead of failing the whole upload request.
+async function extractReceiptText(absoluteFilePath: string): Promise<string> {
+  try {
+    const worker = await getOcrWorker();
+    const {
+      data: { text },
+    } = await worker.recognize(absoluteFilePath);
+    console.log(`[receipt-ocr] Tesseract raw output: ${JSON.stringify(text)}`);
+    return text;
+  } catch (err) {
+    console.error('[receipt-ocr] Tesseract OCR failed', err);
+    return '';
+  }
+}
+
 async function detectMerchant(
   text: string
 ): Promise<{ name: string; category: TransactionCategory } | null> {
   const normalizedText = normalizeForMatch(text);
-  console.log(`[receipt-ocr] raw text: "${text}"`);
-  console.log(`[receipt-ocr] normalized text: "${normalizedText}"`);
+  console.log(`[receipt-ocr] raw OCR text (pre-normalization): ${JSON.stringify(text)}`);
+  console.log(`[receipt-ocr] normalized OCR text: ${JSON.stringify(normalizedText)}`);
   if (!normalizedText) return null;
+
   const merchants = await prisma.merchant.findMany({ where: { isActive: true } });
+  console.log(
+    `[receipt-ocr] DB merchants (${merchants.length}) as stored:`,
+    merchants.map((m) => JSON.stringify(m.name))
+  );
+
+  let bestFuzzy: { merchant: (typeof merchants)[number]; ratio: number } | null = null;
+
   for (const merchant of merchants) {
     const normalizedName = normalizeForMatch(merchant.name);
     const nameWords = normalizedName.split(' ').filter(Boolean);
-    const allWordsMatch = nameWords.length > 0 && nameWords.every((word) => normalizedText.includes(word));
+    const matchedWords = nameWords.filter((word) => normalizedText.includes(word));
+    const allWordsMatch = nameWords.length > 0 && matchedWords.length === nameWords.length;
+    const ratio = nameWords.length > 0 ? matchedWords.length / nameWords.length : 0;
     console.log(
-      `[receipt-ocr] comparing DB merchant "${merchant.name}" -> normalized "${normalizedName}" words [${nameWords.join(', ')}] -> ${allWordsMatch ? 'MATCH' : 'no match'}`
+      `[receipt-ocr] comparing DB merchant ${JSON.stringify(merchant.name)} -> normalized ${JSON.stringify(normalizedName)}, ` +
+        `normalizedText.includes(normalizedName) = ${normalizedText.includes(normalizedName)}, ` +
+        `words [${nameWords.join(', ')}] matched [${matchedWords.join(', ')}] (${Math.round(ratio * 100)}%) -> ` +
+        `${allWordsMatch ? 'EXACT MATCH' : 'no exact match'}`
     );
     if (allWordsMatch) {
       return { name: merchant.name, category: merchant.category };
     }
+    if (ratio >= FUZZY_MATCH_THRESHOLD && (!bestFuzzy || ratio > bestFuzzy.ratio)) {
+      bestFuzzy = { merchant, ratio };
+    }
   }
-  console.log('[receipt-ocr] no merchant matched');
+
+  if (bestFuzzy) {
+    console.log(
+      `[receipt-ocr] no exact match — accepting fuzzy match ${JSON.stringify(bestFuzzy.merchant.name)} ` +
+        `(${Math.round(bestFuzzy.ratio * 100)}% of words matched, threshold ${Math.round(FUZZY_MATCH_THRESHOLD * 100)}%)`
+    );
+    return { name: bestFuzzy.merchant.name, category: bestFuzzy.merchant.category };
+  }
+
+  console.log('[receipt-ocr] no merchant matched (exact or fuzzy)');
   return null;
 }
 
@@ -756,7 +807,22 @@ export async function uploadReceipt(
   await fs.writeFile(absoluteFilePath, fileBuffer);
   const filePath = path.relative(BACKEND_ROOT, absoluteFilePath);
 
-  const extractedText = [fileName, providedMerchantName ?? ''].join(' ').trim();
+  // Set before OCR starts (which can take several seconds) so anyone viewing this withdrawal
+  // elsewhere — the agent withdrawals list, the parent's student detail page — sees an accurate
+  // "still being checked" state instead of a stale PENDING left over from before the receipt
+  // existed at all.
+  await prisma.withdrawalRequest.update({
+    where: { id: request.id },
+    data: {
+      receiptPath: filePath,
+      receiptVerificationStatus: 'PROCESSING',
+      receiptVerificationNote: null,
+      merchantName: null,
+      detectedCategory: null,
+    },
+  });
+
+  const extractedText = (await extractReceiptText(absoluteFilePath)).trim();
   const merchantMatch = extractedText ? await detectMerchant(extractedText) : null;
   // Only ever informational once the merchant lookup below decides the status — a keyword hit
   // alone (e.g. "cafe" in the filename) is not a merchant match and must never AUTO_VERIFY or

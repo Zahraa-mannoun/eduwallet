@@ -201,6 +201,7 @@ export type EmailChangeRequestRow = {
 export type WithdrawalStatus = 'PENDING' | 'PENDING_PARENT_APPROVAL' | 'APPROVED' | 'REJECTED' | 'COMPLETED';
 
 export type ReceiptVerificationStatus =
+  | 'PROCESSING'
   | 'PENDING'
   | 'AUTO_VERIFIED'
   | 'FLAGGED'
@@ -217,6 +218,7 @@ export const WITHDRAWAL_STATUSES: WithdrawalStatus[] = [
 ];
 
 export const RECEIPT_VERIFICATION_STATUSES: ReceiptVerificationStatus[] = [
+  'PROCESSING',
   'PENDING',
   'AUTO_VERIFIED',
   'FLAGGED',

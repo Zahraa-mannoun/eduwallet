@@ -23,10 +23,12 @@ const DECISION_LABEL: Record<Decision, string> = {
   REJECTED: 'Reject',
 };
 
-// Which decisions make sense from each current receipt status — MANUALLY_VERIFIED/REJECTED are
-// final states with no further action, AUTO_VERIFIED only allows the rare admin override (Flag),
-// and PENDING/FLAGGED both still need a human call (Verify or Reject).
+// Which decisions make sense from each current receipt status — PROCESSING is still being
+// OCR'd and has no verdict to act on yet, MANUALLY_VERIFIED/REJECTED are final states with no
+// further action, AUTO_VERIFIED only allows the rare admin override (Flag), and PENDING/FLAGGED
+// both still need a human call (Verify or Reject).
 const AVAILABLE_DECISIONS: Record<ReceiptVerificationStatus, Decision[]> = {
+  PROCESSING: [],
   PENDING: ['VERIFIED', 'REJECTED'],
   FLAGGED: ['VERIFIED', 'REJECTED'],
   AUTO_VERIFIED: ['FLAGGED'],

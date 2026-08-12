@@ -3,6 +3,9 @@
 !/backend/uploads/**/
 !/backend/uploads/**/.gitkeep
 
+# Tesseract.js language data — auto-downloaded into the cwd on first OCR call, not source
+/backend/*.traineddata
+
 # Logs
 logs
 *.log

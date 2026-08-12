@@ -98,6 +98,7 @@ enum WithdrawalStatus {
 }
 
 enum ReceiptVerificationStatus {
+  PROCESSING
   PENDING
   AUTO_VERIFIED
   FLAGGED

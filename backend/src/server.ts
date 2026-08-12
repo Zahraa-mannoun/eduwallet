@@ -22,6 +22,7 @@ import supportRoutes from './modules/support/support.routes';
 import savingsRoutes from './modules/savings/savings.routes';
 import { startSavingsCron, stopSavingsCron } from './modules/savings/savings.service';
 import { startWithdrawalsCron, stopWithdrawalsCron } from './modules/withdrawals/withdrawals.service';
+import { getOcrWorker, terminateOcrWorker } from './modules/withdrawals/ocr-worker';
 import withdrawalsRoutes from './modules/withdrawals/withdrawals.routes';
 import universityRoutes from './modules/university/university.routes';
 import reportsRoutes from './modules/reports/reports.routes';
@@ -108,6 +109,9 @@ async function start() {
     await redis.connect();
     app.log.info('Connected to Redis');
 
+    await getOcrWorker();
+    app.log.info('Tesseract OCR worker ready');
+
     const server = await buildServer();
     const io = initSocket(server.server, server);
     startSavingsCron(server);
@@ -117,6 +121,7 @@ async function start() {
       stopSavingsCron();
       stopWithdrawalsCron();
       io.close();
+      await terminateOcrWorker();
       await prisma.$disconnect();
       await redis.quit();
     });

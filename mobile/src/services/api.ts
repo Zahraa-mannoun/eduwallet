@@ -113,6 +113,10 @@ export type ApiRequestOptions = {
   query?: Record<string, string | number | boolean | undefined>;
   auth?: boolean;
   formData?: FormData;
+  // No timeout by default — plain fetch() never times out on its own. Receipt upload passes an
+  // explicit value since it now waits on real Tesseract OCR server-side (a cold worker can take
+  // 5-10s, so the default needs real headroom beyond a normal JSON request).
+  timeoutMs?: number;
 };
 
 function buildQueryString(query: ApiRequestOptions['query']): string {
@@ -145,11 +149,33 @@ async function performFetch(
     requestBody = JSON.stringify(options.body);
   }
 
-  return fetch(`${API_BASE_URL}${path}${buildQueryString(options.query)}`, {
-    method: options.method ?? 'GET',
-    headers,
-    body: requestBody,
-  });
+  if (!options.timeoutMs) {
+    return fetch(`${API_BASE_URL}${path}${buildQueryString(options.query)}`, {
+      method: options.method ?? 'GET',
+      headers,
+      body: requestBody,
+    });
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), options.timeoutMs);
+  try {
+    return await fetch(`${API_BASE_URL}${path}${buildQueryString(options.query)}`, {
+      method: options.method ?? 'GET',
+      headers,
+      body: requestBody,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function throwFetchError(err: unknown): never {
+  if (err instanceof Error && err.name === 'AbortError') {
+    throw new ApiError('The request took too long. Please try again.', 'REQUEST_TIMEOUT', 0);
+  }
+  throw new ApiError('Could not reach the server. Check your connection.', 'NETWORK_ERROR', 0);
 }
 
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
@@ -159,8 +185,8 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
   let res: Response;
   try {
     res = await performFetch(path, options, token);
-  } catch {
-    throw new ApiError('Could not reach the server. Check your connection.', 'NETWORK_ERROR', 0);
+  } catch (err) {
+    throwFetchError(err);
   }
 
   if (res.status === 401 && useAuth && token) {
@@ -168,8 +194,8 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     if ('accessToken' in outcome) {
       try {
         res = await performFetch(path, options, outcome.accessToken);
-      } catch {
-        throw new ApiError('Could not reach the server. Check your connection.', 'NETWORK_ERROR', 0);
+      } catch (err) {
+        throwFetchError(err);
       }
     } else if ('networkError' in outcome) {
       throw new ApiError('Could not reach the server. Check your connection.', 'NETWORK_ERROR', 0);

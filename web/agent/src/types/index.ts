@@ -69,6 +69,7 @@ export type WithdrawalStatus =
   | 'COMPLETED';
 
 export type ReceiptVerificationStatus =
+  | 'PROCESSING'
   | 'PENDING'
   | 'AUTO_VERIFIED'
   | 'FLAGGED'

@@ -49,6 +49,7 @@ export const withdrawalStatusTone: Record<string, BadgeTone> = {
 
 export const receiptStatusTone: Record<string, BadgeTone> = {
   NOT_UPLOADED: 'gray',
+  PROCESSING: 'blue',
   PENDING: 'yellow',
   AUTO_VERIFIED: 'green',
   MANUALLY_VERIFIED: 'green',

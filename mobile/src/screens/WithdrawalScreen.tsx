@@ -33,6 +33,7 @@ const RECEIPT_STATUS_META: Record<
   NonNullable<WithdrawalRequest['receiptVerificationStatus']>,
   { label: string; icon: string; color: string }
 > = {
+  PROCESSING: { label: 'Verifying your receipt...', icon: 'progress-clock', color: colors.primary },
   AUTO_VERIFIED: { label: 'Verified', icon: 'check-circle-outline', color: colors.accent },
   FLAGGED: { label: 'Flagged for review', icon: 'alert-outline', color: colors.danger },
   PENDING: { label: 'Pending review', icon: 'clock-outline', color: '#F59E0B' },
@@ -238,13 +239,19 @@ export default function WithdrawalScreen({
               activeOutlineColor={colors.primary}
               style={styles.dialogInput}
             />
+            {isUploadingReceipt ? (
+              <View style={styles.verifyingRow}>
+                <ActivityIndicator size={16} color={colors.primary} />
+                <Text style={styles.verifyingText}>Verifying your receipt...</Text>
+              </View>
+            ) : null}
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={closeReceiptDialog} disabled={isUploadingReceipt}>
               Cancel
             </Button>
             <Button onPress={handleSubmitReceipt} disabled={!pendingReceipt || isUploadingReceipt}>
-              {isUploadingReceipt ? <ActivityIndicator size={16} color={colors.primary} /> : 'Upload'}
+              Upload
             </Button>
           </Dialog.Actions>
         </Dialog>
@@ -368,5 +375,16 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginBottom: 12,
     lineHeight: 18,
+  },
+  verifyingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  verifyingText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+    marginLeft: 8,
   },
 });
