@@ -1,39 +1,79 @@
 import { useCallback, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator as RNActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { ActivityIndicator, Avatar, Chip, IconButton, Text } from 'react-native-paper';
+import { ActivityIndicator, Avatar, IconButton, Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import type { StudentWithdrawalForParent } from '../types/api';
-import { colors } from '../theme/colors';
+import type { StudentWithdrawalForParent, TransactionCategory } from '../types/api';
+import IconBadge from '../components/IconBadge';
+import { categoryColors, colors } from '../theme/colors';
 import { getInitials } from '../utils/getInitials';
 import * as withdrawalService from '../services/withdrawalService';
 import { ApiError } from '../services/api';
 import type { RootStackScreenProps } from '../navigation/types';
 
-const STATUS_META: Record<StudentWithdrawalForParent['status'], { label: string; color: string }> = {
-  PENDING: { label: 'Pending', color: colors.muted },
-  PENDING_PARENT_APPROVAL: { label: 'Awaiting Approval', color: '#F59E0B' },
-  APPROVED: { label: 'Approved', color: colors.primary },
-  REJECTED: { label: 'Rejected', color: colors.danger },
-  COMPLETED: { label: 'Completed', color: colors.accent },
-};
-
-const RECEIPT_STATUS_META: Record<
-  StudentWithdrawalForParent['receiptStatus'],
-  { label: string; emoji: string; color: string }
+const CATEGORY_META: Record<
+  TransactionCategory,
+  { icon: keyof typeof MaterialCommunityIcons.glyphMap; color: string }
 > = {
-  PROCESSING: { label: 'Processing', emoji: '⏳', color: colors.primary },
-  AUTO_VERIFIED: { label: 'Auto-verified', emoji: '✅', color: colors.accent },
-  MANUALLY_VERIFIED: { label: 'Verified', emoji: '✅', color: colors.accent },
-  PENDING: { label: 'Pending review', emoji: '🕐', color: '#F59E0B' },
-  FLAGGED: { label: 'Flagged', emoji: '⚠️', color: colors.danger },
-  REJECTED: { label: 'Rejected', emoji: '❌', color: colors.danger },
-  NOT_UPLOADED: { label: 'Not uploaded', emoji: '❌', color: colors.danger },
+  FOOD: { icon: 'food', color: categoryColors.food },
+  BOOKS: { icon: 'book-open-variant', color: categoryColors.books },
+  TRANSPORT: { icon: 'bus', color: categoryColors.transport },
+  SOFTWARE: { icon: 'laptop', color: categoryColors.software },
+  TUITION: { icon: 'school', color: categoryColors.tuition },
+  LIFESTYLE: { icon: 'shopping-outline', color: categoryColors.lifestyle },
+  RENT: { icon: 'home-outline', color: categoryColors.rent },
+  PERSONAL_SAVINGS: { icon: 'piggy-bank-outline', color: categoryColors.personalSavings },
+  GENERAL: { icon: 'wallet-outline', color: categoryColors.general },
 };
 
-function formatDate(isoDate: string): string {
-  return new Date(isoDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+type ReceiptBadgeMeta = {
+  label: string;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  bg: string;
+  fg: string;
+};
+
+const RECEIPT_STATUS_META: Record<StudentWithdrawalForParent['receiptStatus'], ReceiptBadgeMeta> = {
+  AUTO_VERIFIED: { label: 'Auto-verified', icon: 'check-circle', bg: '#D1FAE5', fg: '#065F46' },
+  MANUALLY_VERIFIED: { label: 'Verified', icon: 'check-circle', bg: '#D1FAE5', fg: '#065F46' },
+  PENDING: { label: 'Pending review', icon: 'clock-outline', bg: '#FEF3C7', fg: '#92400E' },
+  FLAGGED: { label: 'Flagged', icon: 'alert', bg: '#FEE2E2', fg: '#991B1B' },
+  REJECTED: { label: 'Rejected', icon: 'close-circle', bg: '#FCA5A5', fg: '#7F1D1D' },
+  NOT_UPLOADED: { label: 'Not uploaded', icon: 'file-outline', bg: '#F3F4F6', fg: '#6B7280' },
+  PROCESSING: { label: 'Processing', icon: 'sync', bg: '#DBEAFE', fg: '#1E40AF' },
+};
+
+// Only statuses that need the parent's attention or an explanation get a note banner — a
+// verified receipt speaks for itself via the badge alone.
+const RECEIPT_STATUS_NOTE: Partial<Record<StudentWithdrawalForParent['receiptStatus'], string>> = {
+  FLAGGED: 'Receipt was flagged — a category mismatch was detected. Admin is reviewing.',
+  NOT_UPLOADED: 'Receipt not uploaded yet — please remind your student to upload their receipt',
+  PENDING: 'Receipt is pending admin review',
+  REJECTED: 'Receipt was rejected by admin. Student should contact support.',
+  PROCESSING: 'Receipt is being verified...',
+};
+
+function formatDateTime(isoDate: string): string {
+  const date = new Date(isoDate);
+  const datePart = date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+  const timePart = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return `${datePart} at ${timePart}`;
+}
+
+function ReceiptBadge({ meta, isProcessing }: Readonly<{ meta: ReceiptBadgeMeta; isProcessing: boolean }>) {
+  return (
+    <View style={[styles.receiptBadge, { backgroundColor: meta.bg }]}>
+      {isProcessing ? (
+        <RNActivityIndicator size={11} color={meta.fg} />
+      ) : (
+        <MaterialCommunityIcons name={meta.icon} size={13} color={meta.fg} />
+      )}
+      <Text style={[styles.receiptBadgeText, { color: meta.fg }]} numberOfLines={1}>
+        {meta.label}
+      </Text>
+    </View>
+  );
 }
 
 export default function ParentStudentDetailScreen({
@@ -66,51 +106,40 @@ export default function ParentStudentDetailScreen({
   );
 
   const renderWithdrawalItem = (withdrawal: StudentWithdrawalForParent) => {
-    const statusMeta = STATUS_META[withdrawal.status];
-    const receiptMeta = RECEIPT_STATUS_META[withdrawal.receiptStatus];
+    const categoryMeta = CATEGORY_META[withdrawal.category];
     // GENERAL withdrawals never require a receipt, so a perpetually-empty receiptStatus of
     // NOT_UPLOADED for them isn't a real problem to flag — only locked-category withdrawals
-    // (which the receipt is what proves was spent correctly) show the status row/warning.
+    // (which the receipt is what proves was spent correctly) show the badge/note at all.
     const receiptRequired = withdrawal.category !== 'GENERAL';
-    const needsAttention =
-      receiptRequired &&
-      (withdrawal.receiptStatus === 'NOT_UPLOADED' || withdrawal.receiptStatus === 'FLAGGED');
+    const receiptMeta = RECEIPT_STATUS_META[withdrawal.receiptStatus];
+    const note = receiptRequired ? RECEIPT_STATUS_NOTE[withdrawal.receiptStatus] : undefined;
+    const isProcessing = withdrawal.receiptStatus === 'PROCESSING';
 
     return (
-      <View key={withdrawal.id} style={styles.row}>
-        <View style={styles.rowTop}>
-          <View style={styles.rowMiddle}>
-            <Text style={styles.rowTitle}>
-              ${Number(withdrawal.amount).toFixed(2)} · {withdrawal.category}
-            </Text>
-            <Text style={styles.rowDate}>
-              {formatDate(withdrawal.completedAt ?? withdrawal.createdAt)}
-              {withdrawal.agent ? ` · ${withdrawal.agent.fullName}` : ''}
-            </Text>
+      <View
+        key={withdrawal.id}
+        style={[styles.card, { borderLeftColor: receiptRequired ? receiptMeta.fg : colors.border }]}
+      >
+        <View style={styles.cardTopRow}>
+          <View style={styles.cardLeft}>
+            <IconBadge icon={categoryMeta.icon} color={categoryMeta.color} size={44} />
+            <View style={styles.cardTextGroup}>
+              <View style={styles.cardCategoryAmountRow}>
+                <Text style={styles.amountText}>${Number(withdrawal.amount).toFixed(2)}</Text>
+                <Text style={styles.categoryText}>{withdrawal.category}</Text>
+              </View>
+              <Text style={styles.dateText}>
+                {formatDateTime(withdrawal.completedAt ?? withdrawal.createdAt)}
+                {withdrawal.agent ? ` · ${withdrawal.agent.fullName}` : ''}
+              </Text>
+            </View>
           </View>
-          <Chip
-            compact
-            style={[styles.statusChip, { backgroundColor: `${statusMeta.color}1F` }]}
-            textStyle={{ color: statusMeta.color, fontSize: 11, fontWeight: '700' }}
-          >
-            {statusMeta.label}
-          </Chip>
+          {receiptRequired ? <ReceiptBadge meta={receiptMeta} isProcessing={isProcessing} /> : null}
         </View>
 
-        {receiptRequired ? (
-          <View style={styles.receiptStatusRow}>
-            <Text style={styles.receiptEmoji}>{receiptMeta.emoji}</Text>
-            <Text style={[styles.receiptStatusText, { color: receiptMeta.color }]}>
-              {receiptMeta.label}
-            </Text>
-          </View>
-        ) : null}
-
-        {needsAttention ? (
-          <View style={styles.warningBanner}>
-            <Text style={styles.warningText}>
-              Receipt not verified — please remind your student to upload their receipt
-            </Text>
+        {note ? (
+          <View style={[styles.noteBanner, { backgroundColor: `${receiptMeta.fg}1A` }]}>
+            <Text style={[styles.noteText, { color: receiptMeta.fg }]}>{note}</Text>
           </View>
         ) : null}
       </View>
@@ -223,55 +252,75 @@ const styles = StyleSheet.create({
   list: {
     marginBottom: 8,
   },
-  row: {
-    backgroundColor: colors.surface,
+  card: {
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 14,
+    borderLeftWidth: 4,
+    padding: 16,
     marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
   },
-  rowTop: {
+  cardTopRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    justifyContent: 'space-between',
   },
-  rowMiddle: {
+  cardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
     flex: 1,
     marginRight: 8,
   },
-  rowTitle: {
+  cardTextGroup: {
+    marginLeft: 12,
+    flexShrink: 1,
+  },
+  cardCategoryAmountRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flexWrap: 'wrap',
+  },
+  amountText: {
+    fontSize: 18,
     fontWeight: '700',
     color: colors.heading,
-    fontSize: 13,
   },
-  rowDate: {
-    fontSize: 11,
+  categoryText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.muted,
+    marginLeft: 6,
+  },
+  dateText: {
+    fontSize: 12,
     color: colors.muted,
     marginTop: 4,
   },
-  statusChip: {
-    height: 24,
-  },
-  receiptStatusRow: {
+  receiptBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
+    borderRadius: 999,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    maxWidth: 150,
   },
-  receiptEmoji: {
-    fontSize: 13,
-    marginRight: 6,
+  receiptBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginLeft: 5,
+    flexShrink: 1,
   },
-  receiptStatusText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  warningBanner: {
-    backgroundColor: `${colors.danger}1F`,
+  noteBanner: {
     borderRadius: 10,
     padding: 10,
-    marginTop: 8,
+    marginTop: 12,
   },
-  warningText: {
+  noteText: {
     fontSize: 12,
-    color: colors.danger,
     lineHeight: 17,
   },
 });

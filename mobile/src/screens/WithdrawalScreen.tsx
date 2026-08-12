@@ -1,12 +1,12 @@
 import { useCallback, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator as RNActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import {
   ActivityIndicator,
   Button,
-  Chip,
   Dialog,
   IconButton,
   Portal,
@@ -14,35 +14,82 @@ import {
   Text,
   TextInput,
 } from 'react-native-paper';
-import type { WithdrawalRequest } from '../types/api';
+import type { TransactionCategory, WithdrawalRequest } from '../types/api';
 import IconBadge from '../components/IconBadge';
-import { colors } from '../theme/colors';
+import { categoryColors, colors } from '../theme/colors';
 import * as withdrawalService from '../services/withdrawalService';
 import { ApiError } from '../services/api';
 import type { RootStackScreenProps } from '../navigation/types';
 
-const STATUS_META: Record<WithdrawalRequest['status'], { label: string; color: string }> = {
-  PENDING: { label: 'Pending', color: colors.muted },
-  PENDING_PARENT_APPROVAL: { label: 'Awaiting Parent', color: '#F59E0B' },
-  APPROVED: { label: 'Approved', color: colors.primary },
-  REJECTED: { label: 'Rejected', color: colors.danger },
-  COMPLETED: { label: 'Completed', color: colors.accent },
+const CATEGORY_META: Record<
+  TransactionCategory,
+  { icon: keyof typeof MaterialCommunityIcons.glyphMap; color: string }
+> = {
+  FOOD: { icon: 'food', color: categoryColors.food },
+  BOOKS: { icon: 'book-open-variant', color: categoryColors.books },
+  TRANSPORT: { icon: 'bus', color: categoryColors.transport },
+  SOFTWARE: { icon: 'laptop', color: categoryColors.software },
+  TUITION: { icon: 'school', color: categoryColors.tuition },
+  LIFESTYLE: { icon: 'shopping-outline', color: categoryColors.lifestyle },
+  RENT: { icon: 'home-outline', color: categoryColors.rent },
+  PERSONAL_SAVINGS: { icon: 'piggy-bank-outline', color: categoryColors.personalSavings },
+  GENERAL: { icon: 'wallet-outline', color: categoryColors.general },
+};
+
+type ReceiptBadgeMeta = {
+  label: string;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  bg: string;
+  fg: string;
 };
 
 const RECEIPT_STATUS_META: Record<
   NonNullable<WithdrawalRequest['receiptVerificationStatus']>,
-  { label: string; icon: string; color: string }
+  ReceiptBadgeMeta
 > = {
-  PROCESSING: { label: 'Verifying your receipt...', icon: 'progress-clock', color: colors.primary },
-  AUTO_VERIFIED: { label: 'Verified', icon: 'check-circle-outline', color: colors.accent },
-  FLAGGED: { label: 'Flagged for review', icon: 'alert-outline', color: colors.danger },
-  PENDING: { label: 'Pending review', icon: 'clock-outline', color: '#F59E0B' },
-  MANUALLY_VERIFIED: { label: 'Verified', icon: 'check-circle-outline', color: colors.accent },
-  REJECTED: { label: 'Rejected', icon: 'close-circle-outline', color: colors.danger },
+  AUTO_VERIFIED: { label: 'Verified', icon: 'check-circle', bg: '#D1FAE5', fg: '#065F46' },
+  MANUALLY_VERIFIED: { label: 'Verified', icon: 'check-circle', bg: '#D1FAE5', fg: '#065F46' },
+  FLAGGED: { label: 'Flagged for Review', icon: 'alert', bg: '#FEE2E2', fg: '#991B1B' },
+  PENDING: { label: 'Pending Review', icon: 'clock-outline', bg: '#FEF3C7', fg: '#92400E' },
+  PROCESSING: { label: 'Verifying...', icon: 'sync', bg: '#DBEAFE', fg: '#1E40AF' },
+  REJECTED: { label: 'Rejected', icon: 'close-circle', bg: '#FCA5A5', fg: '#7F1D1D' },
 };
 
-function formatDate(isoDate: string): string {
-  return new Date(isoDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+const NO_RECEIPT_META: ReceiptBadgeMeta = {
+  label: 'No Receipt',
+  icon: 'file-outline',
+  bg: '#F3F4F6',
+  fg: '#6B7280',
+};
+
+// A receipt row only becomes "PROCESSING" once uploadReceipt has written a file — before that,
+// receiptVerificationStatus is still whatever default the row was created with, so receiptPath
+// is what actually distinguishes "nothing uploaded" from "something uploaded, being checked".
+function receiptBadgeFor(request: WithdrawalRequest): ReceiptBadgeMeta {
+  if (!request.receiptPath || !request.receiptVerificationStatus) return NO_RECEIPT_META;
+  return RECEIPT_STATUS_META[request.receiptVerificationStatus];
+}
+
+function formatDateTime(isoDate: string): string {
+  const date = new Date(isoDate);
+  const datePart = date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+  const timePart = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return `${datePart} at ${timePart}`;
+}
+
+function ReceiptBadge({ meta, isProcessing }: Readonly<{ meta: ReceiptBadgeMeta; isProcessing: boolean }>) {
+  return (
+    <View style={[styles.receiptBadge, { backgroundColor: meta.bg }]}>
+      {isProcessing ? (
+        <RNActivityIndicator size={11} color={meta.fg} />
+      ) : (
+        <MaterialCommunityIcons name={meta.icon} size={13} color={meta.fg} />
+      )}
+      <Text style={[styles.receiptBadgeText, { color: meta.fg }]} numberOfLines={1}>
+        {meta.label}
+      </Text>
+    </View>
+  );
 }
 
 export default function WithdrawalScreen({
@@ -134,48 +181,41 @@ export default function WithdrawalScreen({
   };
 
   const renderWithdrawalItem = (request: WithdrawalRequest) => {
-    const statusMeta = STATUS_META[request.status];
-    const receiptMeta = request.receiptVerificationStatus
-      ? RECEIPT_STATUS_META[request.receiptVerificationStatus]
-      : null;
+    const categoryMeta = CATEGORY_META[request.category];
+    const receiptMeta = receiptBadgeFor(request);
+    const isProcessing = Boolean(request.receiptPath) && request.receiptVerificationStatus === 'PROCESSING';
+    const showUploadButton =
+      request.status === 'COMPLETED' && !request.receiptPath && request.category !== 'GENERAL';
 
     return (
-      <View key={request.id} style={styles.row}>
-        <IconBadge icon="cash-multiple" color={statusMeta.color} size={44} />
-        <View style={styles.rowMiddle}>
-          <Text style={styles.rowTitle}>
-            ${Number(request.amount).toFixed(2)} · {request.category}
-          </Text>
-          <Text style={styles.rowDate}>{formatDate(request.completedAt ?? request.createdAt)}</Text>
-
-          {!request.receiptPath && request.category !== 'GENERAL' ? (
-            <Button
-              mode="text"
-              compact
-              textColor={colors.primary}
-              style={styles.receiptButton}
-              onPress={() => openReceiptDialog(request)}
-            >
-              Upload Receipt
-            </Button>
-          ) : null}
-
-          {request.receiptPath && receiptMeta ? (
-            <View style={styles.receiptStatusRow}>
-              <IconBadge icon={receiptMeta.icon as never} color={receiptMeta.color} size={20} iconSize={12} />
-              <Text style={[styles.receiptStatusText, { color: receiptMeta.color }]}>
-                {receiptMeta.label}
+      <View key={request.id} style={[styles.card, { borderLeftColor: receiptMeta.fg }]}>
+        <View style={styles.cardTopRow}>
+          <View style={styles.cardLeft}>
+            <IconBadge icon={categoryMeta.icon} color={categoryMeta.color} size={44} />
+            <View style={styles.cardTextGroup}>
+              <View style={styles.cardCategoryAmountRow}>
+                <Text style={styles.amountText}>${Number(request.amount).toFixed(2)}</Text>
+                <Text style={styles.categoryText}>{request.category}</Text>
+              </View>
+              <Text style={styles.dateText}>
+                {formatDateTime(request.completedAt ?? request.createdAt)}
               </Text>
             </View>
-          ) : null}
+          </View>
+          <ReceiptBadge meta={receiptMeta} isProcessing={isProcessing} />
         </View>
-        <Chip
-          compact
-          style={[styles.statusChip, { backgroundColor: `${statusMeta.color}1F` }]}
-          textStyle={{ color: statusMeta.color, fontSize: 11, fontWeight: '700' }}
-        >
-          {statusMeta.label}
-        </Chip>
+
+        {showUploadButton ? (
+          <Button
+            mode="contained"
+            icon="camera-outline"
+            style={styles.uploadButton}
+            contentStyle={styles.uploadButtonContent}
+            onPress={() => openReceiptDialog(request)}
+          >
+            Upload Receipt
+          </Button>
+        ) : null}
       </View>
     );
   };
@@ -325,46 +365,74 @@ const styles = StyleSheet.create({
   list: {
     marginBottom: 8,
   },
-  row: {
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderLeftWidth: 4,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  cardTopRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 10,
+    justifyContent: 'space-between',
   },
-  rowMiddle: {
+  cardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
     flex: 1,
-    marginLeft: 12,
     marginRight: 8,
   },
-  rowTitle: {
+  cardTextGroup: {
+    marginLeft: 12,
+    flexShrink: 1,
+  },
+  cardCategoryAmountRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flexWrap: 'wrap',
+  },
+  amountText: {
+    fontSize: 18,
     fontWeight: '700',
     color: colors.heading,
-    fontSize: 13,
   },
-  rowDate: {
-    fontSize: 11,
+  categoryText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.muted,
+    marginLeft: 6,
+  },
+  dateText: {
+    fontSize: 12,
     color: colors.muted,
     marginTop: 4,
   },
-  receiptButton: {
-    alignSelf: 'flex-start',
-    marginTop: 4,
-    marginLeft: -8,
-  },
-  receiptStatusRow: {
+  receiptBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 6,
+    borderRadius: 999,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    maxWidth: 150,
   },
-  receiptStatusText: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 6,
+  receiptBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginLeft: 5,
+    flexShrink: 1,
   },
-  statusChip: {
-    height: 24,
+  uploadButton: {
+    marginTop: 14,
+    borderRadius: 10,
+  },
+  uploadButtonContent: {
+    paddingVertical: 2,
   },
   dialogInput: {
     backgroundColor: colors.inputBackground,
