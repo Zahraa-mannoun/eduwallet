@@ -528,11 +528,14 @@ const styles = StyleSheet.create({
   lockGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    gap: 10,
   },
+  // `justifyContent: 'space-between'` distributes leftover space per-row, so an incomplete
+  // last row (e.g. 2 items instead of 3) gets stretched apart instead of spaced like every
+  // other row — a fixed `gap` on the grid above keeps spacing identical whether a row is full
+  // or not. Width leaves room for two 10px gaps across three equal columns.
   lockItem: {
     width: '31%',
-    marginBottom: 12,
     borderRadius: 14,
     borderWidth: 1.5,
     borderColor: colors.border,

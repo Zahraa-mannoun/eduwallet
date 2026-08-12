@@ -88,6 +88,7 @@ export type WithdrawalRequest = {
   detectedCategory: TransactionCategory | null;
   agentId: string | null;
   createdAt: string;
+  approvedAt: string | null;
   completedAt: string | null;
   wallet: {
     id: string;

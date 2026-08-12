@@ -59,15 +59,34 @@ export default function ReportHistoryScreen({
   );
 
   const handleDownload = async (report: ReportRequest) => {
+    // The Download button itself only renders for SENT reports (below), but this guard is a
+    // second line of defense against a stale list (e.g. tapping right as an admin un-sends it) —
+    // GENERATED/PENDING reports 400 on the backend anyway, so catch it before even trying.
+    if (report.status !== 'SENT') {
+      setDownloadError('Report not yet sent by admin');
+      return;
+    }
+
     setDownloadingId(report.id);
     setDownloadError(null);
     try {
       const uri = await reportService.downloadReportPdf(report.id);
+      console.log('Report downloaded to', uri);
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, { mimeType: 'application/pdf' });
+      } else {
+        console.log('Sharing is not available on this platform — file was saved but not shared');
+        setDownloadError('Downloaded, but sharing is not available on this device.');
       }
     } catch (err) {
-      setDownloadError(err instanceof ApiError ? err.message : 'Could not download this report.');
+      // File.downloadFileAsync throws a plain Error (not the ApiError apiRequest() produces),
+      // so the previous `err instanceof ApiError` check here always fell through to the generic
+      // message below regardless of what actually went wrong — logging and surfacing err.message
+      // is what makes the real cause (auth, network, 404/400 from the server) visible at all.
+      console.error('Report download failed', err);
+      const message =
+        err instanceof ApiError || err instanceof Error ? err.message : 'Could not download this report.';
+      setDownloadError(message);
     } finally {
       setDownloadingId(null);
     }

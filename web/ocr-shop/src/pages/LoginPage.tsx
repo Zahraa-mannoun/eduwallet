@@ -40,7 +40,7 @@ export function LoginPage() {
             Sign in with your EduWallet account
           </h1>
           <p className="mt-1 text-center text-sm text-slate-500">
-            Shop without categories — our AI detects your spending category at checkout
+            Shop without categories — EduWallet routes each purchase automatically
           </p>
         </div>
 

@@ -82,7 +82,7 @@ function CategoryChipsSelector({ selected, onToggle }: CategoryChipsSelectorProp
   );
 }
 
-export default function StudentsListScreen({ navigation }: ParentTabScreenProps<'Students'>) {
+export default function StudentsListScreen(_props: ParentTabScreenProps<'Students'>) {
   const [students, setStudents] = useState<LinkedStudent[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -207,13 +207,7 @@ export default function StudentsListScreen({ navigation }: ParentTabScreenProps<
               <TouchableOpacity
                 key={student.id}
                 style={styles.studentRow}
-                onPress={() =>
-                  navigation.navigate('ParentStudentDetail', {
-                    studentId: student.id,
-                    studentName: student.fullName,
-                    studentEmail: student.email,
-                  })
-                }
+                onPress={() => openSettingsDialog(item)}
               >
                 <Avatar.Text
                   size={48}

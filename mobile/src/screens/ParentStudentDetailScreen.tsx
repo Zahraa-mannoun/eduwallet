@@ -67,7 +67,13 @@ export default function ParentStudentDetailScreen({
   const renderWithdrawalItem = (withdrawal: StudentWithdrawalForParent) => {
     const statusMeta = STATUS_META[withdrawal.status];
     const receiptMeta = RECEIPT_STATUS_META[withdrawal.receiptStatus];
-    const needsAttention = withdrawal.receiptStatus === 'NOT_UPLOADED' || withdrawal.receiptStatus === 'FLAGGED';
+    // GENERAL withdrawals never require a receipt, so a perpetually-empty receiptStatus of
+    // NOT_UPLOADED for them isn't a real problem to flag — only locked-category withdrawals
+    // (which the receipt is what proves was spent correctly) show the status row/warning.
+    const receiptRequired = withdrawal.category !== 'GENERAL';
+    const needsAttention =
+      receiptRequired &&
+      (withdrawal.receiptStatus === 'NOT_UPLOADED' || withdrawal.receiptStatus === 'FLAGGED');
 
     return (
       <View key={withdrawal.id} style={styles.row}>
@@ -90,12 +96,14 @@ export default function ParentStudentDetailScreen({
           </Chip>
         </View>
 
-        <View style={styles.receiptStatusRow}>
-          <Text style={styles.receiptEmoji}>{receiptMeta.emoji}</Text>
-          <Text style={[styles.receiptStatusText, { color: receiptMeta.color }]}>
-            {receiptMeta.label}
-          </Text>
-        </View>
+        {receiptRequired ? (
+          <View style={styles.receiptStatusRow}>
+            <Text style={styles.receiptEmoji}>{receiptMeta.emoji}</Text>
+            <Text style={[styles.receiptStatusText, { color: receiptMeta.color }]}>
+              {receiptMeta.label}
+            </Text>
+          </View>
+        ) : null}
 
         {needsAttention ? (
           <View style={styles.warningBanner}>

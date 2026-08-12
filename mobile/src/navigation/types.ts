@@ -41,6 +41,7 @@ export type RootStackParamList = {
   TransactionDetail: { transactionId: string };
   ApprovalRequest: { transaction: Transaction; studentName: string };
   ParentStudentDetail: { studentId: string; studentName: string; studentEmail: string };
+  NoLinkedStudents: undefined;
   KYC: undefined;
   PersonalSavings: undefined;
   ReportRequest: undefined;

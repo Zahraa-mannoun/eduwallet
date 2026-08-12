@@ -19,16 +19,16 @@ export function Header({ onCartClick }: Readonly<HeaderProps>) {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
+    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
-        <Link to="/home" className="flex shrink-0 items-center gap-2">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-600 text-xl">
+        <Link to="/home" className="flex shrink-0 items-center gap-2.5">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary-600 to-primary-800 text-xl shadow-sm">
             🔍
           </div>
           <span className="flex flex-col leading-tight">
-            <span className="text-xl font-bold text-primary-600">ScanMart</span>
-            <span className="hidden text-[10px] font-medium uppercase tracking-wide text-slate-400 sm:block">
-              Powered by EduWallet AI Detection
+            <span className="text-xl font-extrabold tracking-tight text-primary-700">ScanMart</span>
+            <span className="hidden text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:block">
+              Powered by EduWallet
             </span>
           </span>
         </Link>

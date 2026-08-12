@@ -18,32 +18,34 @@ export function HomePage() {
     );
   }, [query]);
 
+  const resultsSummary = query.trim()
+    ? `${filteredProducts.length} result${filteredProducts.length === 1 ? '' : 's'} for “${query.trim()}”`
+    : `${filteredProducts.length} products available`;
+
   return (
     <div>
-      <section className="relative overflow-hidden bg-gradient-to-r from-primary-900 via-primary-700 to-primary-500">
-        <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <section className="relative overflow-hidden bg-gradient-to-br from-primary-900 via-primary-700 to-primary-500">
+        <div className="pointer-events-none absolute inset-0 opacity-20 [background-image:radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] [background-size:24px_24px]" />
+        <div className="relative mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
           <p className="text-lg font-medium text-white/90 sm:text-xl">
             Welcome back, {user?.fullName ?? 'student'}!
           </p>
-          <h1 className="mt-1 max-w-2xl text-3xl font-bold text-white sm:text-4xl">
-            One catalog, no categories — our AI figures out the rest
+          <h1 className="mt-1 max-w-2xl text-3xl font-bold tracking-tight text-white sm:text-5xl">
+            Everything a student needs, in one place
           </h1>
-          <p className="mt-3 max-w-xl text-sm text-white/80 sm:text-base">
-            ScanMart doesn&apos;t sort products by category. At checkout, our AI scans your cart
-            and automatically routes each purchase to the right EduWallet card.
+          <p className="mt-4 max-w-xl text-sm text-white/80 sm:text-base">
+            Shop freely — ScanMart automatically routes each purchase to the right EduWallet
+            card at checkout, so your education-locked funds always land where they should.
           </p>
         </div>
       </section>
 
       <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-xl font-bold text-slate-900">All Products</h2>
-          {query.trim() && (
-            <p className="text-sm text-slate-500">
-              {filteredProducts.length} result{filteredProducts.length === 1 ? '' : 's'} for
-              &ldquo;{query.trim()}&rdquo;
-            </p>
-          )}
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-bold text-slate-900">All Products</h2>
+            <p className="mt-0.5 text-sm text-slate-500">{resultsSummary}</p>
+          </div>
         </div>
 
         {filteredProducts.length === 0 ? (

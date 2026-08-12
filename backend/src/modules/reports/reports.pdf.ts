@@ -29,6 +29,18 @@ function formatDate(date: Date): string {
   return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+// Every status/category value rendered in a table is a SCREAMING_SNAKE_CASE Prisma enum
+// (AUTO_APPROVED, PERSONAL_SAVINGS, MANUALLY_VERIFIED, ...) — converting to Title Case both
+// reads better and is meaningfully shorter, which is what actually keeps narrow columns like
+// STATUS from wrapping/overflowing rather than the column width alone.
+function titleCaseEnum(value: string): string {
+  return value
+    .toLowerCase()
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
 export type ReportData = {
   studentName: string;
   parentName: string;
@@ -152,7 +164,7 @@ export function renderReportPdf(doc: PDFKit.PDFDocument, data: ReportData): void
       data.cardPurchases.map((entry) => [
         formatDate(entry.usedAt),
         entry.merchantName ?? '—',
-        entry.categoryLock ?? '—',
+        entry.categoryLock ? titleCaseEnum(entry.categoryLock) : '—',
         formatMoney(entry.amountPaid),
         `•••• ${entry.lastFourDigits}`,
       ]),
@@ -165,20 +177,20 @@ export function renderReportPdf(doc: PDFKit.PDFDocument, data: ReportData): void
       doc,
       'Transfers',
       [
-        { label: 'Date', width: 80 },
-        { label: 'Sender', width: 130 },
-        { label: 'Receiver', width: 130 },
+        { label: 'Date', width: 65 },
+        { label: 'Sender', width: 110 },
+        { label: 'Receiver', width: 110 },
         { label: 'Category', width: 80 },
-        { label: 'Amount', width: 50 },
-        { label: 'Status', width: 30 },
+        { label: 'Amount', width: 60 },
+        { label: 'Status', width: 70 },
       ],
       data.transfers.map((tx) => [
         formatDate(tx.createdAt),
         tx.fromWallet?.user.fullName ?? '—',
         tx.toWallet?.user.fullName ?? '—',
-        tx.category,
+        titleCaseEnum(tx.category),
         formatMoney(tx.amount),
-        tx.status,
+        titleCaseEnum(tx.status),
       ]),
       y
     );
@@ -196,9 +208,9 @@ export function renderReportPdf(doc: PDFKit.PDFDocument, data: ReportData): void
       ],
       data.withdrawals.map((w) => [
         formatDate(w.createdAt),
-        w.category,
+        titleCaseEnum(w.category),
         formatMoney(w.amount),
-        w.receiptVerificationStatus,
+        titleCaseEnum(w.receiptVerificationStatus),
       ]),
       y
     );
@@ -218,9 +230,9 @@ export function renderReportPdf(doc: PDFKit.PDFDocument, data: ReportData): void
       data.flagged.flatMap((tx) =>
         tx.fraudAlerts.map((alert) => [
           formatDate(tx.createdAt),
-          tx.category,
+          titleCaseEnum(tx.category),
           formatMoney(tx.amount),
-          alert.alertType,
+          titleCaseEnum(alert.alertType),
           alert.resolved ? 'Yes' : 'No',
         ])
       ),
@@ -238,7 +250,12 @@ export function renderReportPdf(doc: PDFKit.PDFDocument, data: ReportData): void
         { label: 'Category', width: 120 },
         { label: 'Status', width: 100 },
       ],
-      data.pending.map((tx) => [formatDate(tx.createdAt), formatMoney(tx.amount), tx.category, tx.status]),
+      data.pending.map((tx) => [
+        formatDate(tx.createdAt),
+        formatMoney(tx.amount),
+        titleCaseEnum(tx.category),
+        titleCaseEnum(tx.status),
+      ]),
       y
     );
   }
@@ -257,7 +274,7 @@ export function renderReportPdf(doc: PDFKit.PDFDocument, data: ReportData): void
         formatDate(entry.createdAt),
         entry.type === 'ROLLOVER' ? 'Rollover' : 'Withdrawal',
         formatMoney(entry.amount),
-        entry.status,
+        titleCaseEnum(entry.status),
       ]),
       y
     );
@@ -282,7 +299,7 @@ export function renderReportPdf(doc: PDFKit.PDFDocument, data: ReportData): void
         { label: 'Category', width: 200 },
         { label: 'Total', width: 200 },
       ],
-      data.summary.byCategory.map((row) => [row.category, formatMoney(row.total)]),
+      data.summary.byCategory.map((row) => [titleCaseEnum(row.category), formatMoney(row.total)]),
       y
     );
   }

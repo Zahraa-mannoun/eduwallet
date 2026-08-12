@@ -450,6 +450,12 @@ export async function processWithdrawal(
           amount: input.amount,
           category: 'GENERAL',
           status: 'PENDING_PARENT_APPROVAL',
+          // No Prisma relation to User (see getAllWithdrawalsForAdmin's note above) — stamped
+          // here with the *initiating* agent so approveWithdrawal below can notify them back.
+          // completeWithdrawal's disburse() call overwrites this with whichever agent actually
+          // ends up dispensing the cash, which remains the correct source of truth once the
+          // request reaches COMPLETED.
+          agentId: adminUserId,
         },
       });
 
@@ -464,6 +470,13 @@ export async function processWithdrawal(
         'Withdrawal Approval Needed',
         `${student.fullName} is requesting to withdraw $${formatMoney(input.amount)} cash at an agent. Your approval is needed.`,
         'WITHDRAWAL_APPROVAL_NEEDED'
+      );
+
+      await createNotification(
+        adminUserId,
+        'Withdrawal Pending Approval',
+        `Withdrawal request for ${student.fullName} ($${formatMoney(input.amount)}, ${input.category}) requires parent approval. You will be notified once approved.`,
+        'WITHDRAWAL_PENDING_APPROVAL'
       );
 
       return { pending: true, request, studentName: student.fullName };
@@ -533,7 +546,7 @@ export async function approveWithdrawal(
 
   const updated = await prisma.withdrawalRequest.update({
     where: { id: request.id },
-    data: { status: 'APPROVED' },
+    data: { status: 'APPROVED', approvedAt: new Date() },
   });
 
   await recordWithdrawalHistory(
@@ -548,6 +561,19 @@ export async function approveWithdrawal(
     `Your cash withdrawal request of $${formatMoney(request.amount)} has been approved. Visit an agent to collect your cash.`,
     'WITHDRAWAL_APPROVED'
   );
+
+  if (updated.agentId) {
+    const student = await prisma.user.findUnique({
+      where: { id: wallet.userId },
+      select: { fullName: true },
+    });
+    await createNotification(
+      updated.agentId,
+      'Withdrawal Approved',
+      `${student?.fullName ?? 'The student'}'s withdrawal has been approved. You can now dispense $${formatMoney(updated.amount)}.`,
+      'WITHDRAWAL_APPROVED_FOR_AGENT'
+    );
+  }
 
   return updated;
 }
@@ -659,15 +685,36 @@ function detectCategoryFromText(text: string): TransactionCategory | null {
   return best?.category ?? null;
 }
 
+// Matches a Unicode combining mark — what NFKD decomposition splits an accented letter into
+// (e.g. "e" + a combining acute accent), so stripping this after normalize() is the standard
+// way to fold accents away for matching (the Unicode property escape avoids hardcoding a
+// numeric code-point range in source).
+const COMBINING_DIACRITICS_PATTERN = /\p{Mn}/gu;
+
+// Lowercases, strips accents (so "Café" matches "cafe"), and collapses any run of
+// non-alphanumeric characters (receipt punctuation, extra whitespace, underscores in a
+// filename) down to a single space — makes the contains-check below tolerant of formatting
+// noise a case-only comparison would still miss (e.g. "CARREFOUR-LAVAL_receipt.jpg").
+function normalizeForMatch(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(COMBINING_DIACRITICS_PATTERN, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
 async function detectMerchant(
   text: string
 ): Promise<{ name: string; category: TransactionCategory } | null> {
-  const lower = text.toLowerCase();
+  const normalizedText = normalizeForMatch(text);
+  if (!normalizedText) return null;
   const merchants = await prisma.merchant.findMany({ where: { isActive: true } });
   for (const merchant of merchants) {
-    const nameWords = merchant.name.toLowerCase().split(/\s+/).filter((word) => word.length > 3);
+    const normalizedName = normalizeForMatch(merchant.name);
+    const nameWords = normalizedName.split(' ').filter((word) => word.length > 3);
     const matches =
-      lower.includes(merchant.name.toLowerCase()) || nameWords.some((word) => lower.includes(word));
+      normalizedText.includes(normalizedName) || nameWords.some((word) => normalizedText.includes(word));
     if (matches) {
       return { name: merchant.name, category: merchant.category };
     }
@@ -886,6 +933,9 @@ export async function sendMissingReceiptReminders(): Promise<number> {
   const overdue = await prisma.withdrawalRequest.findMany({
     where: {
       status: 'COMPLETED',
+      // GENERAL draws from unlocked free balance and was never required to prove a locked
+      // category was spent correctly, so it never needs a receipt in the first place.
+      category: { not: 'GENERAL' },
       receiptPath: null,
       receiptReminderSentAt: null,
       completedAt: { lte: cutoff },

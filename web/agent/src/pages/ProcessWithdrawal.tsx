@@ -1,15 +1,91 @@
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import type { ApiResponse, ProcessWithdrawalResult, StudentLookup, TransactionCategory } from '../types';
+import type {
+  ApiResponse,
+  ProcessWithdrawalResult,
+  StudentLookup,
+  TransactionCategory,
+  WithdrawalRequest,
+} from '../types';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Modal } from '../components/Modal';
 import { AgentStatsCard } from '../components/AgentStatsCard';
 import type { AgentStatsCardHandle } from '../components/AgentStatsCard';
 import { useAuth } from '../context/AuthContext';
-import { IconCheckCircle, IconSearch, IconUserSearch, IconWallet } from '../components/icons';
+import { IconCash, IconCheckCircle, IconSearch, IconUserSearch, IconWallet } from '../components/icons';
+import { formatDateTime } from '../lib/format';
 
 function formatMoney(amount: string): string {
   return `$${Number(amount).toFixed(2)}`;
+}
+
+function ReadyToDispenseSection({
+  withdrawals,
+  onDispensed,
+}: {
+  withdrawals: WithdrawalRequest[];
+  onDispensed: () => void;
+}) {
+  const [dispensingId, setDispensingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  if (withdrawals.length === 0) return null;
+
+  const handleDispense = async (request: WithdrawalRequest) => {
+    setDispensingId(request.id);
+    setError(null);
+    try {
+      await api.patch(`/withdrawals/${request.id}/complete`);
+      onDispensed();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setDispensingId(null);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+      <div className="mb-3 flex items-center gap-2">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+          <IconCash className="h-4 w-4" />
+        </div>
+        <h2 className="text-sm font-semibold text-slate-900">Ready to Dispense</h2>
+        <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white">
+          {withdrawals.length}
+        </span>
+      </div>
+
+      {error && (
+        <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+      )}
+
+      <div className="space-y-2">
+        {withdrawals.map((request) => (
+          <div
+            key={request.id}
+            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-white px-4 py-3"
+          >
+            <div>
+              <p className="text-sm font-semibold text-slate-900">{request.wallet.user.fullName}</p>
+              <p className="text-xs text-slate-500">
+                {formatMoney(request.amount)} · {request.category}
+                {request.approvedAt ? ` · Approved ${formatDateTime(request.approvedAt)}` : ''}
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={dispensingId === request.id}
+              onClick={() => void handleDispense(request)}
+              className="rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-60"
+            >
+              {dispensingId === request.id ? 'Dispensing…' : 'Dispense Cash'}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function ConfirmDispenseModal({
@@ -111,6 +187,21 @@ export function ProcessWithdrawal() {
   const [resultMessage, setResultMessage] = useState<{ text: string; tone: 'success' | 'info' } | null>(
     null
   );
+  const [approvedWithdrawals, setApprovedWithdrawals] = useState<WithdrawalRequest[]>([]);
+
+  const loadApprovedWithdrawals = useCallback(async () => {
+    try {
+      const res = await api.get<ApiResponse<WithdrawalRequest[]>>('/withdrawals');
+      setApprovedWithdrawals(unwrap(res.data).filter((request) => request.status === 'APPROVED'));
+    } catch {
+      // Non-critical — the section just stays empty/stale until the next successful refresh
+      // rather than blocking the rest of the page on this fetch.
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadApprovedWithdrawals();
+  }, [loadApprovedWithdrawals]);
 
   const handleSearch = async (event: FormEvent) => {
     event.preventDefault();
@@ -178,6 +269,7 @@ export function ProcessWithdrawal() {
     setAmount('');
     setHasSearched(false);
     statsRef.current?.refresh();
+    void loadApprovedWithdrawals();
   };
 
   return (
@@ -194,6 +286,14 @@ export function ProcessWithdrawal() {
           Search for a student to dispense a cash withdrawal from their wallet.
         </p>
       </div>
+
+      <ReadyToDispenseSection
+        withdrawals={approvedWithdrawals}
+        onDispensed={() => {
+          void loadApprovedWithdrawals();
+          statsRef.current?.refresh();
+        }}
+      />
 
       <AgentStatsCard ref={statsRef} />
 

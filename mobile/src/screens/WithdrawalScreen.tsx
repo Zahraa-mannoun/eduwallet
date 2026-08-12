@@ -147,7 +147,7 @@ export default function WithdrawalScreen({
           </Text>
           <Text style={styles.rowDate}>{formatDate(request.completedAt ?? request.createdAt)}</Text>
 
-          {!request.receiptPath ? (
+          {!request.receiptPath && request.category !== 'GENERAL' ? (
             <Button
               mode="text"
               compact

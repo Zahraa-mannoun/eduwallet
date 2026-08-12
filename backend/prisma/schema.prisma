@@ -471,6 +471,10 @@ model WithdrawalRequest {
   detectedCategory          TransactionCategory?
   agentId                   String?
   createdAt                 DateTime                  @default(now())
+  // Only ever set on the GENERAL-over-threshold exception, when a parent approves a
+  // PENDING_PARENT_APPROVAL request (approveWithdrawal) — null for every withdrawal dispensed
+  // directly, since those never pass through an APPROVED state at all.
+  approvedAt                DateTime?
   completedAt               DateTime?
   // Set once the 24h-no-receipt reminder notification fires (sendMissingReceiptReminders) —
   // stops the hourly cron from re-notifying the same student/parent every run.

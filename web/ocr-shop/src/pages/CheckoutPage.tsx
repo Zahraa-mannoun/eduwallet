@@ -67,10 +67,10 @@ function groupByDetectedCategory(items: CartItem[]): CategoryGroup[] {
   }));
 }
 
-function AiDetectionBadge() {
+function EduWalletBadge() {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-700">
-      🔍 Powered by EduWallet AI Detection
+      🔍 Powered by EduWallet
     </span>
   );
 }
@@ -111,14 +111,14 @@ export function CheckoutPage() {
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-slate-900">Checkout</h1>
-        <AiDetectionBadge />
+        <EduWalletBadge />
       </div>
 
       {groups.length > 1 && (
         <div className="mt-4 rounded-lg border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-800">
-          Our AI detected items across {groups.length} categories in your cart. Because EduWallet
-          funds can be education-locked per category, you&apos;ll need to pay for each detected
-          category separately with its own virtual card.
+          Your cart spans {groups.length} categories. Because EduWallet funds can be
+          education-locked per category, you&apos;ll need to pay for each one separately with
+          its own virtual card.
         </div>
       )}
 
@@ -135,7 +135,7 @@ export function CheckoutPage() {
       )}
 
       <div className="mt-6 grid gap-8 lg:grid-cols-3">
-        <div className="space-y-4 lg:col-span-1">
+        <div className="space-y-4 lg:sticky lg:top-20 lg:col-span-1 lg:self-start">
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-bold text-slate-900">Order Summary</h2>
             <div className="mt-4 space-y-4">
