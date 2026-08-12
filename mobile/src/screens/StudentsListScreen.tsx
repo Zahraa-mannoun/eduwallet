@@ -16,6 +16,7 @@ import {
   TextInput,
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import type { TransactionCategory } from '../types/api';
 import { BUDGET_CATEGORIES, LOCKABLE_BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import { categoryColors, colors } from '../theme/colors';
@@ -87,6 +88,49 @@ function CategoryChipsSelector({ selected, onToggle }: CategoryChipsSelectorProp
           >
             {category.label}
           </Chip>
+        );
+      })}
+    </View>
+  );
+}
+
+// Settings-dialog-only category selector — visually distinct (3-column toggle chips) from
+// CategoryChipsSelector above, which the Link-a-Student dialog still uses unchanged.
+function SettingsCategoryGrid({ selected, onToggle }: CategoryChipsSelectorProps) {
+  return (
+    <View style={styles.settingsCategoryGrid}>
+      {LOCKABLE_BUDGET_CATEGORIES.map((cat, index) => {
+        const txCategory = cat.key.toUpperCase() as TransactionCategory;
+        const isSelected = selected.has(txCategory);
+        // Same ragged-last-row fix as the category grid in ParentSendMoneyScreen — explicit
+        // per-item margins instead of space-between so an 8-item/3-column grid's 2-item last
+        // row still sits evenly spaced instead of pushed to opposite edges.
+        const isLastInRow = (index + 1) % 3 === 0;
+        return (
+          <TouchableOpacity
+            key={cat.key}
+            onPress={() => onToggle(txCategory)}
+            style={[
+              styles.settingsCategoryChip,
+              !isLastInRow && styles.settingsCategoryChipGap,
+              isSelected && styles.settingsCategoryChipSelected,
+            ]}
+          >
+            <MaterialCommunityIcons
+              name={isSelected ? 'check-circle' : cat.icon}
+              size={16}
+              color={isSelected ? '#FFFFFF' : colors.muted}
+            />
+            <Text
+              style={[
+                styles.settingsCategoryChipText,
+                isSelected && styles.settingsCategoryChipTextSelected,
+              ]}
+              numberOfLines={1}
+            >
+              {cat.label}
+            </Text>
+          </TouchableOpacity>
         );
       })}
     </View>
@@ -345,19 +389,29 @@ export default function StudentsListScreen(_props: ParentTabScreenProps<'Student
           </Dialog.Actions>
         </Dialog>
 
-        <Dialog visible={settingsStudent !== null} onDismiss={closeSettingsDialog}>
-          <Dialog.Title>
-            {settingsStudent ? `${settingsStudent.student.fullName}'s Settings` : 'Student Settings'}
-          </Dialog.Title>
+        <Dialog
+          visible={settingsStudent !== null}
+          onDismiss={closeSettingsDialog}
+          style={styles.settingsDialog}
+        >
+          <View style={styles.settingsTitleRow}>
+            <MaterialCommunityIcons name="cog-outline" size={20} color={colors.primary} />
+            <Text style={styles.settingsTitleText}>
+              {settingsStudent ? `${settingsStudent.student.fullName}'s Settings` : 'Student Settings'}
+            </Text>
+          </View>
           <Dialog.Content>
+            <Text style={styles.settingsFieldLabel}>Approval Threshold ($)</Text>
             <TextInput
               mode="outlined"
-              label="Approval threshold ($)"
+              placeholder="0"
               value={settingsThreshold}
               onChangeText={(text: string) => setSettingsThreshold(text.replace(/[^0-9.]/g, ''))}
               keyboardType="decimal-pad"
+              left={<TextInput.Icon icon="currency-usd" />}
               outlineColor={colors.border}
               activeOutlineColor={colors.primary}
+              theme={{ roundness: 12 }}
               style={styles.dialogInputTight}
             />
             <HelperText type="info" visible style={styles.thresholdHelperText}>
@@ -365,20 +419,51 @@ export default function StudentsListScreen(_props: ParentTabScreenProps<'Student
               Education-locked funds are automatically approved when spent correctly.
             </HelperText>
 
-            <Text style={styles.fieldLabel}>Allowed Spending Categories</Text>
-            <CategoryChipsSelector
+            <Text style={styles.settingsSectionLabel}>Allowed Spending Categories</Text>
+            <SettingsCategoryGrid
               selected={settingsCategories}
               onToggle={(category) => setSettingsCategories((prev) => toggleInSet(prev, category))}
             />
             <Text style={styles.categoryExplanation}>{CATEGORY_EXPLANATION}</Text>
           </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={closeSettingsDialog} disabled={isSavingSettings}>
+          <Dialog.Actions style={styles.settingsActions}>
+            <Button
+              mode="outlined"
+              textColor={colors.muted}
+              style={styles.settingsCancelButton}
+              disabled={isSavingSettings}
+              onPress={closeSettingsDialog}
+            >
               Cancel
             </Button>
-            <Button onPress={handleSaveSettings} disabled={!canSaveSettings}>
-              {isSavingSettings ? <ActivityIndicator size={16} color={colors.primary} /> : 'Save'}
-            </Button>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              disabled={!canSaveSettings}
+              onPress={handleSaveSettings}
+              style={styles.settingsSaveButtonWrapper}
+            >
+              <LinearGradient
+                colors={
+                  canSaveSettings ? [colors.gradientStart, colors.gradientEnd] : [colors.border, colors.border]
+                }
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.settingsSaveButton}
+              >
+                {isSavingSettings ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text
+                    style={[
+                      styles.settingsSaveButtonText,
+                      { color: canSaveSettings ? '#FFFFFF' : colors.muted },
+                    ]}
+                  >
+                    Save
+                  </Text>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
           </Dialog.Actions>
         </Dialog>
       </Portal>
@@ -602,5 +687,105 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '600',
     marginTop: 8,
+  },
+  settingsDialog: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  settingsTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 4,
+  },
+  settingsTitleText: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: colors.primary,
+    marginLeft: 8,
+    flexShrink: 1,
+  },
+  settingsFieldLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 6,
+  },
+  settingsSectionLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.primary,
+    marginTop: 6,
+    marginBottom: 10,
+  },
+  settingsCategoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+  },
+  settingsCategoryChip: {
+    width: '31%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    marginBottom: 10,
+  },
+  settingsCategoryChipGap: {
+    marginRight: '3.5%',
+  },
+  settingsCategoryChipSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  settingsCategoryChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.muted,
+    marginLeft: 5,
+    flexShrink: 1,
+  },
+  settingsCategoryChipTextSelected: {
+    color: '#FFFFFF',
+  },
+  settingsActions: {
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    paddingTop: 8,
+  },
+  settingsCancelButton: {
+    flex: 1,
+    marginRight: 10,
+    borderRadius: 12,
+    borderColor: colors.border,
+  },
+  settingsSaveButtonWrapper: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  settingsSaveButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 11,
+    borderRadius: 12,
+  },
+  settingsSaveButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

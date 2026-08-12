@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import {
@@ -145,18 +146,32 @@ export default function ParentDashboardScreen({
           end={{ x: 1, y: 1 }}
           style={styles.walletCard}
         >
-          <Text style={styles.balanceLabel}>Your Wallet Balance</Text>
-          {!parentWallet ? (
-            <ActivityIndicator color={colors.onPrimary} style={styles.balanceLoading} />
-          ) : (
-            <Text style={styles.balanceValue}>
-              ${Number(parentWallet.balance).toFixed(2)} {parentWallet.currency}
-            </Text>
-          )}
-          <Text style={styles.walletNote}>Contact admin to add funds to your wallet</Text>
+          <View style={styles.walletCardRow}>
+            <View style={styles.walletCardLeft}>
+              <Text style={styles.walletBalanceLabel}>Your Wallet Balance</Text>
+              {!parentWallet ? (
+                <ActivityIndicator color={colors.onPrimary} style={styles.balanceLoading} />
+              ) : (
+                <Text style={styles.walletBalanceValue}>
+                  ${Number(parentWallet.balance).toFixed(2)} {parentWallet.currency}
+                </Text>
+              )}
+              <Text style={styles.walletNote}>Contact admin to add funds to your wallet</Text>
+            </View>
+            <View style={styles.walletIconCircle}>
+              <MaterialCommunityIcons name="wallet-outline" size={28} color="#FFFFFF" />
+            </View>
+          </View>
         </LinearGradient>
 
-        <Text style={styles.sectionLabel}>Linked Students</Text>
+        <View style={styles.sectionLabelRow}>
+          <Text style={styles.sectionLabel}>Linked Students</Text>
+          {students.length > 0 ? (
+            <View style={styles.countBadge}>
+              <Text style={styles.countBadgeText}>{students.length}</Text>
+            </View>
+          ) : null}
+        </View>
         {isLoading && students.length === 0 ? (
           <ActivityIndicator color={colors.primary} style={styles.studentsLoading} />
         ) : students.length > 0 ? (
@@ -166,31 +181,26 @@ export default function ParentDashboardScreen({
             return (
               <TouchableOpacity
                 key={student.id}
+                style={styles.studentCard}
                 activeOpacity={0.85}
                 onPress={() => openBreakdown(linkedStudent)}
               >
-                <LinearGradient
-                  colors={[colors.gradientStart, colors.gradientEnd]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.studentCard}
-                >
-                  <View style={styles.studentRow}>
-                    <Avatar.Text
-                      size={48}
-                      label={getInitials(student.fullName)}
-                      style={styles.studentAvatar}
-                      color={colors.primary}
-                    />
-                    <View style={styles.studentInfo}>
-                      <Text style={styles.studentName}>{student.fullName}</Text>
-                      <Text style={styles.studentUniversity}>{student.email}</Text>
-                    </View>
+                <View style={styles.studentRow}>
+                  <Avatar.Text
+                    size={48}
+                    label={getInitials(student.fullName)}
+                    style={styles.studentAvatar}
+                    color={colors.onPrimary}
+                  />
+                  <View style={styles.studentInfo}>
+                    <Text style={styles.studentName}>{student.fullName}</Text>
+                    <Text style={styles.studentEmail}>{student.email}</Text>
                   </View>
-                  <Text style={styles.balanceLabel}>Wallet Balance</Text>
-                  <Text style={styles.balanceValue}>${balance.toFixed(2)}</Text>
-                  <Text style={styles.studentCardHint}>Tap for spending details</Text>
-                </LinearGradient>
+                  <MaterialCommunityIcons name="chevron-right" size={22} color={colors.muted} />
+                </View>
+                <Text style={styles.studentBalanceLabel}>Wallet Balance</Text>
+                <Text style={styles.studentBalanceValue}>${balance.toFixed(2)}</Text>
+                <Text style={styles.studentCardHint}>Tap for spending details</Text>
               </TouchableOpacity>
             );
           })
@@ -212,7 +222,14 @@ export default function ParentDashboardScreen({
         )}
 
         <View style={[styles.pendingHeaderRow, styles.pendingHeaderRowSpacing]}>
-          <Text style={styles.sectionLabel}>Pending Approvals</Text>
+          <View style={styles.sectionLabelRow}>
+            <Text style={styles.sectionLabel}>Pending Approvals</Text>
+            {approvals.length > 0 ? (
+              <View style={styles.pendingCountBadge}>
+                <Text style={styles.pendingCountBadgeText}>{approvals.length}</Text>
+              </View>
+            ) : null}
+          </View>
           <Button
             mode="text"
             compact
@@ -222,47 +239,47 @@ export default function ParentDashboardScreen({
             See All
           </Button>
         </View>
-        {pendingPreview.length > 0 ? (
-          pendingPreview.map((transaction) => {
-            const category = categoryLookup.get(
-              transaction.category.toLowerCase() as BudgetCategoryKey
-            );
-            const statusMeta = TRANSACTION_STATUS_META[transaction.status];
-            const studentName = transaction.fromWalletId
-              ? (walletToStudentName.get(transaction.fromWalletId) ?? 'Student')
-              : 'Student';
-            return (
-              <TouchableOpacity
-                key={transaction.id}
-                style={styles.approvalRow}
-                onPress={() =>
-                  navigation.navigate('ApprovalRequest', { transaction, studentName })
-                }
-              >
-                <IconBadge
-                  icon={category?.icon ?? 'wallet-outline'}
-                  color={category?.color ?? colors.primary}
-                  size={44}
-                />
-                <View style={styles.approvalMiddle}>
-                  <Text style={styles.approvalTitle}>{transactionTitle(transaction)}</Text>
-                  <Text style={styles.approvalSubtitle}>
-                    {studentName} • ${Number(transaction.amount).toFixed(2)}
-                  </Text>
-                </View>
-                <Chip
-                  compact
-                  style={[styles.approvalChip, { backgroundColor: `${statusMeta.color}1F` }]}
-                  textStyle={{ color: statusMeta.color, fontSize: 11, fontWeight: '700' }}
+        <View style={styles.pendingCard}>
+          {pendingPreview.length > 0 ? (
+            pendingPreview.map((transaction) => {
+              const category = categoryLookup.get(
+                transaction.category.toLowerCase() as BudgetCategoryKey
+              );
+              const statusMeta = TRANSACTION_STATUS_META[transaction.status];
+              const studentName = transaction.fromWalletId
+                ? (walletToStudentName.get(transaction.fromWalletId) ?? 'Student')
+                : 'Student';
+              return (
+                <TouchableOpacity
+                  key={transaction.id}
+                  style={styles.approvalRow}
+                  onPress={() =>
+                    navigation.navigate('ApprovalRequest', { transaction, studentName })
+                  }
                 >
-                  Review
-                </Chip>
-              </TouchableOpacity>
-            );
-          })
-        ) : (
-          <Card style={styles.emptyCard} mode="elevated">
-            <Card.Content style={styles.emptyState}>
+                  <IconBadge
+                    icon={category?.icon ?? 'wallet-outline'}
+                    color={category?.color ?? colors.primary}
+                    size={44}
+                  />
+                  <View style={styles.approvalMiddle}>
+                    <Text style={styles.approvalTitle}>{transactionTitle(transaction)}</Text>
+                    <Text style={styles.approvalSubtitle}>
+                      {studentName} • ${Number(transaction.amount).toFixed(2)}
+                    </Text>
+                  </View>
+                  <Chip
+                    compact
+                    style={[styles.approvalChip, { backgroundColor: `${statusMeta.color}1F` }]}
+                    textStyle={{ color: statusMeta.color, fontSize: 11, fontWeight: '700' }}
+                  >
+                    Review
+                  </Chip>
+                </TouchableOpacity>
+              );
+            })
+          ) : (
+            <View style={styles.emptyState}>
               <Avatar.Icon
                 icon="check-circle-outline"
                 size={48}
@@ -271,9 +288,9 @@ export default function ParentDashboardScreen({
               />
               <Text style={styles.emptyTitle}>No pending approvals</Text>
               <Text style={styles.emptySubtitle}>You&apos;re all caught up.</Text>
-            </Card.Content>
-          </Card>
-        )}
+            </View>
+          )}
+        </View>
       </ScrollView>
 
       <Portal>
@@ -365,7 +382,7 @@ export default function ParentDashboardScreen({
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.surface,
   },
   header: {
     flexDirection: 'row',
@@ -406,46 +423,111 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 16,
   },
+  walletCardRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  walletCardLeft: {
+    flex: 1,
+  },
+  walletIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+  },
+  walletBalanceLabel: {
+    color: '#DBEAFE',
+    fontSize: 12,
+  },
+  walletBalanceValue: {
+    color: colors.onPrimary,
+    fontSize: 28,
+    fontWeight: '800',
+    marginTop: 2,
+  },
   walletNote: {
     color: 'rgba(255,255,255,0.75)',
     fontSize: 11,
     marginTop: 10,
+  },
+  sectionLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  countBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 6,
+    backgroundColor: `${colors.primary}1F`,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+    marginBottom: 10,
+  },
+  countBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primary,
   },
   studentsLoading: {
     marginTop: 8,
     marginBottom: 16,
   },
   studentCard: {
-    borderRadius: 20,
-    padding: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
+    padding: 16,
     marginBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
   },
   studentRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 14,
   },
   studentAvatar: {
-    backgroundColor: colors.onPrimary,
+    backgroundColor: colors.primary,
   },
   studentInfo: {
     marginLeft: 12,
     flex: 1,
   },
   studentName: {
-    color: colors.onPrimary,
+    color: colors.heading,
     fontSize: 16,
     fontWeight: '700',
   },
-  studentUniversity: {
-    color: 'rgba(255,255,255,0.75)',
+  studentEmail: {
+    color: colors.muted,
     fontSize: 12,
     marginTop: 2,
   },
-  studentCardHint: {
-    color: 'rgba(255,255,255,0.75)',
+  studentBalanceLabel: {
+    color: colors.muted,
     fontSize: 11,
-    marginTop: 10,
+  },
+  studentBalanceValue: {
+    color: colors.primary,
+    fontSize: 20,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  studentCardHint: {
+    color: colors.muted,
+    fontSize: 11,
+    marginTop: 8,
   },
   breakdownScrollArea: {
     paddingHorizontal: 0,
@@ -509,16 +591,6 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 4,
   },
-  balanceLabel: {
-    color: 'rgba(255,255,255,0.75)',
-    fontSize: 12,
-  },
-  balanceValue: {
-    color: colors.onPrimary,
-    fontSize: 28,
-    fontWeight: '800',
-    marginTop: 2,
-  },
   balanceLoading: {
     marginTop: 8,
     alignSelf: 'flex-start',
@@ -536,6 +608,32 @@ const styles = StyleSheet.create({
   },
   pendingHeaderRowSpacing: {
     marginTop: 10,
+  },
+  pendingCountBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 6,
+    backgroundColor: `${colors.danger}1F`,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+    marginBottom: 10,
+  },
+  pendingCountBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.danger,
+  },
+  pendingCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
   },
   approvalRow: {
     flexDirection: 'row',
