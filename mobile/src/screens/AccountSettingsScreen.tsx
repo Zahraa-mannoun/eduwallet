@@ -2,13 +2,16 @@ import { useState } from 'react';
 import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { ActivityIndicator, Button, HelperText, IconButton, Snackbar, Switch, Text, TextInput } from 'react-native-paper';
+import { LinearGradient } from 'expo-linear-gradient';
+import { ActivityIndicator, IconButton, Snackbar, Switch, Text, TextInput } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
 import * as authService from '../services/authService';
 import * as cardService from '../services/cardService';
 import { ApiError } from '../services/api';
 import { colors } from '../theme/colors';
 import type { RootStackScreenProps } from '../navigation/types';
+
+const SCREEN_BACKGROUND = '#F9FAFB';
 
 function ChangePasswordSection() {
   const { logout } = useAuth();
@@ -18,12 +21,14 @@ function ChangePasswordSection() {
   const [secure, setSecure] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [succeeded, setSucceeded] = useState(false);
 
   const canSubmit =
     currentPassword.length > 0 &&
     newPassword.length >= 8 &&
     confirmPassword.length > 0 &&
-    !isSubmitting;
+    !isSubmitting &&
+    !succeeded;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -35,9 +40,13 @@ function ChangePasswordSection() {
     setIsSubmitting(true);
     try {
       await authService.changePassword(currentPassword, newPassword);
+      setSucceeded(true);
       // Changing the password revokes this session's refresh token server-side — sign out
-      // now rather than waiting for the next silent refresh to fail unexpectedly.
-      await logout();
+      // shortly after showing confirmation, rather than waiting for the next silent refresh to
+      // fail unexpectedly.
+      setTimeout(() => {
+        void logout();
+      }, 1500);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not change your password.');
       setIsSubmitting(false);
@@ -46,11 +55,19 @@ function ChangePasswordSection() {
 
   return (
     <>
-      <Text style={styles.sectionLabel}>Change Password</Text>
+      <Text style={styles.sectionLabel}>Security</Text>
       <View style={styles.settingCard}>
+        <View style={styles.cardHeaderRow}>
+          <View style={[styles.rowIconCircle, { backgroundColor: `${colors.primary}1F` }]}>
+            <MaterialCommunityIcons name="lock-outline" size={18} color={colors.primary} />
+          </View>
+          <Text style={styles.cardHeaderText}>Change Password</Text>
+        </View>
+
+        <Text style={styles.inputLabel}>Current password</Text>
         <TextInput
           mode="outlined"
-          label="Current password"
+          placeholder="Enter current password"
           value={currentPassword}
           onChangeText={setCurrentPassword}
           secureTextEntry={secure}
@@ -62,21 +79,33 @@ function ChangePasswordSection() {
           }
           outlineColor={colors.border}
           activeOutlineColor={colors.primary}
+          theme={{ roundness: 12 }}
           style={styles.passwordInput}
         />
+
+        <Text style={styles.inputLabel}>New password</Text>
         <TextInput
           mode="outlined"
-          label="New password"
+          placeholder="At least 8 characters"
           value={newPassword}
           onChangeText={setNewPassword}
           secureTextEntry={secure}
+          right={
+            <TextInput.Icon
+              icon={secure ? 'eye-off-outline' : 'eye-outline'}
+              onPress={() => setSecure((v) => !v)}
+            />
+          }
           outlineColor={colors.border}
           activeOutlineColor={colors.primary}
+          theme={{ roundness: 12 }}
           style={styles.passwordInput}
         />
+
+        <Text style={styles.inputLabel}>Confirm new password</Text>
         <TextInput
           mode="outlined"
-          label="Confirm new password"
+          placeholder="Re-enter new password"
           value={confirmPassword}
           onChangeText={setConfirmPassword}
           secureTextEntry={secure}
@@ -88,21 +117,51 @@ function ChangePasswordSection() {
           }
           outlineColor={colors.border}
           activeOutlineColor={colors.primary}
+          theme={{ roundness: 12 }}
           style={styles.passwordInput}
         />
-        <HelperText type="error" visible={Boolean(error)}>
-          {error}
-        </HelperText>
-        <Button
-          mode="contained"
-          buttonColor={colors.primary}
+
+        <TouchableOpacity
+          activeOpacity={0.85}
           disabled={!canSubmit}
-          style={styles.saveButton}
-          contentStyle={styles.saveButtonContent}
           onPress={handleSubmit}
+          style={styles.gradientButtonWrapper}
         >
-          {isSubmitting ? <ActivityIndicator size={18} color={colors.onPrimary} /> : 'Update Password'}
-        </Button>
+          <LinearGradient
+            colors={canSubmit ? [colors.gradientStart, colors.gradientEnd] : [colors.border, colors.border]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.gradientButton}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <MaterialCommunityIcons
+                  name="lock-check-outline"
+                  size={18}
+                  color={canSubmit ? '#FFFFFF' : colors.muted}
+                />
+                <Text style={[styles.gradientButtonText, { color: canSubmit ? '#FFFFFF' : colors.muted }]}>
+                  Update Password
+                </Text>
+              </>
+            )}
+          </LinearGradient>
+        </TouchableOpacity>
+
+        {succeeded ? (
+          <View style={styles.successBanner}>
+            <Text style={styles.successBannerText}>✅ Password updated successfully</Text>
+          </View>
+        ) : null}
+
+        {error ? (
+          <View style={styles.errorBanner}>
+            <MaterialCommunityIcons name="alert-circle-outline" size={16} color={colors.danger} />
+            <Text style={styles.errorBannerText}>{error}</Text>
+          </View>
+        ) : null}
       </View>
     </>
   );
@@ -135,17 +194,25 @@ export default function AccountSettingsScreen({
     <SafeAreaView style={styles.flex} edges={['top']}>
       <View style={styles.header}>
         <IconButton icon="arrow-left" onPress={() => navigation.goBack()} style={styles.backButton} />
-        <Text variant="titleLarge" style={styles.headerTitle}>
-          Account Settings
-        </Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.hero}>
+          <View style={styles.heroIconCircle}>
+            <MaterialCommunityIcons name="cog-outline" size={32} color={colors.primary} />
+          </View>
+          <Text style={styles.heroTitle}>Account Settings</Text>
+          <Text style={styles.heroSubtitle}>Manage your account security and email</Text>
+        </View>
+
         {user?.userType === 'STUDENT' && (
           <>
             <Text style={styles.sectionLabel}>Card Settings</Text>
             <View style={styles.settingCard}>
               <View style={styles.settingRow}>
+                <View style={[styles.rowIconCircle, { backgroundColor: `${colors.primary}1F` }]}>
+                  <MaterialCommunityIcons name="credit-card-outline" size={19} color={colors.primary} />
+                </View>
                 <View style={styles.settingTextColumn}>
                   <Text style={styles.settingTitle}>Auto-renew cards</Text>
                   <Text style={styles.settingDescription}>
@@ -158,6 +225,7 @@ export default function AccountSettingsScreen({
                   value={cardAutoRenew}
                   onValueChange={handleToggleCardAutoRenew}
                   disabled={isSaving}
+                  color={colors.primary}
                 />
               </View>
             </View>
@@ -174,6 +242,9 @@ export default function AccountSettingsScreen({
               onPress={() => navigation.navigate('EmailChangeRequest')}
             >
               <View style={styles.settingRow}>
+                <View style={[styles.rowIconCircle, { backgroundColor: `${colors.primary}1F` }]}>
+                  <MaterialCommunityIcons name="email-outline" size={19} color={colors.primary} />
+                </View>
                 <View style={styles.settingTextColumn}>
                   <Text style={styles.settingTitle}>Request Email Change</Text>
                   <Text style={styles.settingDescription}>
@@ -181,7 +252,7 @@ export default function AccountSettingsScreen({
                     admin review.
                   </Text>
                 </View>
-                <MaterialCommunityIcons name="chevron-right" size={24} color={colors.muted} />
+                <MaterialCommunityIcons name="chevron-right" size={24} color={colors.primary} />
               </View>
             </TouchableOpacity>
           </>
@@ -202,7 +273,7 @@ export default function AccountSettingsScreen({
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: SCREEN_BACKGROUND,
   },
   header: {
     flexDirection: 'row',
@@ -213,30 +284,66 @@ const styles = StyleSheet.create({
   backButton: {
     margin: 0,
   },
-  headerTitle: {
-    fontWeight: '700',
-    color: colors.heading,
-    marginLeft: 4,
-  },
   content: {
     paddingHorizontal: 20,
     paddingBottom: 32,
-    paddingTop: 8,
+  },
+  hero: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginBottom: 20,
+  },
+  heroIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: `${colors.primary}1F`,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  heroTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.heading,
+    textAlign: 'center',
+  },
+  heroSubtitle: {
+    fontSize: 13,
+    color: colors.muted,
+    textAlign: 'center',
+    marginTop: 4,
   },
   sectionLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.label,
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primary,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
     marginBottom: 10,
   },
   settingCard: {
     borderRadius: 16,
-    backgroundColor: colors.surface,
+    backgroundColor: '#FFFFFF',
     padding: 16,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
   },
   settingRow: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  rowIconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
   },
   settingTextColumn: {
     flex: 1,
@@ -252,15 +359,68 @@ const styles = StyleSheet.create({
     color: colors.muted,
     lineHeight: 17,
   },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  cardHeaderText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.heading,
+    marginLeft: 10,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.muted,
+    marginBottom: 6,
+  },
   passwordInput: {
     backgroundColor: colors.inputBackground,
     marginBottom: 12,
   },
-  saveButton: {
-    borderRadius: 10,
+  gradientButtonWrapper: {
+    borderRadius: 16,
+    overflow: 'hidden',
     marginTop: 4,
   },
-  saveButtonContent: {
-    paddingVertical: 6,
+  gradientButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 15,
+    borderRadius: 16,
+  },
+  gradientButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  successBanner: {
+    backgroundColor: `${colors.accent}1A`,
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 12,
+  },
+  successBannerText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#065F46',
+    textAlign: 'center',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: `${colors.danger}14`,
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 12,
+  },
+  errorBannerText: {
+    fontSize: 12,
+    color: colors.danger,
+    marginLeft: 8,
+    flexShrink: 1,
   },
 });

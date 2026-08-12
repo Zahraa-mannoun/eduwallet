@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as DocumentPicker from 'expo-document-picker';
 import { ActivityIndicator, Button, Chip, IconButton, Text, TextInput } from 'react-native-paper';
 import type { EmailChangeRequest } from '../types/api';
@@ -10,6 +12,8 @@ import * as emailChangeService from '../services/emailChangeService';
 import { ApiError } from '../services/api';
 import { colors } from '../theme/colors';
 import type { RootStackScreenProps } from '../navigation/types';
+
+const SCREEN_BACKGROUND = '#F9FAFB';
 
 const STATUS_META: Record<EmailChangeRequest['status'], { label: string; color: string }> = {
   PENDING: { label: 'Pending Review', color: '#F59E0B' },
@@ -36,6 +40,7 @@ export default function EmailChangeRequestScreen({
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [justSubmitted, setJustSubmitted] = useState(false);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -82,6 +87,9 @@ export default function EmailChangeRequestScreen({
     });
   };
 
+  // pendingProof stays required even though the button-disabled spec only mentions email/reason
+  // — the backend rejects a submission with no proof file outright ("Proof image is required"),
+  // so leaving it out here would just let the button submit into a guaranteed server error.
   const canSubmit =
     requestedEmail.trim().length > 0 &&
     reason.trim().length > 0 &&
@@ -102,6 +110,7 @@ export default function EmailChangeRequestScreen({
         file: pendingProof.file,
       });
       setCurrentRequest(created);
+      setJustSubmitted(true);
     } catch (err) {
       setSubmitError(err instanceof ApiError ? err.message : 'Could not submit your request.');
     } finally {
@@ -114,6 +123,7 @@ export default function EmailChangeRequestScreen({
     setReason('');
     setPendingProof(null);
     setSubmitError(null);
+    setJustSubmitted(false);
     setCurrentRequest(null);
   };
 
@@ -123,16 +133,29 @@ export default function EmailChangeRequestScreen({
     <SafeAreaView style={styles.flex} edges={['top']}>
       <View style={styles.header}>
         <IconButton icon="arrow-left" onPress={() => navigation.goBack()} style={styles.backButton} />
-        <Text variant="titleLarge" style={styles.headerTitle}>
-          Request Email Change
-        </Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.hero}>
+          <View style={styles.heroIconCircle}>
+            <MaterialCommunityIcons name="email-outline" size={32} color={colors.primary} />
+          </View>
+          <Text style={styles.heroTitle}>Request Email Change</Text>
+          <Text style={styles.heroSubtitle}>
+            Submit a request to update your email address. Admin will review and approve.
+          </Text>
+        </View>
+
         {loadError ? <Text style={styles.errorText}>{loadError}</Text> : null}
 
         {isLoading && !currentRequest ? (
           <ActivityIndicator color={colors.primary} style={styles.loading} />
+        ) : justSubmitted && currentRequest?.status === 'PENDING' ? (
+          <View style={styles.successCard}>
+            <Text style={styles.successCardText}>
+              ✅ Request submitted! Admin will review your request.
+            </Text>
+          </View>
         ) : currentRequest?.status === 'PENDING' ? (
           <View style={styles.statusCard}>
             <Chip
@@ -188,55 +211,108 @@ export default function EmailChangeRequestScreen({
 
             {(!currentRequest || currentRequest.status === 'REJECTED') && (
               <>
-                <Text style={styles.fieldLabel}>Current Email</Text>
-                <Text style={styles.currentEmail}>{user?.email}</Text>
+                <View style={styles.currentEmailCard}>
+                  <Text style={styles.cardLabel}>Current Email</Text>
+                  <View style={styles.currentEmailRow}>
+                    <MaterialCommunityIcons name="email-check-outline" size={18} color={colors.primary} />
+                    <Text style={styles.currentEmailText}>{user?.email}</Text>
+                  </View>
+                  <Text style={styles.currentEmailNote}>
+                    Your account is currently linked to this email
+                  </Text>
+                </View>
 
+                <Text style={styles.inputLabel}>New Email Address</Text>
                 <TextInput
                   mode="outlined"
-                  label="New email address"
+                  placeholder="you@example.com"
                   value={requestedEmail}
                   onChangeText={setRequestedEmail}
                   autoCapitalize="none"
                   keyboardType="email-address"
+                  left={<TextInput.Icon icon="email-outline" />}
                   outlineColor={colors.border}
                   activeOutlineColor={colors.primary}
+                  theme={{ roundness: 12 }}
                   style={styles.input}
                 />
 
+                <Text style={styles.inputLabel}>Reason</Text>
                 <TextInput
                   mode="outlined"
-                  label="Reason"
-                  placeholder="e.g. My university email was deactivated"
+                  placeholder="e.g. My current email was suspended by the provider"
                   value={reason}
                   onChangeText={setReason}
                   outlineColor={colors.border}
                   activeOutlineColor={colors.primary}
-                  style={styles.input}
+                  theme={{ roundness: 12 }}
+                  style={styles.reasonInput}
                   multiline
+                  numberOfLines={4}
                 />
 
-                <Button
-                  mode="outlined"
-                  icon="camera-outline"
-                  style={styles.input}
-                  onPress={handlePickProof}
-                >
-                  {pendingProof ? pendingProof.name : 'Upload Proof'}
-                </Button>
+                <Text style={styles.inputLabel}>Upload Proof</Text>
+                {pendingProof ? (
+                  <View style={styles.uploadedBox}>
+                    <MaterialCommunityIcons name="check-circle" size={18} color={colors.accent} />
+                    <Text style={styles.uploadedFileName} numberOfLines={1}>
+                      {pendingProof.name}
+                    </Text>
+                    <TouchableOpacity onPress={() => setPendingProof(null)}>
+                      <MaterialCommunityIcons name="close-circle" size={20} color={colors.muted} />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity style={styles.uploadBox} activeOpacity={0.7} onPress={handlePickProof}>
+                    <MaterialCommunityIcons name="cloud-upload-outline" size={28} color={colors.primary} />
+                    <Text style={styles.uploadBoxText}>Tap to upload proof document</Text>
+                    <Text style={styles.uploadBoxNote}>JPG, PNG accepted</Text>
+                  </TouchableOpacity>
+                )}
 
-                {submitError ? <Text style={styles.errorText}>{submitError}</Text> : null}
+                <View style={styles.infoBanner}>
+                  <Text style={styles.infoBannerIcon}>ℹ️</Text>
+                  <Text style={styles.infoBannerText}>
+                    Your request will be reviewed by admin within 24-48 hours. You&apos;ll be
+                    notified once approved.
+                  </Text>
+                </View>
 
-                <Button
-                  mode="contained"
-                  buttonColor={colors.primary}
-                  style={styles.submitButton}
-                  contentStyle={styles.submitButtonContent}
+                <TouchableOpacity
+                  activeOpacity={0.85}
                   disabled={!canSubmit}
-                  loading={isSubmitting}
                   onPress={handleSubmit}
+                  style={styles.submitButtonWrapper}
                 >
-                  Submit Request
-                </Button>
+                  <LinearGradient
+                    colors={canSubmit ? [colors.gradientStart, colors.gradientEnd] : [colors.border, colors.border]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.submitButton}
+                  >
+                    {isSubmitting ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <>
+                        <MaterialCommunityIcons
+                          name="send-outline"
+                          size={18}
+                          color={canSubmit ? '#FFFFFF' : colors.muted}
+                        />
+                        <Text style={[styles.submitButtonText, { color: canSubmit ? '#FFFFFF' : colors.muted }]}>
+                          Submit Request
+                        </Text>
+                      </>
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                {submitError ? (
+                  <View style={styles.errorBanner}>
+                    <MaterialCommunityIcons name="alert-circle-outline" size={16} color={colors.danger} />
+                    <Text style={styles.errorBannerText}>{submitError}</Text>
+                  </View>
+                ) : null}
               </>
             )}
           </>
@@ -249,7 +325,7 @@ export default function EmailChangeRequestScreen({
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: SCREEN_BACKGROUND,
   },
   header: {
     flexDirection: 'row',
@@ -260,15 +336,37 @@ const styles = StyleSheet.create({
   backButton: {
     margin: 0,
   },
-  headerTitle: {
-    fontWeight: '700',
-    color: colors.heading,
-    marginLeft: 4,
-  },
   content: {
     paddingHorizontal: 20,
-    paddingBottom: 32,
-    paddingTop: 8,
+    paddingBottom: 40,
+  },
+  hero: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginBottom: 20,
+  },
+  heroIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: `${colors.primary}1F`,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  heroTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.heading,
+    textAlign: 'center',
+  },
+  heroSubtitle: {
+    fontSize: 13,
+    color: colors.muted,
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 18,
+    paddingHorizontal: 12,
   },
   errorText: {
     color: colors.danger,
@@ -279,11 +377,16 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   statusCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 20,
     alignItems: 'center',
     marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
   },
   statusChip: {
     height: 28,
@@ -299,36 +402,169 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.heading,
   },
-  rejectedNotice: {
-    backgroundColor: colors.surface,
+  successCard: {
+    backgroundColor: `${colors.accent}1A`,
     borderRadius: 16,
     padding: 20,
     alignItems: 'center',
     marginBottom: 20,
   },
+  successCardText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#065F46',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  rejectedNotice: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    alignItems: 'center',
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
   newRequestButton: {
     marginTop: 8,
   },
-  fieldLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.label,
-    marginBottom: 4,
+  currentEmailCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
   },
-  currentEmail: {
-    fontSize: 14,
+  cardLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primary,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  currentEmailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  currentEmailText: {
+    fontSize: 15,
+    fontWeight: '700',
     color: colors.heading,
-    marginBottom: 16,
+    marginLeft: 8,
+  },
+  currentEmailNote: {
+    fontSize: 11,
+    color: colors.muted,
+    marginTop: 6,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.muted,
+    marginBottom: 6,
   },
   input: {
-    backgroundColor: colors.inputBackground,
-    marginBottom: 12,
+    backgroundColor: '#FFFFFF',
+    marginBottom: 14,
   },
-  submitButton: {
-    borderRadius: 10,
+  reasonInput: {
+    backgroundColor: '#FFFFFF',
+    minHeight: 100,
+    marginBottom: 14,
+  },
+  uploadBox: {
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 24,
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    marginBottom: 16,
+  },
+  uploadBoxText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.heading,
+    marginTop: 8,
+  },
+  uploadBoxNote: {
+    fontSize: 11,
+    color: colors.muted,
     marginTop: 4,
   },
-  submitButtonContent: {
-    paddingVertical: 6,
+  uploadedBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.accent,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    backgroundColor: `${colors.accent}0D`,
+    marginBottom: 16,
+  },
+  uploadedFileName: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.heading,
+    marginLeft: 8,
+    marginRight: 8,
+  },
+  infoBanner: {
+    flexDirection: 'row',
+    backgroundColor: `${colors.primary}14`,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  infoBannerIcon: {
+    fontSize: 15,
+    marginRight: 8,
+  },
+  infoBannerText: {
+    flex: 1,
+    fontSize: 12,
+    color: colors.primaryDark,
+    lineHeight: 17,
+  },
+  submitButtonWrapper: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  submitButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 15,
+    borderRadius: 16,
+  },
+  submitButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: `${colors.danger}14`,
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 12,
+  },
+  errorBannerText: {
+    fontSize: 12,
+    color: colors.danger,
+    marginLeft: 8,
+    flexShrink: 1,
   },
 });

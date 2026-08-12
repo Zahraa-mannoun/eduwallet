@@ -9,6 +9,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   ActivityIndicator,
   Avatar,
@@ -194,6 +196,7 @@ export default function ParentSendMoneyScreen(_props: Readonly<ParentTabScreenPr
             {loadError ? <Text style={styles.errorText}>{loadError}</Text> : null}
 
             <View style={styles.infoBanner}>
+              <Text style={styles.infoBannerIcon}>ℹ️</Text>
               <Text style={styles.infoBannerText}>
                 Money you send with an Education Lock is automatically approved when your student
                 spends it in the correct category. No extra approval needed.
@@ -228,7 +231,7 @@ export default function ParentSendMoneyScreen(_props: Readonly<ParentTabScreenPr
                         <Text style={styles.studentEmail}>{student.email}</Text>
                       </View>
                       {selected ? (
-                        <IconBadge icon="check-circle" color={colors.accent} size={28} iconSize={16} />
+                        <IconBadge icon="check-circle" color={colors.primary} size={28} iconSize={16} />
                       ) : null}
                     </TouchableOpacity>
                   );
@@ -259,21 +262,31 @@ export default function ParentSendMoneyScreen(_props: Readonly<ParentTabScreenPr
               </Text>
             ) : null}
             <View style={styles.categoryGrid}>
-              {availableCategories.map((cat) => {
+              {availableCategories.map((cat, index) => {
                 const selected = category?.key === cat.key;
+                // A plain `justifyContent: 'space-between'` 3-column grid pushes a 2-item last
+                // row to opposite edges with a big gap between them — explicit per-item margins
+                // instead keep every row (including a ragged last one) evenly and consistently
+                // spaced, so e.g. Lifestyle and General sit directly side by side.
+                const isLastInRow = (index + 1) % 3 === 0;
                 return (
                   <TouchableRipple
                     key={cat.key}
                     onPress={() => setCategory(cat)}
                     style={[
                       styles.categoryItem,
-                      selected && { borderColor: cat.color, backgroundColor: `${cat.color}14` },
+                      !isLastInRow && styles.categoryItemGap,
+                      selected && styles.categoryItemSelected,
                     ]}
                     borderless
                   >
                     <View style={styles.categoryItemContent}>
-                      <IconBadge icon={cat.icon} color={cat.color} size={36} iconSize={20} />
-                      <Text style={[styles.categoryItemLabel, selected && { color: cat.color }]}>
+                      <MaterialCommunityIcons
+                        name={cat.icon}
+                        size={22}
+                        color={selected ? '#FFFFFF' : cat.color}
+                      />
+                      <Text style={[styles.categoryItemLabel, selected && styles.categoryItemLabelSelected]}>
                         {cat.label}
                       </Text>
                     </View>
@@ -287,14 +300,15 @@ export default function ParentSendMoneyScreen(_props: Readonly<ParentTabScreenPr
                 : 'Choose a category to lock these funds to — or General for no restriction.'}
             </Text>
 
+            <Text style={styles.inputLabel}>Note (optional)</Text>
             <TextInput
               mode="outlined"
-              label="Note (optional)"
               placeholder="What's this for?"
               value={note}
               onChangeText={setNote}
               outlineColor={colors.border}
               activeOutlineColor={colors.primary}
+              theme={{ roundness: 12 }}
               style={styles.noteInput}
               multiline
             />
@@ -303,16 +317,34 @@ export default function ParentSendMoneyScreen(_props: Readonly<ParentTabScreenPr
               {sendError}
             </HelperText>
 
-            <Button
-              mode="contained"
-              buttonColor={colors.primary}
+            <TouchableOpacity
+              activeOpacity={0.85}
               disabled={!canSend}
-              style={styles.sendButton}
-              contentStyle={styles.sendButtonContent}
               onPress={handleSend}
+              style={styles.sendButtonWrapper}
             >
-              {isSending ? <ActivityIndicator size={18} color={colors.onPrimary} /> : 'Send Money'}
-            </Button>
+              <LinearGradient
+                colors={canSend ? [colors.gradientStart, colors.gradientEnd] : [colors.border, colors.border]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.sendButton}
+              >
+                {isSending ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons
+                      name="send-outline"
+                      size={18}
+                      color={canSend ? '#FFFFFF' : colors.muted}
+                    />
+                    <Text style={[styles.sendButtonText, { color: canSend ? '#FFFFFF' : colors.muted }]}>
+                      Send Money
+                    </Text>
+                  </>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
           </ScrollView>
         )}
       </KeyboardAvoidingView>
@@ -323,7 +355,7 @@ export default function ParentSendMoneyScreen(_props: Readonly<ParentTabScreenPr
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.surface,
   },
   header: {
     paddingHorizontal: 20,
@@ -339,14 +371,20 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
   },
   infoBanner: {
-    backgroundColor: colors.surface,
+    flexDirection: 'row',
+    backgroundColor: `${colors.primary}14`,
     borderRadius: 12,
     padding: 12,
     marginBottom: 20,
   },
+  infoBannerIcon: {
+    fontSize: 14,
+    marginRight: 8,
+  },
   infoBannerText: {
+    flex: 1,
     fontSize: 12,
-    color: colors.label,
+    color: colors.primaryDark,
     lineHeight: 18,
   },
   errorText: {
@@ -374,16 +412,21 @@ const styles = StyleSheet.create({
   studentRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
+    backgroundColor: '#FFFFFF',
     borderRadius: 14,
     padding: 12,
     marginBottom: 10,
     borderWidth: 1.5,
     borderColor: 'transparent',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 1,
   },
   studentRowSelected: {
-    borderColor: colors.accent,
-    backgroundColor: `${colors.accent}0F`,
+    borderColor: colors.primary,
+    backgroundColor: `${colors.primary}0F`,
   },
   studentAvatar: {
     backgroundColor: colors.primary,
@@ -425,7 +468,7 @@ const styles = StyleSheet.create({
   categoryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     marginBottom: 12,
   },
   categoryItem: {
@@ -434,7 +477,14 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1.5,
     borderColor: colors.border,
-    backgroundColor: colors.inputBackground,
+    backgroundColor: '#FFFFFF',
+  },
+  categoryItemGap: {
+    marginRight: '3.5%',
+  },
+  categoryItemSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   categoryItemContent: {
     alignItems: 'center',
@@ -446,21 +496,41 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginTop: 6,
   },
+  categoryItemLabelSelected: {
+    color: '#FFFFFF',
+  },
   categoryExplanation: {
     fontSize: 12,
     color: colors.muted,
     lineHeight: 18,
     marginBottom: 20,
   },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.muted,
+    marginBottom: 6,
+  },
   noteInput: {
-    backgroundColor: colors.inputBackground,
+    backgroundColor: '#FFFFFF',
     marginBottom: 4,
   },
-  sendButton: {
-    borderRadius: 10,
+  sendButtonWrapper: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginTop: 8,
   },
-  sendButtonContent: {
-    paddingVertical: 6,
+  sendButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 15,
+    borderRadius: 16,
+  },
+  sendButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginLeft: 8,
   },
   successContent: {
     alignItems: 'center',

@@ -18,7 +18,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { TransactionCategory } from '../types/api';
 import { BUDGET_CATEGORIES, LOCKABLE_BUDGET_CATEGORIES } from '../constants/budgetCategories';
-import { colors } from '../theme/colors';
+import { categoryColors, colors } from '../theme/colors';
 import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
 import * as parentalService from '../services/parentalService';
 import type { LinkedStudent } from '../services/parentalService';
@@ -29,21 +29,32 @@ import type { ParentTabScreenProps } from '../navigation/types';
 const CATEGORY_EXPLANATION =
   'Select which categories your student can spend locked funds in. They cannot spend in unselected categories.';
 
+const CATEGORY_PILL_COLORS: Record<TransactionCategory, string> = {
+  TUITION: categoryColors.tuition,
+  BOOKS: categoryColors.books,
+  FOOD: categoryColors.food,
+  TRANSPORT: categoryColors.transport,
+  SOFTWARE: categoryColors.software,
+  RENT: categoryColors.rent,
+  LIFESTYLE: categoryColors.lifestyle,
+  PERSONAL_SAVINGS: categoryColors.personalSavings,
+  GENERAL: categoryColors.general,
+};
+
+function CategoryPill({ category }: Readonly<{ category: TransactionCategory }>) {
+  const color = CATEGORY_PILL_COLORS[category];
+  return (
+    <View style={[styles.categoryPill, { backgroundColor: `${color}1F` }]}>
+      <Text style={[styles.categoryPillText, { color }]}>{categoryLabel(category)}</Text>
+    </View>
+  );
+}
+
 function categoryLabel(category: TransactionCategory): string {
   return (
     BUDGET_CATEGORIES.find((definition) => definition.key.toUpperCase() === category)?.label ??
     category
   );
-}
-
-function formatPermissionsSummary(link: LinkedStudent['link']): string {
-  const categories =
-    link.categories.length > 0 ? link.categories.map(categoryLabel).join(', ') : 'No categories';
-  const threshold =
-    Number(link.approvalThreshold) > 0
-      ? `Free up to $${Number(link.approvalThreshold).toFixed(0)}`
-      : 'No approval limit';
-  return `${categories} · ${threshold}`;
 }
 
 function toggleInSet<T>(set: Set<T>, value: T): Set<T> {
@@ -187,8 +198,9 @@ export default function StudentsListScreen(_props: ParentTabScreenProps<'Student
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.header}>
+        <MaterialCommunityIcons name="account-group-outline" size={22} color={colors.primary} />
         <Text variant="headlineSmall" style={styles.headerTitle}>
-          Students
+          My Students
         </Text>
       </View>
 
@@ -203,37 +215,51 @@ export default function StudentsListScreen(_props: ParentTabScreenProps<'Student
         ) : students.length > 0 ? (
           students.map((item) => {
             const { student, wallets } = item;
+            const thresholdText =
+              Number(item.link.approvalThreshold) > 0
+                ? `Free up to $${Number(item.link.approvalThreshold).toFixed(0)}`
+                : 'No approval limit';
             return (
               <TouchableOpacity
                 key={student.id}
-                style={styles.studentRow}
+                style={styles.studentCard}
+                activeOpacity={0.8}
                 onPress={() => openSettingsDialog(item)}
               >
-                <Avatar.Text
-                  size={48}
-                  label={getInitials(student.fullName)}
-                  style={styles.avatar}
-                  color={colors.onPrimary}
-                />
-                <View style={styles.studentMiddle}>
-                  <Text style={styles.studentName}>{student.fullName}</Text>
-                  <Text style={styles.studentUniversity}>{student.email}</Text>
-                  <Text style={styles.studentPermissions} numberOfLines={1}>
-                    {formatPermissionsSummary(item.link)}
-                  </Text>
-                </View>
-                <View style={styles.studentRight}>
-                  <Text style={styles.studentBalance}>
-                    {wallets.length > 0 ? `$${Number(wallets[0].balance).toFixed(2)}` : '—'}
-                  </Text>
-                  <IconButton
-                    icon="cog-outline"
-                    size={18}
-                    iconColor={colors.onPrimary}
-                    style={styles.settingsButton}
-                    onPress={() => openSettingsDialog(item)}
+                <View style={styles.studentTopRow}>
+                  <Avatar.Text
+                    size={52}
+                    label={getInitials(student.fullName)}
+                    style={styles.avatar}
+                    color={colors.onPrimary}
                   />
+                  <View style={styles.studentMiddle}>
+                    <Text style={styles.studentName}>{student.fullName}</Text>
+                    <Text style={styles.studentEmail}>{student.email}</Text>
+                  </View>
+                  <View style={styles.studentRight}>
+                    <Text style={styles.studentBalance}>
+                      {wallets.length > 0 ? `$${Number(wallets[0].balance).toFixed(2)}` : '—'}
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.settingsButton}
+                      onPress={() => openSettingsDialog(item)}
+                    >
+                      <MaterialCommunityIcons name="cog-outline" size={17} color={colors.primary} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
+
+                {item.link.categories.length > 0 ? (
+                  <View style={styles.categoryPillsRow}>
+                    {item.link.categories.map((category) => (
+                      <CategoryPill key={category} category={category} />
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={styles.noCategoriesText}>No categories selected</Text>
+                )}
+                <Text style={styles.thresholdText}>{thresholdText}</Text>
               </TouchableOpacity>
             );
           })
@@ -371,9 +397,11 @@ export default function StudentsListScreen(_props: ParentTabScreenProps<'Student
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.surface,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 16,
@@ -381,6 +409,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontWeight: '700',
     color: colors.heading,
+    marginLeft: 8,
   },
   content: {
     paddingHorizontal: 20,
@@ -394,16 +423,25 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 12,
   },
-  studentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.primary,
+  studentCard: {
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
     padding: 16,
     marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  studentTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   avatar: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: colors.primary,
   },
   studentMiddle: {
     flex: 1,
@@ -411,28 +449,55 @@ const styles = StyleSheet.create({
   },
   studentName: {
     fontWeight: '700',
-    color: colors.onPrimary,
+    fontSize: 16,
+    color: colors.heading,
   },
-  studentUniversity: {
+  studentEmail: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.8)',
+    color: colors.muted,
     marginTop: 2,
-  },
-  studentPermissions: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.6)',
-    marginTop: 3,
   },
   studentRight: {
     alignItems: 'flex-end',
   },
   studentBalance: {
     fontWeight: '700',
-    color: colors.onPrimary,
+    color: colors.primary,
     fontSize: 15,
   },
   settingsButton: {
-    margin: 0,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: `${colors.primary}1F`,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+  },
+  categoryPillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 12,
+  },
+  categoryPill: {
+    borderRadius: 999,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    marginRight: 6,
+    marginBottom: 6,
+  },
+  categoryPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  noCategoriesText: {
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 10,
+  },
+  thresholdText: {
+    fontSize: 11,
+    color: colors.muted,
     marginTop: 2,
   },
   emptyCard: {
@@ -456,10 +521,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
-    borderColor: colors.border,
+    borderColor: colors.primary,
     borderStyle: 'dashed',
-    borderRadius: 14,
+    borderRadius: 16,
     paddingVertical: 16,
   },
   addRowText: {

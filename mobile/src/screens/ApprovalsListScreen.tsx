@@ -2,18 +2,8 @@ import { useCallback, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import {
-  ActivityIndicator,
-  Avatar,
-  Button,
-  Card,
-  Chip,
-  Dialog,
-  Portal,
-  Snackbar,
-  Text,
-  TextInput,
-} from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { ActivityIndicator, Button, Chip, Dialog, Portal, Snackbar, Text, TextInput } from 'react-native-paper';
 import type { PersonalSavingsHistory, Transaction, WithdrawalRequestWithStudent } from '../types/api';
 import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
@@ -33,6 +23,59 @@ function transactionTitle(transaction: Transaction): string {
   if (transaction.note) return transaction.note;
   const category = categoryLookup.get(transaction.category.toLowerCase() as BudgetCategoryKey);
   return category?.label ?? 'Payment';
+}
+
+function formatDate(isoDate: string): string {
+  return new Date(isoDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function SectionHeader({
+  icon,
+  title,
+  count,
+}: Readonly<{ icon: keyof typeof MaterialCommunityIcons.glyphMap; title: string; count: number }>) {
+  return (
+    <View style={styles.sectionHeaderRow}>
+      <View style={styles.sectionHeaderLeft}>
+        <MaterialCommunityIcons name={icon} size={18} color={colors.primary} />
+        <Text style={styles.sectionHeaderTitle}>{title}</Text>
+      </View>
+      <View style={styles.countBadge}>
+        <Text style={styles.countBadgeText}>{count}</Text>
+      </View>
+    </View>
+  );
+}
+
+function InfoBanner({ text }: Readonly<{ text: string }>) {
+  return (
+    <View style={styles.infoBanner}>
+      <Text style={styles.infoBannerIcon}>ℹ️</Text>
+      <Text style={styles.infoBannerText}>{text}</Text>
+    </View>
+  );
+}
+
+function CategoryBadge({ label, color }: Readonly<{ label: string; color: string }>) {
+  return (
+    <View style={[styles.categoryPill, { backgroundColor: `${color}1F` }]}>
+      <Text style={[styles.categoryPillText, { color }]}>{label}</Text>
+    </View>
+  );
+}
+
+function EmptyState({
+  icon,
+  color,
+  title,
+}: Readonly<{ icon: keyof typeof MaterialCommunityIcons.glyphMap; color: string; title: string }>) {
+  return (
+    <View style={styles.emptyState}>
+      <MaterialCommunityIcons name={icon} size={40} color={color} />
+      <Text style={styles.emptyTitle}>{title}</Text>
+      <Text style={styles.emptySubtitle}>You&apos;re all caught up.</Text>
+    </View>
+  );
 }
 
 export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps<'Approvals'>) {
@@ -169,6 +212,7 @@ export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.header}>
+        <MaterialCommunityIcons name="clipboard-check-outline" size={22} color={colors.primary} />
         <Text variant="headlineSmall" style={styles.headerTitle}>
           Approvals
         </Text>
@@ -180,201 +224,180 @@ export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps
       >
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        <View style={styles.infoBanner}>
-          <Text style={styles.infoBannerText}>
-            These are general transfers your student made above your approval threshold.
-            Education-locked spending is handled automatically.
-          </Text>
-        </View>
+        <View style={styles.sectionCard}>
+          <SectionHeader icon="swap-horizontal" title="Approvals" count={approvals.length} />
+          <InfoBanner text="These are general transfers your student made above your approval threshold. Education-locked spending is handled automatically." />
 
-        {isLoading && approvals.length === 0 ? (
-          <ActivityIndicator color={colors.primary} style={styles.loading} />
-        ) : approvals.length > 0 ? (
-          approvals.map((transaction) => {
-            const category = categoryLookup.get(
-              transaction.category.toLowerCase() as BudgetCategoryKey
-            );
-            const statusMeta = TRANSACTION_STATUS_META[transaction.status];
-            const studentName = transaction.fromWalletId
-              ? (walletToStudentName.get(transaction.fromWalletId) ?? 'Student')
-              : 'Student';
-            return (
-              <TouchableOpacity
-                key={transaction.id}
-                style={styles.approvalRow}
-                onPress={() =>
-                  navigation.navigate('ApprovalRequest', { transaction, studentName })
-                }
-              >
-                <IconBadge
-                  icon={category?.icon ?? 'wallet-outline'}
-                  color={category?.color ?? colors.primary}
-                  size={44}
-                />
-                <View style={styles.approvalMiddle}>
-                  <Text style={styles.approvalTitle}>{transactionTitle(transaction)}</Text>
-                  <Text style={styles.approvalSubtitle}>
-                    {studentName} • ${Number(transaction.amount).toFixed(2)}
-                  </Text>
-                </View>
-                <Chip
-                  compact
-                  style={[styles.approvalChip, { backgroundColor: `${statusMeta.color}1F` }]}
-                  textStyle={{ color: statusMeta.color, fontSize: 11, fontWeight: '700' }}
+          {isLoading && approvals.length === 0 ? (
+            <ActivityIndicator color={colors.primary} style={styles.loading} />
+          ) : approvals.length > 0 ? (
+            approvals.map((transaction) => {
+              const category = categoryLookup.get(
+                transaction.category.toLowerCase() as BudgetCategoryKey
+              );
+              const statusMeta = TRANSACTION_STATUS_META[transaction.status];
+              const studentName = transaction.fromWalletId
+                ? (walletToStudentName.get(transaction.fromWalletId) ?? 'Student')
+                : 'Student';
+              return (
+                <TouchableOpacity
+                  key={transaction.id}
+                  style={styles.itemRow}
+                  onPress={() =>
+                    navigation.navigate('ApprovalRequest', { transaction, studentName })
+                  }
                 >
-                  Review
-                </Chip>
-              </TouchableOpacity>
-            );
-          })
-        ) : (
-          <Card style={styles.emptyCard} mode="elevated">
-            <Card.Content style={styles.emptyState}>
-              <Avatar.Icon
-                icon="check-circle-outline"
-                size={56}
-                style={styles.emptyIcon}
-                color={colors.accent}
-              />
-              <Text style={styles.emptyTitle}>No pending approvals</Text>
-              <Text style={styles.emptySubtitle}>You&apos;re all caught up.</Text>
-            </Card.Content>
-          </Card>
-        )}
-
-        <Text style={styles.sectionTitle}>Savings Withdrawal Requests</Text>
-        <View style={styles.infoBanner}>
-          <Text style={styles.infoBannerText}>
-            Your student is asking to withdraw from their Personal Savings balance.
-          </Text>
+                  <IconBadge
+                    icon={category?.icon ?? 'wallet-outline'}
+                    color={category?.color ?? colors.primary}
+                    size={44}
+                  />
+                  <View style={styles.itemMiddle}>
+                    <Text style={styles.itemTitle}>{transactionTitle(transaction)}</Text>
+                    <Text style={styles.itemSubtitle}>
+                      {studentName} • ${Number(transaction.amount).toFixed(2)}
+                    </Text>
+                    <View style={styles.itemMetaRow}>
+                      {category ? <CategoryBadge label={category.label} color={category.color} /> : null}
+                      <Text style={styles.itemDate}>{formatDate(transaction.createdAt)}</Text>
+                    </View>
+                  </View>
+                  <Chip
+                    compact
+                    style={[styles.approvalChip, { backgroundColor: `${statusMeta.color}1F` }]}
+                    textStyle={{ color: statusMeta.color, fontSize: 11, fontWeight: '700' }}
+                  >
+                    Review
+                  </Chip>
+                </TouchableOpacity>
+              );
+            })
+          ) : (
+            <EmptyState icon="check-circle-outline" color={colors.accent} title="No pending approvals" />
+          )}
         </View>
 
-        {isLoading && savingsRequests.length === 0 ? (
-          <ActivityIndicator color={colors.primary} style={styles.loading} />
-        ) : savingsRequests.length > 0 ? (
-          savingsRequests.map((request) => {
-            const studentName = walletToStudentName.get(request.walletId) ?? 'Student';
-            const isProcessing = processingId === request.id;
-            return (
-              <View key={request.id} style={styles.savingsRow}>
-                <IconBadge icon="piggy-bank-outline" color={colors.accent} size={44} />
-                <View style={styles.approvalMiddle}>
-                  <Text style={styles.approvalTitle}>
-                    {studentName} • ${Number(request.amount).toFixed(2)}
-                  </Text>
-                  <Text style={styles.approvalSubtitle} numberOfLines={2}>
-                    {request.reason}
-                  </Text>
-                  <View style={styles.savingsActionsRow}>
-                    <Button
-                      mode="outlined"
-                      textColor={colors.danger}
-                      compact
-                      style={[styles.savingsActionButton, styles.rejectButton]}
-                      disabled={isProcessing}
-                      onPress={() => openRejectDialog(request)}
-                    >
-                      Reject
-                    </Button>
-                    <Button
-                      mode="contained"
-                      buttonColor={colors.accent}
-                      compact
-                      style={styles.savingsActionButton}
-                      disabled={isProcessing}
-                      onPress={() => handleApproveSavings(request)}
-                    >
-                      {isProcessing ? (
-                        <ActivityIndicator size={14} color={colors.onPrimary} />
-                      ) : (
-                        'Approve'
-                      )}
-                    </Button>
+        <View style={styles.sectionCard}>
+          <SectionHeader
+            icon="piggy-bank-outline"
+            title="Savings Withdrawal Requests"
+            count={savingsRequests.length}
+          />
+          <InfoBanner text="Your student is asking to withdraw from their Personal Savings balance." />
+
+          {isLoading && savingsRequests.length === 0 ? (
+            <ActivityIndicator color={colors.primary} style={styles.loading} />
+          ) : savingsRequests.length > 0 ? (
+            savingsRequests.map((request) => {
+              const studentName = walletToStudentName.get(request.walletId) ?? 'Student';
+              const isProcessing = processingId === request.id;
+              return (
+                <View key={request.id} style={styles.itemRow}>
+                  <IconBadge icon="piggy-bank-outline" color={colors.accent} size={44} />
+                  <View style={styles.itemMiddle}>
+                    <Text style={styles.itemTitle}>
+                      {studentName} • ${Number(request.amount).toFixed(2)}
+                    </Text>
+                    <Text style={styles.itemSubtitle} numberOfLines={2}>
+                      {request.reason}
+                    </Text>
+                    <View style={styles.itemMetaRow}>
+                      <CategoryBadge label="Personal Savings" color={colors.accent} />
+                      <Text style={styles.itemDate}>{formatDate(request.createdAt)}</Text>
+                    </View>
+                    <View style={styles.actionsRow}>
+                      <Button
+                        mode="outlined"
+                        textColor={colors.danger}
+                        compact
+                        style={[styles.actionButton, styles.rejectButton]}
+                        disabled={isProcessing}
+                        onPress={() => openRejectDialog(request)}
+                      >
+                        Reject
+                      </Button>
+                      <Button
+                        mode="contained"
+                        buttonColor={colors.accent}
+                        compact
+                        style={styles.actionButton}
+                        disabled={isProcessing}
+                        onPress={() => handleApproveSavings(request)}
+                      >
+                        {isProcessing ? (
+                          <ActivityIndicator size={14} color={colors.onPrimary} />
+                        ) : (
+                          'Approve'
+                        )}
+                      </Button>
+                    </View>
                   </View>
                 </View>
-              </View>
-            );
-          })
-        ) : (
-          <Card style={styles.emptyCard} mode="elevated">
-            <Card.Content style={styles.emptyState}>
-              <Avatar.Icon
-                icon="piggy-bank-outline"
-                size={56}
-                style={styles.emptyIcon}
-                color={colors.accent}
-              />
-              <Text style={styles.emptyTitle}>No withdrawal requests</Text>
-              <Text style={styles.emptySubtitle}>You&apos;re all caught up.</Text>
-            </Card.Content>
-          </Card>
-        )}
-
-        <Text style={styles.sectionTitle}>Pending Cash Withdrawal Approvals</Text>
-        <View style={styles.infoBanner}>
-          <Text style={styles.infoBannerText}>
-            Your student is at an agent trying to withdraw general cash above your approval
-            threshold. The agent can&apos;t dispense it until you approve.
-          </Text>
+              );
+            })
+          ) : (
+            <EmptyState icon="piggy-bank-outline" color={colors.accent} title="No withdrawal requests" />
+          )}
         </View>
 
-        {isLoading && cashWithdrawals.length === 0 ? (
-          <ActivityIndicator color={colors.primary} style={styles.loading} />
-        ) : cashWithdrawals.length > 0 ? (
-          cashWithdrawals.map((request) => {
-            const isProcessing = cashProcessingId === request.id;
-            return (
-              <View key={request.id} style={styles.savingsRow}>
-                <IconBadge icon="cash-multiple" color={colors.primary} size={44} />
-                <View style={styles.approvalMiddle}>
-                  <Text style={styles.approvalTitle}>
-                    {request.wallet.user.fullName} • ${Number(request.amount).toFixed(2)}
-                  </Text>
-                  <Text style={styles.approvalSubtitle}>Cash withdrawal — General</Text>
-                  <View style={styles.savingsActionsRow}>
-                    <Button
-                      mode="outlined"
-                      textColor={colors.danger}
-                      compact
-                      style={[styles.savingsActionButton, styles.rejectButton]}
-                      disabled={isProcessing}
-                      onPress={() => openCashRejectDialog(request)}
-                    >
-                      Reject
-                    </Button>
-                    <Button
-                      mode="contained"
-                      buttonColor={colors.accent}
-                      compact
-                      style={styles.savingsActionButton}
-                      disabled={isProcessing}
-                      onPress={() => handleApproveCashWithdrawal(request)}
-                    >
-                      {isProcessing ? (
-                        <ActivityIndicator size={14} color={colors.onPrimary} />
-                      ) : (
-                        'Approve'
-                      )}
-                    </Button>
+        <View style={styles.sectionCard}>
+          <SectionHeader
+            icon="cash-multiple"
+            title="Pending Cash Withdrawal Approvals"
+            count={cashWithdrawals.length}
+          />
+          <InfoBanner text="Your student is at an agent trying to withdraw general cash above your approval threshold. The agent can't dispense it until you approve." />
+
+          {isLoading && cashWithdrawals.length === 0 ? (
+            <ActivityIndicator color={colors.primary} style={styles.loading} />
+          ) : cashWithdrawals.length > 0 ? (
+            cashWithdrawals.map((request) => {
+              const isProcessing = cashProcessingId === request.id;
+              return (
+                <View key={request.id} style={styles.itemRow}>
+                  <IconBadge icon="cash-multiple" color={colors.primary} size={44} />
+                  <View style={styles.itemMiddle}>
+                    <Text style={styles.itemTitle}>
+                      {request.wallet.user.fullName} • ${Number(request.amount).toFixed(2)}
+                    </Text>
+                    <View style={styles.itemMetaRow}>
+                      <CategoryBadge label="General" color={colors.primary} />
+                      <Text style={styles.itemDate}>{formatDate(request.createdAt)}</Text>
+                    </View>
+                    <View style={styles.actionsRow}>
+                      <Button
+                        mode="outlined"
+                        textColor={colors.danger}
+                        compact
+                        style={[styles.actionButton, styles.rejectButton]}
+                        disabled={isProcessing}
+                        onPress={() => openCashRejectDialog(request)}
+                      >
+                        Reject
+                      </Button>
+                      <Button
+                        mode="contained"
+                        buttonColor={colors.accent}
+                        compact
+                        style={styles.actionButton}
+                        disabled={isProcessing}
+                        onPress={() => handleApproveCashWithdrawal(request)}
+                      >
+                        {isProcessing ? (
+                          <ActivityIndicator size={14} color={colors.onPrimary} />
+                        ) : (
+                          'Approve'
+                        )}
+                      </Button>
+                    </View>
                   </View>
                 </View>
-              </View>
-            );
-          })
-        ) : (
-          <Card style={styles.emptyCard} mode="elevated">
-            <Card.Content style={styles.emptyState}>
-              <Avatar.Icon
-                icon="cash-multiple"
-                size={56}
-                style={styles.emptyIcon}
-                color={colors.primary}
-              />
-              <Text style={styles.emptyTitle}>No cash withdrawal requests</Text>
-              <Text style={styles.emptySubtitle}>You&apos;re all caught up.</Text>
-            </Card.Content>
-          </Card>
-        )}
+              );
+            })
+          ) : (
+            <EmptyState icon="cash-multiple" color={colors.primary} title="No cash withdrawal requests" />
+          )}
+        </View>
       </ScrollView>
 
       <Portal>
@@ -445,9 +468,11 @@ export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.surface,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 16,
@@ -455,6 +480,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontWeight: '700',
     color: colors.heading,
+    marginLeft: 8,
   },
   content: {
     paddingHorizontal: 20,
@@ -468,36 +494,110 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 12,
   },
-  infoBanner: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
+  sectionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
   },
-  infoBannerText: {
-    fontSize: 12,
-    color: colors.label,
-    lineHeight: 18,
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
-  sectionTitle: {
+  sectionHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 1,
+  },
+  sectionHeaderTitle: {
     fontSize: 15,
     fontWeight: '700',
     color: colors.heading,
-    marginTop: 24,
-    marginBottom: 12,
+    marginLeft: 8,
   },
-  savingsRow: {
+  countBadge: {
+    minWidth: 24,
+    height: 24,
+    borderRadius: 12,
+    paddingHorizontal: 7,
+    backgroundColor: `${colors.primary}1F`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  countBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  infoBanner: {
     flexDirection: 'row',
+    backgroundColor: `${colors.primary}14`,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+  },
+  infoBannerIcon: {
+    fontSize: 14,
+    marginRight: 8,
+  },
+  infoBannerText: {
+    flex: 1,
+    fontSize: 12,
+    color: colors.primaryDark,
+    lineHeight: 17,
+  },
+  itemRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     backgroundColor: colors.surface,
     borderRadius: 14,
     padding: 12,
     marginBottom: 10,
   },
-  savingsActionsRow: {
+  itemMiddle: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  itemTitle: {
+    fontWeight: '700',
+    color: colors.heading,
+  },
+  itemSubtitle: {
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 2,
+  },
+  itemMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  itemDate: {
+    fontSize: 11,
+    color: colors.muted,
+    marginLeft: 8,
+  },
+  categoryPill: {
+    borderRadius: 999,
+    paddingVertical: 3,
+    paddingHorizontal: 9,
+  },
+  categoryPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  actionsRow: {
     flexDirection: 'row',
     marginTop: 10,
   },
-  savingsActionButton: {
+  actionButton: {
     flex: 1,
     marginRight: 8,
     borderRadius: 8,
@@ -505,48 +605,21 @@ const styles = StyleSheet.create({
   rejectButton: {
     borderColor: colors.danger,
   },
-  approvalRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 10,
-  },
-  approvalMiddle: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  approvalTitle: {
-    fontWeight: '700',
-    color: colors.heading,
-  },
-  approvalSubtitle: {
-    fontSize: 12,
-    color: colors.muted,
-    marginTop: 2,
-  },
   approvalChip: {
     height: 26,
   },
-  emptyCard: {
-    borderRadius: 16,
-    marginTop: 8,
-  },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 24,
-  },
-  emptyIcon: {
-    backgroundColor: colors.surface,
-    marginBottom: 14,
+    paddingVertical: 20,
   },
   emptyTitle: {
     fontWeight: '700',
     color: colors.heading,
-    marginBottom: 6,
+    marginTop: 10,
+    marginBottom: 4,
   },
   emptySubtitle: {
     color: colors.muted,
+    fontSize: 12,
   },
 });
