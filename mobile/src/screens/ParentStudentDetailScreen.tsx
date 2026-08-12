@@ -2,9 +2,11 @@ import { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { ActivityIndicator, Chip, IconButton, Text } from 'react-native-paper';
+import { ActivityIndicator, Avatar, Chip, IconButton, Text } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { StudentWithdrawalForParent } from '../types/api';
 import { colors } from '../theme/colors';
+import { getInitials } from '../utils/getInitials';
 import * as withdrawalService from '../services/withdrawalService';
 import { ApiError } from '../services/api';
 import type { RootStackScreenProps } from '../navigation/types';
@@ -37,7 +39,7 @@ export default function ParentStudentDetailScreen({
   navigation,
   route,
 }: Readonly<RootStackScreenProps<'ParentStudentDetail'>>) {
-  const { studentId, studentName } = route.params;
+  const { studentId, studentName, studentEmail } = route.params;
 
   const [withdrawals, setWithdrawals] = useState<StudentWithdrawalForParent[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -110,15 +112,25 @@ export default function ParentStudentDetailScreen({
     <SafeAreaView style={styles.flex} edges={['top']}>
       <View style={styles.header}>
         <IconButton icon="arrow-left" onPress={() => navigation.goBack()} style={styles.backButton} />
-        <Text variant="titleLarge" style={styles.headerTitle}>
-          {studentName}
-        </Text>
       </View>
 
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={load} />}
       >
+        <View style={styles.profileHeader}>
+          <Avatar.Text
+            size={64}
+            label={getInitials(studentName)}
+            style={styles.avatar}
+            color={colors.onPrimary}
+          />
+          <Text variant="titleLarge" style={styles.studentName}>
+            {studentName}
+          </Text>
+          <Text style={styles.studentEmail}>{studentEmail}</Text>
+        </View>
+
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         <Text style={styles.sectionLabel}>Cash Withdrawals</Text>
@@ -127,7 +139,10 @@ export default function ParentStudentDetailScreen({
         ) : withdrawals.length > 0 ? (
           <View style={styles.list}>{withdrawals.map(renderWithdrawalItem)}</View>
         ) : (
-          <Text style={styles.emptyText}>No cash withdrawals yet.</Text>
+          <View style={styles.emptyState}>
+            <MaterialCommunityIcons name="cash-remove" size={40} color={colors.muted} />
+            <Text style={styles.emptyText}>No cash withdrawals yet</Text>
+          </View>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -148,14 +163,25 @@ const styles = StyleSheet.create({
   backButton: {
     margin: 0,
   },
-  headerTitle: {
-    fontWeight: '700',
-    color: colors.heading,
-    marginLeft: 4,
-  },
   content: {
     paddingHorizontal: 20,
     paddingBottom: 32,
+  },
+  profileHeader: {
+    alignItems: 'center',
+    paddingBottom: 20,
+  },
+  avatar: {
+    backgroundColor: colors.primary,
+    marginBottom: 12,
+  },
+  studentName: {
+    fontWeight: '700',
+    color: colors.heading,
+  },
+  studentEmail: {
+    color: colors.muted,
+    marginTop: 2,
   },
   errorText: {
     color: colors.danger,
@@ -166,25 +192,33 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: colors.label,
-    marginTop: 12,
+    marginTop: 4,
     marginBottom: 10,
   },
   loading: {
     marginTop: 24,
   },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    paddingVertical: 40,
+  },
   emptyText: {
     color: colors.muted,
     fontSize: 13,
     lineHeight: 18,
+    marginTop: 10,
   },
   list: {
     marginBottom: 8,
   },
   row: {
     backgroundColor: colors.surface,
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 10,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
   },
   rowTop: {
     flexDirection: 'row',

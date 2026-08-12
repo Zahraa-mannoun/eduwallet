@@ -1,14 +1,19 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+
+type LoginLocationState = { suspensionMessage?: string } | null;
 
 export function Login() {
   const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(
+    (location.state as LoginLocationState)?.suspensionMessage ?? null
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (isAuthenticated) {
@@ -55,7 +60,7 @@ export function Login() {
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-              placeholder="admin@eduwallet.com"
+              placeholder="agent@eduwallet.com"
             />
           </div>
 

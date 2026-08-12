@@ -193,12 +193,12 @@ export function Dashboard() {
   }));
 
   const pluralize = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`;
-  const adminCount = stats.users.byType.ADMIN ?? 0;
   const usersSubtitle = [
     pluralize(stats.users.studentCount, 'student'),
     pluralize(stats.users.parentCount, 'parent'),
     pluralize(stats.users.institutionCount, 'institution'),
-    pluralize(adminCount, 'admin'),
+    pluralize(stats.users.agentCount, 'agent'),
+    pluralize(stats.users.adminCount, 'admin'),
   ].join(', ');
 
   return (
@@ -218,6 +218,18 @@ export function Dashboard() {
           accent="yellow"
         />
         <StatCard label="Total Withdrawals" value={stats.withdrawals.totalCompleted} />
+        <StatCard label="Withdrawals Today" value={stats.withdrawals.today} />
+        <StatCard label="Total Agents" value={stats.agents.active} subtitle="Active agents" />
+        <StatCard
+          label="Suspended Agents"
+          value={stats.agents.suspended}
+          accent={stats.agents.suspended > 0 ? 'red' : 'primary'}
+        />
+        <StatCard
+          label="Pending Agent Messages"
+          value={stats.agentMessages.pending}
+          accent={stats.agentMessages.pending > 0 ? 'yellow' : 'primary'}
+        />
         <StatCard
           label="Pending Report Requests"
           value={stats.reportRequests.pending}

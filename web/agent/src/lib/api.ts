@@ -110,3 +110,20 @@ export function getErrorMessage(error: unknown): string {
   }
   return 'Something went wrong';
 }
+
+// Distinguishes a suspended-account rejection (ACCOUNT_SUSPENDED) from every other failure —
+// login and the global response interceptor both need the raw { error, code } pair, not just
+// a flattened message, so they can render the "Your account has been suspended: …" copy.
+export function getApiError(error: unknown): { message: string; code?: string } {
+  if (axios.isAxiosError(error)) {
+    const data = error.response?.data as ApiResponse<unknown> | undefined;
+    if (data && !data.success) {
+      return { message: data.error, code: data.code };
+    }
+    return { message: error.message };
+  }
+  if (error instanceof Error) {
+    return { message: error.message };
+  }
+  return { message: 'Something went wrong' };
+}

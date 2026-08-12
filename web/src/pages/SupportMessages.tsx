@@ -60,7 +60,7 @@ export function SupportMessages() {
     }
   };
 
-  const appealMessages = messages.filter((message) => message.type !== 'GENERAL');
+  const appealMessages = messages.filter((message) => message.type === 'SUSPENSION_APPEAL');
   const generalMessages = messages.filter((message) => message.type === 'GENERAL');
 
   return (

@@ -66,3 +66,29 @@ export const addFundsSchema = z.object({
 });
 
 export type AddFundsInput = z.infer<typeof addFundsSchema>;
+
+export const createAgentSchema = z.object({
+  fullName: z.string().trim().min(2, 'Full name must be at least 2 characters'),
+  email: z.string().trim().toLowerCase().email('Invalid email address'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+});
+
+export type CreateAgentInput = z.infer<typeof createAgentSchema>;
+
+export const agentIdParamsSchema = z.object({
+  id: z.string().uuid('id must be a valid UUID'),
+});
+
+export type AgentIdParams = z.infer<typeof agentIdParamsSchema>;
+
+export const deactivateAgentSchema = z.object({
+  reason: z.string().trim().min(1, 'reason is required').max(500),
+});
+
+export type DeactivateAgentInput = z.infer<typeof deactivateAgentSchema>;
+
+export const notifyAgentSchema = z.object({
+  message: z.string().trim().min(1, 'message is required').max(1000),
+});
+
+export type NotifyAgentInput = z.infer<typeof notifyAgentSchema>;

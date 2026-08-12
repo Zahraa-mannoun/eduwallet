@@ -1,7 +1,9 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 import type { ApiResponse, User } from '../types';
-import { api, getErrorMessage, tokenStorage, unwrap } from '../lib/api';
+import { api, getApiError, getErrorMessage, tokenStorage, unwrap } from '../lib/api';
 
 type LoginResult = { user: User; accessToken: string; refreshToken: string };
 
@@ -14,7 +16,12 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+function formatSuspensionMessage(reason: string): string {
+  return `Your account has been suspended: ${reason}. Please contact your administrator.`;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const navigate = useNavigate();
   const [agent, setAgent] = useState<User | null>(() => tokenStorage.getStoredUser());
 
   const login = useCallback(async (email: string, password: string) => {
@@ -23,13 +30,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await api.post<ApiResponse<LoginResult>>('/auth/login', { email, password });
       result = unwrap(response.data);
     } catch (error) {
-      throw new Error(getErrorMessage(error));
+      const { message, code } = getApiError(error);
+      if (code === 'ACCOUNT_SUSPENDED') {
+        throw new Error(formatSuspensionMessage(message));
+      }
+      throw new Error(message || getErrorMessage(error));
     }
 
-    // Agent portal is admin-only for demo purposes — there's no separate "agent" user type,
-    // so any admin account can sign in and act as an agent processing cash withdrawals.
-    if (result.user.userType !== 'ADMIN') {
-      throw new Error('This account does not have agent access.');
+    if (result.user.userType !== 'AGENT') {
+      throw new Error('This portal is for agents only');
     }
 
     tokenStorage.setSession(result.accessToken, result.refreshToken, result.user);
@@ -40,6 +49,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     tokenStorage.clear();
     setAgent(null);
   }, []);
+
+  // Catches a suspension that happens mid-session — the agent is already logged in and
+  // suspended.suspended is re-checked on every authenticate() call on the backend, so the
+  // very next request (e.g. the notification-bell poll) comes back 403 ACCOUNT_SUSPENDED.
+  useEffect(() => {
+    const interceptorId = api.interceptors.response.use(
+      (response) => response,
+      (error: unknown) => {
+        if (axios.isAxiosError(error) && error.response?.status === 403) {
+          const { message, code } = getApiError(error);
+          if (code === 'ACCOUNT_SUSPENDED') {
+            tokenStorage.clear();
+            setAgent(null);
+            navigate('/login', {
+              replace: true,
+              state: { suspensionMessage: formatSuspensionMessage(message) },
+            });
+          }
+        }
+        return Promise.reject(error);
+      }
+    );
+    return () => {
+      api.interceptors.response.eject(interceptorId);
+    };
+  }, [navigate]);
 
   const value = useMemo<AuthContextValue>(
     () => ({ agent, isAuthenticated: agent !== null, login, logout }),

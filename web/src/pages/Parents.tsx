@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { ApiResponse } from '@eduwallet/shared';
@@ -8,7 +8,7 @@ import { SuspendModal } from '../components/SuspendModal';
 import { UnsuspendModal } from '../components/UnsuspendModal';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { formatDate } from '../lib/format';
-import type { AdminUser } from '../types/admin';
+import type { AdminUser, RelationshipRow } from '../types/admin';
 
 export function Parents() {
   const navigate = useNavigate();
@@ -21,6 +21,8 @@ export function Parents() {
   const [fundsUser, setFundsUser] = useState<AdminUser | null>(null);
   const [suspendTarget, setSuspendTarget] = useState<AdminUser | null>(null);
   const [unsuspendTarget, setUnsuspendTarget] = useState<AdminUser | null>(null);
+  const [relationships, setRelationships] = useState<RelationshipRow[]>([]);
+  const [expandedParentId, setExpandedParentId] = useState<string | null>(null);
 
   const limit = 20;
 
@@ -54,10 +56,29 @@ export function Parents() {
 
   useVisibilityRefetch(loadUsers);
 
+  const loadRelationships = useCallback(async () => {
+    try {
+      const response = await api.get<ApiResponse<RelationshipRow[]>>('/admin/relationships');
+      setRelationships(unwrap(response.data));
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadRelationships();
+  }, [loadRelationships]);
+
+  useVisibilityRefetch(loadRelationships);
+
   const handleSearchSubmit = (event: FormEvent) => {
     event.preventDefault();
     setPage(1);
     void loadUsers();
+  };
+
+  const toggleExpanded = (userId: string) => {
+    setExpandedParentId((current) => (current === userId ? null : userId));
   };
 
   const handleSuspendToggleClick = (user: AdminUser) => {
@@ -117,49 +138,89 @@ export function Parents() {
               </tr>
             )}
             {!isLoading &&
-              users.map((user) => (
-                <tr key={user.id}>
-                  <td className="px-4 py-3 font-medium text-slate-900">
-                    <div className="flex items-center gap-1.5">
-                      <span>{user.fullName}</span>
-                      {user.suspended && user.hasSupportMessage && (
+              users.map((user) => {
+                const isExpanded = expandedParentId === user.id;
+                const linkedStudents = relationships.filter(
+                  (relationship) => relationship.parentUserId === user.id
+                );
+                return (
+                  <Fragment key={user.id}>
+                    <tr>
+                      <td className="px-4 py-3 font-medium text-slate-900">
+                        <div className="flex items-center gap-1.5">
+                          <span>{user.fullName}</span>
+                          {user.suspended && user.hasSupportMessage && (
+                            <button
+                              type="button"
+                              title="View support message"
+                              onClick={() => navigate(`/support?highlight=${user.id}`)}
+                              className="rounded-md p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                            >
+                              💬
+                            </button>
+                          )}
+                          {user.suspended && (
+                            <span className="text-xs font-normal text-red-500">(suspended)</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{user.email}</td>
+                      <td className="px-4 py-3">
                         <button
                           type="button"
-                          title="View support message"
-                          onClick={() => navigate(`/support?highlight=${user.id}`)}
-                          className="rounded-md p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                          onClick={() => toggleExpanded(user.id)}
+                          className="rounded-md px-2 py-0.5 text-slate-600 underline decoration-dotted underline-offset-2 hover:bg-slate-100 hover:text-primary"
                         >
-                          💬
+                          {user.linkedStudentsCount ?? 0}
                         </button>
-                      )}
-                      {user.suspended && (
-                        <span className="text-xs font-normal text-red-500">(suspended)</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">{user.email}</td>
-                  <td className="px-4 py-3 text-slate-600">{user.linkedStudentsCount ?? 0}</td>
-                  <td className="px-4 py-3 text-slate-500">{formatDate(user.createdAt)}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleSuspendToggleClick(user)}
-                        className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                      >
-                        {user.suspended ? 'Unsuspend' : 'Suspend'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setFundsUser(user)}
-                        className="rounded-md border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary-100"
-                      >
-                        Add Funds
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                      </td>
+                      <td className="px-4 py-3 text-slate-500">{formatDate(user.createdAt)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleSuspendToggleClick(user)}
+                            className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                          >
+                            {user.suspended ? 'Unsuspend' : 'Suspend'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setFundsUser(user)}
+                            className="rounded-md border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary-100"
+                          >
+                            Add Funds
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr>
+                        <td colSpan={5} className="bg-slate-50 px-4 py-3">
+                          {linkedStudents.length === 0 ? (
+                            <p className="text-sm text-slate-400">No linked students yet</p>
+                          ) : (
+                            <ul className="space-y-1.5">
+                              {linkedStudents.map((relationship) => (
+                                <li
+                                  key={relationship.id}
+                                  className="flex items-center gap-2 text-sm text-slate-700"
+                                >
+                                  <span className="font-medium text-slate-900">
+                                    {relationship.student.fullName}
+                                  </span>
+                                  <span className="text-slate-400">—</span>
+                                  <span className="text-slate-500">{relationship.student.email}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
           </tbody>
         </table>
       </div>

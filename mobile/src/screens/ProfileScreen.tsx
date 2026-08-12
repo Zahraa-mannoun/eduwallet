@@ -9,7 +9,6 @@ import { USER_TYPES } from '../constants/userTypes';
 import { useAuth } from '../context/AuthContext';
 import * as kycService from '../services/kycService';
 import * as parentalService from '../services/parentalService';
-import { ApiError } from '../services/api';
 import { colors } from '../theme/colors';
 import { getInitials } from '../utils/getInitials';
 import { getEffectiveKYCStatus } from '../utils/kycStatus';
@@ -90,30 +89,42 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
     // AppNavigator reacts to the resulting auth state and switches back to Login on its own.
   };
 
-  const goToStudentReceipts = (studentId: string, studentName: string) => {
-    navigation.navigate('ParentStudentDetail', { studentId, studentName });
+  const goToStudentReceipts = (studentId: string, studentName: string, studentEmail: string) => {
+    navigation.navigate('ParentStudentDetail', { studentId, studentName, studentEmail });
   };
 
   const handleStudentReceiptsPress = async () => {
     try {
       const students = await parentalService.getLinkedStudents();
       if (students.length === 0) {
-        Alert.alert('No Linked Students', 'Link a student first to view their withdrawal receipts.');
+        Alert.alert(
+          'No Linked Students',
+          'You have no linked students yet. Link a student first to view their receipts.',
+          [{ text: 'OK' }]
+        );
         return;
       }
       if (students.length === 1) {
-        goToStudentReceipts(students[0].student.id, students[0].student.fullName);
+        goToStudentReceipts(
+          students[0].student.id,
+          students[0].student.fullName,
+          students[0].student.email
+        );
         return;
       }
       Alert.alert('Select Student', 'Which student would you like to view receipts for?', [
         ...students.map((item) => ({
           text: item.student.fullName,
-          onPress: () => goToStudentReceipts(item.student.id, item.student.fullName),
+          onPress: () => goToStudentReceipts(item.student.id, item.student.fullName, item.student.email),
         })),
         { text: 'Cancel', style: 'cancel' as const },
       ]);
-    } catch (err) {
-      Alert.alert('Error', err instanceof ApiError ? err.message : 'Could not load your students.');
+    } catch {
+      Alert.alert(
+        'No Linked Students',
+        'You have no linked students yet. Link a student first to view their receipts.',
+        [{ text: 'OK' }]
+      );
     }
   };
 

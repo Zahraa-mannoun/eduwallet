@@ -68,7 +68,10 @@ export default async function withdrawalsRoutes(fastify: FastifyInstance): Promi
   });
 
   await fastify.register(async (agentScope) => {
-    agentScope.addHook('preHandler', requireRole('ADMIN'));
+    // ADMIN kept alongside AGENT — the agent portal now logs in with real AGENT accounts,
+    // but ADMIN retains access too (e.g. GET /admin below, the web admin dashboard's Agent
+    // Withdrawals page, and any admin-run demo/test flows that dispense directly).
+    agentScope.addHook('preHandler', requireRole('ADMIN', 'AGENT'));
 
     // Agent portal — every completed withdrawal, across every student.
     agentScope.get('/', { config: { rateLimit: READ_RATE_LIMIT } }, getAllWithdrawalsHandler);

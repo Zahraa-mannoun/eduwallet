@@ -6,6 +6,7 @@ import { NotificationBell } from './NotificationBell';
 import {
   IconAlert,
   IconAnalytics,
+  IconBriefcase,
   IconBuilding,
   IconCash,
   IconChevronDown,
@@ -22,6 +23,7 @@ import {
   IconTransactions,
   IconUsers,
 } from './icons';
+import type { IconComponent } from './icons';
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: IconDashboard },
@@ -34,9 +36,14 @@ const usersSubItems = [
   { to: '/users/institutions', label: 'Institutions', icon: IconBuilding },
 ];
 
+const agentsSubItems = [
+  { to: '/agents', label: 'Manage Agents', icon: IconBriefcase },
+  { to: '/agent-withdrawals', label: 'Agent Withdrawals', icon: IconCash },
+  { to: '/agent-messages', label: 'Agent Messages', icon: IconSupport },
+];
+
 const trailingNavItems = [
   { to: '/transactions', label: 'Transactions', icon: IconTransactions },
-  { to: '/agent-withdrawals', label: 'Agent Withdrawals', icon: IconCash },
   { to: '/relationships', label: 'Relationships', icon: IconLink },
   { to: '/kyc', label: 'KYC Review', icon: IconShield },
   { to: '/resubmissions', label: 'Resubmissions', icon: IconRepeat },
@@ -53,18 +60,65 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     isActive ? 'bg-primary text-white' : 'text-slate-600 hover:bg-primary-50 hover:text-primary'
   }`;
 
+type NavSubItem = { to: string; label: string; icon: IconComponent };
+
+function NavGroup({
+  label,
+  icon: Icon,
+  items,
+  isActive,
+  isExpanded,
+  onToggle,
+}: {
+  label: string;
+  icon: IconComponent;
+  items: NavSubItem[];
+  isActive: boolean;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onToggle}
+        className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+          isActive ? 'bg-primary text-white' : 'text-slate-600 hover:bg-primary-50 hover:text-primary'
+        }`}
+      >
+        <Icon className="h-5 w-5" />
+        <span className="flex-1 text-left">{label}</span>
+        <IconChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+      </button>
+      {isExpanded && (
+        <div className="mt-1 space-y-1 pl-4">
+          {items.map(({ to, label: itemLabel, icon: ItemIcon }) => (
+            <NavLink key={to} to={to} className={navLinkClass}>
+              <ItemIcon className="h-4 w-4" />
+              {itemLabel}
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Layout({ children }: { children: ReactNode }) {
   const { admin, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [usersExpanded, setUsersExpanded] = useState(location.pathname.startsWith('/users'));
+
+  const usersActive = location.pathname.startsWith('/users');
+  const agentsActive = location.pathname.startsWith('/agents') || location.pathname === '/agent-withdrawals';
+
+  const [usersExpanded, setUsersExpanded] = useState(usersActive);
+  const [agentsExpanded, setAgentsExpanded] = useState(agentsActive);
 
   const handleLogout = () => {
     logout();
     navigate('/login', { replace: true });
   };
-
-  const usersActive = location.pathname.startsWith('/users');
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -83,33 +137,23 @@ export function Layout({ children }: { children: ReactNode }) {
             </NavLink>
           ))}
 
-          <div>
-            <button
-              type="button"
-              onClick={() => setUsersExpanded((expanded) => !expanded)}
-              className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                usersActive
-                  ? 'bg-primary text-white'
-                  : 'text-slate-600 hover:bg-primary-50 hover:text-primary'
-              }`}
-            >
-              <IconUsers className="h-5 w-5" />
-              <span className="flex-1 text-left">Users</span>
-              <IconChevronDown
-                className={`h-4 w-4 transition-transform ${usersExpanded ? 'rotate-180' : ''}`}
-              />
-            </button>
-            {usersExpanded && (
-              <div className="mt-1 space-y-1 pl-4">
-                {usersSubItems.map(({ to, label, icon: Icon }) => (
-                  <NavLink key={to} to={to} className={navLinkClass}>
-                    <Icon className="h-4 w-4" />
-                    {label}
-                  </NavLink>
-                ))}
-              </div>
-            )}
-          </div>
+          <NavGroup
+            label="Users"
+            icon={IconUsers}
+            items={usersSubItems}
+            isActive={usersActive}
+            isExpanded={usersExpanded}
+            onToggle={() => setUsersExpanded((expanded) => !expanded)}
+          />
+
+          <NavGroup
+            label="Agents"
+            icon={IconBriefcase}
+            items={agentsSubItems}
+            isActive={agentsActive}
+            isExpanded={agentsExpanded}
+            onToggle={() => setAgentsExpanded((expanded) => !expanded)}
+          />
 
           {trailingNavItems.map(({ to, label, icon: Icon }) => (
             <NavLink key={to} to={to} className={navLinkClass}>

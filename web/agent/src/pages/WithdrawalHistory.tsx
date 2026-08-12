@@ -3,6 +3,8 @@ import type { ApiResponse, WithdrawalRequest, WithdrawalStatus } from '../types'
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
 import type { BadgeTone } from '../components/Badge';
+import { formatDateTime, formatMoney } from '../lib/format';
+import { IconInbox } from '../components/icons';
 
 const STATUS_META: Record<WithdrawalStatus, { label: string; tone: BadgeTone }> = {
   PENDING: { label: 'Pending', tone: 'gray' },
@@ -19,20 +21,6 @@ const STATUS_FILTERS: Array<{ key: WithdrawalStatus | 'ALL'; label: string }> = 
   { key: 'APPROVED', label: 'Approved' },
   { key: 'REJECTED', label: 'Rejected' },
 ];
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function formatMoney(amount: string): string {
-  return `$${Number(amount).toFixed(2)}`;
-}
 
 export function WithdrawalHistory() {
   const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>([]);
@@ -91,56 +79,61 @@ export function WithdrawalHistory() {
         ))}
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-            <tr>
-              <th className="px-4 py-2 text-left">Student</th>
-              <th className="px-4 py-2 text-left">Amount</th>
-              <th className="px-4 py-2 text-left">Category</th>
-              <th className="px-4 py-2 text-left">Date</th>
-              <th className="px-4 py-2 text-left">Status</th>
-              <th className="px-4 py-2 text-left">Receipt</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {filtered.map((request) => {
-              const statusMeta = STATUS_META[request.status];
-              return (
-                <tr key={request.id}>
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-slate-900">{request.wallet.user.fullName}</div>
-                    <div className="text-xs text-slate-500">{request.wallet.user.email}</div>
-                  </td>
-                  <td className="px-4 py-3 font-medium text-slate-900">
-                    {formatMoney(request.amount)}
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">{request.category}</td>
-                  <td className="px-4 py-3 text-slate-500">
-                    {formatDateTime(request.completedAt ?? request.createdAt)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge tone={statusMeta.tone}>{statusMeta.label}</Badge>
-                  </td>
-                  <td className="px-4 py-3 text-slate-500">
-                    {request.receiptPath ? request.receiptVerificationStatus : '—'}
-                  </td>
-                </tr>
-              );
-            })}
-            {!isLoading && filtered.length === 0 && (
+      {!isLoading && filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white py-14 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-50 text-primary">
+            <IconInbox className="h-6 w-6" />
+          </div>
+          <p className="mt-3 text-sm font-medium text-slate-700">No withdrawals in this status</p>
+          <p className="mt-1 max-w-xs text-sm text-slate-400">
+            Withdrawals you dispense will show up here.
+          </p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+          <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <thead className="bg-slate-50 text-xs uppercase text-slate-500">
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
-                  No withdrawals in this status
-                </td>
+                <th className="px-4 py-2 text-left">Student</th>
+                <th className="px-4 py-2 text-left">Amount</th>
+                <th className="px-4 py-2 text-left">Category</th>
+                <th className="px-4 py-2 text-left">Date</th>
+                <th className="px-4 py-2 text-left">Status</th>
+                <th className="px-4 py-2 text-left">Receipt</th>
               </tr>
-            )}
-          </tbody>
-        </table>
-        {isLoading && withdrawals.length === 0 && (
-          <p className="px-4 py-6 text-center text-sm text-slate-500">Loading withdrawal history…</p>
-        )}
-      </div>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filtered.map((request) => {
+                const statusMeta = STATUS_META[request.status];
+                return (
+                  <tr key={request.id}>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-slate-900">{request.wallet.user.fullName}</div>
+                      <div className="text-xs text-slate-500">{request.wallet.user.email}</div>
+                    </td>
+                    <td className="px-4 py-3 font-medium text-slate-900">
+                      {formatMoney(request.amount)}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">{request.category}</td>
+                    <td className="px-4 py-3 text-slate-500">
+                      {formatDateTime(request.completedAt ?? request.createdAt)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge tone={statusMeta.tone}>{statusMeta.label}</Badge>
+                    </td>
+                    <td className="px-4 py-3 text-slate-500">
+                      {request.receiptPath ? request.receiptVerificationStatus : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {isLoading && withdrawals.length === 0 && (
+            <p className="px-4 py-6 text-center text-sm text-slate-500">Loading withdrawal history…</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

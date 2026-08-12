@@ -1,10 +1,40 @@
-export type UserType = 'STUDENT' | 'PARENT' | 'INSTITUTION' | 'ADMIN';
+export type UserType = 'STUDENT' | 'PARENT' | 'INSTITUTION' | 'ADMIN' | 'AGENT';
 
 export type User = {
   id: string;
   email: string;
   fullName: string;
   userType: UserType;
+};
+
+export type Notification = {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: string;
+  read: boolean;
+  createdAt: string;
+};
+
+export type SupportMessageType = 'SUSPENSION_APPEAL' | 'GENERAL' | 'AGENT_MESSAGE';
+export type SupportMessageStatus = 'UNREAD' | 'READ';
+
+export type AgentMessage = {
+  id: string;
+  userId: string;
+  subject: string | null;
+  message: string;
+  type: SupportMessageType;
+  status: SupportMessageStatus;
+  createdAt: string;
+};
+
+export type AgentStats = {
+  withdrawalsToday: number;
+  withdrawalsThisMonth: number;
+  totalDispensedToday: string;
+  totalDispensedThisMonth: string;
 };
 
 export type ApiSuccess<T> = {

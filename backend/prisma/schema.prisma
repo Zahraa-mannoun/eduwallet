@@ -12,6 +12,7 @@ enum UserType {
   PARENT
   INSTITUTION
   ADMIN
+  AGENT
 }
 
 enum KYCStatus {
@@ -28,6 +29,7 @@ enum SupportMessageStatus {
 enum SupportMessageType {
   SUSPENSION_APPEAL
   GENERAL
+  AGENT_MESSAGE
 }
 
 enum Currency {

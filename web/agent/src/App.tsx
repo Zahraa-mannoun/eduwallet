@@ -6,6 +6,8 @@ import { Layout } from './components/Layout';
 import { Login } from './pages/Login';
 import { ProcessWithdrawal } from './pages/ProcessWithdrawal';
 import { WithdrawalHistory } from './pages/WithdrawalHistory';
+import { Profile } from './pages/Profile';
+import { Messages } from './pages/Messages';
 
 function ProtectedPage({ children }: { children: ReactNode }) {
   return (
@@ -33,6 +35,22 @@ export function App() {
           element={
             <ProtectedPage>
               <WithdrawalHistory />
+            </ProtectedPage>
+          }
+        />
+        <Route
+          path="/messages"
+          element={
+            <ProtectedPage>
+              <Messages />
+            </ProtectedPage>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedPage>
+              <Profile />
             </ProtectedPage>
           }
         />

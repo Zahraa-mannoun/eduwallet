@@ -65,7 +65,7 @@ export function Transactions() {
           className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
         >
           <option value="ALL">All statuses</option>
-          {TRANSACTION_STATUSES.map((s) => (
+          {TRANSACTION_STATUSES.filter((s) => s !== 'EMERGENCY').map((s) => (
             <option key={s} value={s}>
               {s}
             </option>

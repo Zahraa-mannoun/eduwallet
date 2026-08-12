@@ -2,7 +2,7 @@
 // Decimal fields (balance, amount, monthlyLimit, spent, approvalThreshold) are
 // serialized as strings over JSON by Prisma/Fastify — never plain numbers.
 
-export type UserType = 'STUDENT' | 'PARENT' | 'INSTITUTION' | 'ADMIN';
+export type UserType = 'STUDENT' | 'PARENT' | 'INSTITUTION' | 'ADMIN' | 'AGENT';
 
 export type KYCStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
 
@@ -29,7 +29,7 @@ export type FraudSeverity = 'LOW' | 'MEDIUM' | 'HIGH';
 
 export type SupportMessageStatus = 'UNREAD' | 'READ';
 
-export type SupportMessageType = 'SUSPENSION_APPEAL' | 'GENERAL';
+export type SupportMessageType = 'SUSPENSION_APPEAL' | 'GENERAL' | 'AGENT_MESSAGE';
 
 export type User = {
   id: string;

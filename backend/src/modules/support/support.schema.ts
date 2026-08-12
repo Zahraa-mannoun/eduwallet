@@ -21,3 +21,9 @@ export const supportMessageIdParamsSchema = z.object({
 });
 
 export type SupportMessageIdParams = z.infer<typeof supportMessageIdParamsSchema>;
+
+export const replySupportMessageSchema = z.object({
+  message: z.string().trim().min(1, 'message is required').max(2000),
+});
+
+export type ReplySupportMessageInput = z.infer<typeof replySupportMessageSchema>;

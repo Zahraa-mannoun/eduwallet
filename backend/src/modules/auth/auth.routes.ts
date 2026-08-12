@@ -37,9 +37,15 @@ export default async function authRoutes(fastify: FastifyInstance): Promise<void
     { preHandler: authenticate, config: { rateLimit: AUTH_RATE_LIMIT } },
     changePasswordHandler
   );
+  // Despite the URL, also used by the agent portal's Profile page — both ADMIN and AGENT get
+  // an instant self-service email/password change with no approval workflow, unlike the
+  // proof-of-identity email-change flow STUDENT/PARENT/INSTITUTION go through.
   fastify.patch(
     '/admin/update-credentials',
-    { preHandler: [authenticate, requireRole('ADMIN')], config: { rateLimit: AUTH_RATE_LIMIT } },
+    {
+      preHandler: [authenticate, requireRole('ADMIN', 'AGENT')],
+      config: { rateLimit: AUTH_RATE_LIMIT },
+    },
     updateAdminCredentialsHandler
   );
 }

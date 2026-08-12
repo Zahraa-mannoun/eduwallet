@@ -211,6 +211,7 @@ export default function StudentsListScreen({ navigation }: ParentTabScreenProps<
                   navigation.navigate('ParentStudentDetail', {
                     studentId: student.id,
                     studentName: student.fullName,
+                    studentEmail: student.email,
                   })
                 }
               >

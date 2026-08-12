@@ -5,16 +5,23 @@ import { getPendingKYC } from '../kyc/kyc.service';
 import {
   addFundsParamsSchema,
   addFundsSchema,
+  agentIdParamsSchema,
+  createAgentSchema,
+  deactivateAgentSchema,
   fraudAlertIdParamsSchema,
   getAllTransactionsSchema,
   getFraudAlertsSchema,
   getUsersSchema,
+  notifyAgentSchema,
   resolveFraudAlertSchema,
   suspendUserSchema,
   userIdParamsSchema,
 } from './admin.schema';
 import {
   addFunds,
+  createAgent,
+  deactivateAgent,
+  getAgents,
   getAllTransactions,
   getAnalytics,
   getAuditLog,
@@ -23,7 +30,9 @@ import {
   getSystemStats,
   getUserById,
   getUsers,
+  reactivateAgent,
   resolveFraudAlert,
+  sendAgentNotification,
   suspendUser,
   unsuspendUser,
 } from './admin.service';
@@ -254,6 +263,101 @@ export async function getAnalyticsHandler(request: FastifyRequest, reply: Fastif
   try {
     const analytics = await getAnalytics();
     return reply.status(200).send(successResponse(analytics));
+  } catch (error) {
+    return handleAdminError(request, reply, error);
+  }
+}
+
+export async function createAgentHandler(request: FastifyRequest, reply: FastifyReply) {
+  const parsed = createAgentSchema.safeParse(request.body);
+  if (!parsed.success) {
+    return reply
+      .status(400)
+      .send(errorResponse(parsed.error.issues[0]?.message ?? 'Invalid input', 'VALIDATION_ERROR'));
+  }
+
+  try {
+    const authUser = requireAuthUser(request);
+    const agent = await createAgent(authUser.id, parsed.data);
+    return reply.status(201).send(successResponse(agent));
+  } catch (error) {
+    return handleAdminError(request, reply, error);
+  }
+}
+
+export async function getAgentsHandler(request: FastifyRequest, reply: FastifyReply) {
+  try {
+    const agents = await getAgents();
+    return reply.status(200).send(successResponse(agents));
+  } catch (error) {
+    return handleAdminError(request, reply, error);
+  }
+}
+
+export async function deactivateAgentHandler(request: FastifyRequest, reply: FastifyReply) {
+  const paramsParsed = agentIdParamsSchema.safeParse(request.params);
+  if (!paramsParsed.success) {
+    return reply
+      .status(400)
+      .send(
+        errorResponse(paramsParsed.error.issues[0]?.message ?? 'Invalid input', 'VALIDATION_ERROR')
+      );
+  }
+
+  const bodyParsed = deactivateAgentSchema.safeParse(request.body);
+  if (!bodyParsed.success) {
+    return reply
+      .status(400)
+      .send(errorResponse(bodyParsed.error.issues[0]?.message ?? 'Invalid input', 'VALIDATION_ERROR'));
+  }
+
+  try {
+    const authUser = requireAuthUser(request);
+    const agent = await deactivateAgent(authUser.id, paramsParsed.data.id, bodyParsed.data.reason);
+    return reply.status(200).send(successResponse(agent));
+  } catch (error) {
+    return handleAdminError(request, reply, error);
+  }
+}
+
+export async function notifyAgentHandler(request: FastifyRequest, reply: FastifyReply) {
+  const paramsParsed = agentIdParamsSchema.safeParse(request.params);
+  if (!paramsParsed.success) {
+    return reply
+      .status(400)
+      .send(
+        errorResponse(paramsParsed.error.issues[0]?.message ?? 'Invalid input', 'VALIDATION_ERROR')
+      );
+  }
+
+  const bodyParsed = notifyAgentSchema.safeParse(request.body);
+  if (!bodyParsed.success) {
+    return reply
+      .status(400)
+      .send(errorResponse(bodyParsed.error.issues[0]?.message ?? 'Invalid input', 'VALIDATION_ERROR'));
+  }
+
+  try {
+    const authUser = requireAuthUser(request);
+    await sendAgentNotification(authUser.id, paramsParsed.data.id, bodyParsed.data.message);
+    return reply.status(200).send(successResponse({ message: 'Notification sent' }));
+  } catch (error) {
+    return handleAdminError(request, reply, error);
+  }
+}
+
+export async function reactivateAgentHandler(request: FastifyRequest, reply: FastifyReply) {
+  const parsed = agentIdParamsSchema.safeParse(request.params);
+  if (!parsed.success) {
+    return reply
+      .status(400)
+      .send(errorResponse(parsed.error.issues[0]?.message ?? 'Invalid input', 'VALIDATION_ERROR'));
+  }
+
+  try {
+    const authUser = requireAuthUser(request);
+    const agent = await reactivateAgent(authUser.id, parsed.data.id);
+    return reply.status(200).send(successResponse(agent));
   } catch (error) {
     return handleAdminError(request, reply, error);
   }

@@ -3,6 +3,9 @@ import { authenticate } from '../../middleware/authenticate';
 import { requireRole } from '../../middleware/requireRole';
 import {
   addFundsHandler,
+  createAgentHandler,
+  deactivateAgentHandler,
+  getAgentsHandler,
   getAllTransactionsHandler,
   getAnalyticsHandler,
   getAuditLogHandler,
@@ -12,6 +15,8 @@ import {
   getStatsHandler,
   getUserByIdHandler,
   getUsersHandler,
+  notifyAgentHandler,
+  reactivateAgentHandler,
   resolveFraudAlertHandler,
   suspendUserHandler,
   unsuspendUserHandler,
@@ -37,4 +42,10 @@ export default async function adminRoutes(fastify: FastifyInstance): Promise<voi
   // Not in the original route list, but admin.service.ts's getAuditLog() has no
   // other way to be reached — "all admin actions should be logged" implies a way to read them back.
   fastify.get('/audit-log', getAuditLogHandler);
+
+  fastify.post('/agents', createAgentHandler);
+  fastify.get('/agents', getAgentsHandler);
+  fastify.delete('/agents/:id', deactivateAgentHandler);
+  fastify.patch('/agents/:id/reactivate', reactivateAgentHandler);
+  fastify.post('/agents/:id/notify', notifyAgentHandler);
 }

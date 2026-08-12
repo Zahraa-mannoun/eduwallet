@@ -4,6 +4,7 @@ import { requireRole } from '../../middleware/requireRole';
 import {
   getSupportMessagesHandler,
   markSupportMessageReadHandler,
+  replySupportMessageHandler,
   sendGeneralSupportMessageHandler,
   sendSupportMessageHandler,
 } from './support.controller';
@@ -38,5 +39,10 @@ export default async function supportRoutes(fastify: FastifyInstance): Promise<v
     '/messages/:id/read',
     { preHandler: [authenticate, requireRole('ADMIN')] },
     markSupportMessageReadHandler
+  );
+  fastify.post(
+    '/messages/:id/reply',
+    { preHandler: [authenticate, requireRole('ADMIN')] },
+    replySupportMessageHandler
   );
 }

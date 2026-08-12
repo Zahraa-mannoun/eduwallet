@@ -2,6 +2,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { AppError } from '../../utils/AppError';
 import { errorResponse, successResponse } from '../../utils/apiResponse';
 import {
+  replySupportMessageSchema,
   sendGeneralSupportMessageSchema,
   sendSupportMessageSchema,
   supportMessageIdParamsSchema,
@@ -9,6 +10,7 @@ import {
 import {
   getSupportMessages,
   markSupportMessageRead,
+  replySupportMessage,
   sendGeneralSupportMessage,
   sendSupportMessage,
 } from './support.service';
@@ -89,6 +91,32 @@ export async function markSupportMessageReadHandler(request: FastifyRequest, rep
     requireAuthUser(request);
     const message = await markSupportMessageRead(parsed.data.id);
     return reply.status(200).send(successResponse(message));
+  } catch (error) {
+    return handleSupportError(request, reply, error);
+  }
+}
+
+export async function replySupportMessageHandler(request: FastifyRequest, reply: FastifyReply) {
+  const paramsParsed = supportMessageIdParamsSchema.safeParse(request.params);
+  if (!paramsParsed.success) {
+    return reply
+      .status(400)
+      .send(
+        errorResponse(paramsParsed.error.issues[0]?.message ?? 'Invalid input', 'VALIDATION_ERROR')
+      );
+  }
+
+  const bodyParsed = replySupportMessageSchema.safeParse(request.body);
+  if (!bodyParsed.success) {
+    return reply
+      .status(400)
+      .send(errorResponse(bodyParsed.error.issues[0]?.message ?? 'Invalid input', 'VALIDATION_ERROR'));
+  }
+
+  try {
+    requireAuthUser(request);
+    await replySupportMessage(paramsParsed.data.id, bodyParsed.data);
+    return reply.status(200).send(successResponse({ message: 'Reply sent' }));
   } catch (error) {
     return handleSupportError(request, reply, error);
   }

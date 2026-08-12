@@ -40,7 +40,7 @@ export type RootStackParamList = {
   TransactionHistory: undefined;
   TransactionDetail: { transactionId: string };
   ApprovalRequest: { transaction: Transaction; studentName: string };
-  ParentStudentDetail: { studentId: string; studentName: string };
+  ParentStudentDetail: { studentId: string; studentName: string; studentEmail: string };
   KYC: undefined;
   PersonalSavings: undefined;
   ReportRequest: undefined;

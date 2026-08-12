@@ -2,7 +2,11 @@ import type { SupportMessage } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
 import { createNotification } from '../notifications/notifications.service';
-import type { SendGeneralSupportMessageInput, SendSupportMessageInput } from './support.schema';
+import type {
+  ReplySupportMessageInput,
+  SendGeneralSupportMessageInput,
+  SendSupportMessageInput,
+} from './support.schema';
 
 const supportMessageUserSelect = {
   select: { id: true, fullName: true, email: true, userType: true, suspended: true },
@@ -90,4 +94,19 @@ export async function markSupportMessageRead(messageId: string): Promise<Support
     where: { id: messageId },
     data: { status: 'READ' },
   });
+}
+
+// Replying doesn't persist a reply on the SupportMessage row itself (there's no thread/reply
+// field on the model) — it notifies the sender directly, same as every other "admin responds
+// to a user" flow in the app (suspend reason, receipt review note, etc).
+export async function replySupportMessage(
+  messageId: string,
+  input: ReplySupportMessageInput
+): Promise<void> {
+  const message = await prisma.supportMessage.findUnique({ where: { id: messageId } });
+  if (!message) {
+    throw new AppError(404, 'SUPPORT_MESSAGE_NOT_FOUND', 'Support message not found');
+  }
+
+  await createNotification(message.userId, 'Reply from Admin', input.message, 'SUPPORT_MESSAGE_REPLY');
 }

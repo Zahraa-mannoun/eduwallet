@@ -9,6 +9,8 @@ import { Analytics } from './pages/Analytics';
 import { Students } from './pages/Students';
 import { Parents } from './pages/Parents';
 import { Institutions } from './pages/Institutions';
+import { Agents } from './pages/Agents';
+import { AgentMessages } from './pages/AgentMessages';
 import { Transactions } from './pages/Transactions';
 import { AgentWithdrawals } from './pages/AgentWithdrawals';
 import { Relationships } from './pages/Relationships';
@@ -76,6 +78,14 @@ export function App() {
         />
         <Route path="/users" element={<Navigate to="/users/students" replace />} />
         <Route
+          path="/agents"
+          element={
+            <ProtectedPage>
+              <Agents />
+            </ProtectedPage>
+          }
+        />
+        <Route
           path="/transactions"
           element={
             <ProtectedPage>
@@ -88,6 +98,14 @@ export function App() {
           element={
             <ProtectedPage>
               <AgentWithdrawals />
+            </ProtectedPage>
+          }
+        />
+        <Route
+          path="/agent-messages"
+          element={
+            <ProtectedPage>
+              <AgentMessages />
             </ProtectedPage>
           }
         />

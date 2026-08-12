@@ -38,6 +38,8 @@ export type AdminUser = User & {
   hasSupportMessage: boolean;
 };
 
+export type AgentRow = User & { withdrawalsCount: number };
+
 export type SystemStats = {
   users: {
     total: number;
@@ -45,16 +47,20 @@ export type SystemStats = {
     studentCount: number;
     parentCount: number;
     institutionCount: number;
+    agentCount: number;
+    adminCount: number;
   };
   transactions: { total: number; byStatus: Record<string, number>; totalVolume: number };
   fraudAlerts: { active: number };
   kyc: { pending: number };
   wallets: { total: number; balanceByCurrency: Record<string, number> };
-  withdrawals: { totalCompleted: number };
+  withdrawals: { totalCompleted: number; today: number };
   reportRequests: { pending: number };
   emailChangeRequests: { pending: number };
   personalSavings: { totalBalance: number };
   scholarships: { totalThisMonth: number };
+  agents: { active: number; suspended: number };
+  agentMessages: { pending: number };
 };
 
 export type AnalyticsResult = {

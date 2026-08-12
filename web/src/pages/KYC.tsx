@@ -16,6 +16,7 @@ type KYCStudentRow = {
   studentName: string;
   studentEmail: string;
   kycStatus: KYCStatus;
+  kycRejectionReason: string | null;
   studentIdDoc: AcademicDocument | null;
   enrollmentDoc: AcademicDocument | null;
   hasDocuments: boolean;
@@ -46,6 +47,7 @@ function toStudentRow(user: PendingKYCRow): KYCStudentRow {
     studentName: user.fullName,
     studentEmail: user.email,
     kycStatus: user.kycStatus,
+    kycRejectionReason: user.kycRejectionReason,
     studentIdDoc,
     enrollmentDoc,
     hasDocuments: user.documents.length > 0,
@@ -122,6 +124,7 @@ export function KYC() {
   const [isLoading, setIsLoading] = useState(true);
   const [rejectTarget, setRejectTarget] = useState<KYCStudentRow | null>(null);
   const [approveTarget, setApproveTarget] = useState<KYCStudentRow | null>(null);
+  const [reasonTarget, setReasonTarget] = useState<KYCStudentRow | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -208,7 +211,17 @@ export function KYC() {
                 <tr key={row.userId}>
                   <td className="px-4 py-3 font-medium text-slate-900">
                     <div className="flex items-center gap-1.5">
-                      <span>{row.studentName}</span>
+                      {row.kycStatus === 'REJECTED' && !row.hasResubmitted ? (
+                        <button
+                          type="button"
+                          onClick={() => setReasonTarget(row)}
+                          className="underline decoration-dotted underline-offset-2 hover:text-primary"
+                        >
+                          {row.studentName}
+                        </button>
+                      ) : (
+                        <span>{row.studentName}</span>
+                      )}
                       {row.hasResubmitted && (
                         <>
                           <span
@@ -327,6 +340,23 @@ export function KYC() {
             void load();
           }}
         />
+      )}
+
+      {reasonTarget && (
+        <Modal title={`Rejection Reason — ${reasonTarget.studentName}`} onClose={() => setReasonTarget(null)}>
+          <p className="text-sm text-slate-600">
+            {reasonTarget.kycRejectionReason ?? 'No reason was provided.'}
+          </p>
+          <div className="mt-4 flex justify-end">
+            <button
+              type="button"
+              onClick={() => setReasonTarget(null)}
+              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            >
+              Close
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   );

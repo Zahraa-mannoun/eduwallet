@@ -1,3 +1,4 @@
+import bcrypt from 'bcrypt';
 import type {
   AcademicDocument,
   AdminAuditLog,
@@ -9,14 +10,18 @@ import type {
 } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
+import { revokeRefreshToken } from '../auth/auth.service';
 import { toSafeUser } from '../auth/auth.types';
 import type { SafeUser } from '../auth/auth.types';
 import { createNotification } from '../notifications/notifications.service';
 import type {
   AddFundsInput,
+  CreateAgentInput,
   GetAllTransactionsInput,
   GetUsersInput,
 } from './admin.schema';
+
+const SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS ?? 12);
 
 const transactionPartyInclude = {
   fromWallet: { include: { user: { select: { id: true, fullName: true, email: true, userType: true } } } },
@@ -398,16 +403,20 @@ export type SystemStats = {
     studentCount: number;
     parentCount: number;
     institutionCount: number;
+    agentCount: number;
+    adminCount: number;
   };
   transactions: { total: number; byStatus: Record<string, number>; totalVolume: number };
   fraudAlerts: { active: number };
   kyc: { pending: number };
   wallets: { total: number; balanceByCurrency: Record<string, number> };
-  withdrawals: { totalCompleted: number };
+  withdrawals: { totalCompleted: number; today: number };
   reportRequests: { pending: number };
   emailChangeRequests: { pending: number };
   personalSavings: { totalBalance: number };
   scholarships: { totalThisMonth: number };
+  agents: { active: number; suspended: number };
+  agentMessages: { pending: number };
 };
 
 function getCurrentMonthRange(): { start: Date; end: Date } {
@@ -415,6 +424,11 @@ function getCurrentMonthRange(): { start: Date; end: Date } {
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
   return { start, end };
+}
+
+function getTodayStart(): Date {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
 export async function getSystemStats(): Promise<SystemStats> {
@@ -440,15 +454,23 @@ export async function getSystemStats(): Promise<SystemStats> {
   ]);
 
   const { start: monthStart, end: monthEnd } = getCurrentMonthRange();
+  const todayStart = getTodayStart();
 
   const [
     totalCompletedWithdrawals,
+    withdrawalsToday,
     pendingReportRequests,
     pendingEmailChangeRequests,
     personalSavingsSum,
     scholarshipsThisMonth,
+    activeAgents,
+    suspendedAgents,
+    pendingAgentMessages,
   ] = await Promise.all([
     prisma.withdrawalRequest.count({ where: { status: 'COMPLETED' } }),
+    prisma.withdrawalRequest.count({
+      where: { status: 'COMPLETED', completedAt: { gte: todayStart } },
+    }),
     prisma.reportRequest.count({ where: { status: 'PENDING' } }),
     prisma.emailChangeRequest.count({ where: { status: 'PENDING' } }),
     prisma.personalSavings.aggregate({ _sum: { balance: true } }),
@@ -460,6 +482,9 @@ export async function getSystemStats(): Promise<SystemStats> {
       },
       _sum: { amount: true },
     }),
+    prisma.user.count({ where: { userType: 'AGENT', suspended: false } }),
+    prisma.user.count({ where: { userType: 'AGENT', suspended: true } }),
+    prisma.supportMessage.count({ where: { type: 'AGENT_MESSAGE', status: 'UNREAD' } }),
   ]);
 
   const byType = Object.fromEntries(usersByType.map((row) => [row.userType, row._count]));
@@ -471,6 +496,8 @@ export async function getSystemStats(): Promise<SystemStats> {
       studentCount: byType.STUDENT ?? 0,
       parentCount: byType.PARENT ?? 0,
       institutionCount: byType.INSTITUTION ?? 0,
+      agentCount: byType.AGENT ?? 0,
+      adminCount: byType.ADMIN ?? 0,
     },
     transactions: {
       total: totalTransactions,
@@ -485,11 +512,13 @@ export async function getSystemStats(): Promise<SystemStats> {
         walletsByCurrency.map((row) => [row.currency, Number(row._sum.balance ?? 0)])
       ),
     },
-    withdrawals: { totalCompleted: totalCompletedWithdrawals },
+    withdrawals: { totalCompleted: totalCompletedWithdrawals, today: withdrawalsToday },
     reportRequests: { pending: pendingReportRequests },
     emailChangeRequests: { pending: pendingEmailChangeRequests },
     personalSavings: { totalBalance: Number(personalSavingsSum._sum.balance ?? 0) },
     scholarships: { totalThisMonth: Number(scholarshipsThisMonth._sum.amount ?? 0) },
+    agents: { active: activeAgents, suspended: suspendedAgents },
+    agentMessages: { pending: pendingAgentMessages },
   };
 }
 
@@ -767,4 +796,109 @@ export async function getAuditLog(): Promise<AdminAuditLog[]> {
     orderBy: { createdAt: 'desc' },
     take: 50,
   });
+}
+
+export type AgentRow = SafeUser & { withdrawalsCount: number };
+
+export async function createAgent(adminId: string, input: CreateAgentInput): Promise<SafeUser> {
+  const existing = await prisma.user.findUnique({ where: { email: input.email } });
+  if (existing) {
+    throw new AppError(409, 'EMAIL_ALREADY_EXISTS', 'An account with this email already exists');
+  }
+
+  const hashedPassword = await bcrypt.hash(input.password, SALT_ROUNDS);
+
+  const agent = await prisma.user.create({
+    data: {
+      email: input.email,
+      password: hashedPassword,
+      fullName: input.fullName,
+      userType: 'AGENT',
+      wallets: { create: { balance: 0 } },
+    },
+  });
+
+  await logAdminAction(adminId, 'CREATE_AGENT', agent.id, input.email);
+
+  return toSafeUser(agent);
+}
+
+export async function getAgents(): Promise<AgentRow[]> {
+  const agents = await prisma.user.findMany({
+    where: { userType: 'AGENT' },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const agentIds = agents.map((agent) => agent.id);
+  const grouped =
+    agentIds.length > 0
+      ? await prisma.withdrawalRequest.groupBy({
+          by: ['agentId'],
+          where: { agentId: { in: agentIds } },
+          _count: true,
+        })
+      : [];
+  const withdrawalsCountByAgentId = new Map(grouped.map((row) => [row.agentId, row._count]));
+
+  return agents.map((agent) => ({
+    ...toSafeUser(agent),
+    withdrawalsCount: withdrawalsCountByAgentId.get(agent.id) ?? 0,
+  }));
+}
+
+export async function deactivateAgent(
+  adminId: string,
+  agentId: string,
+  reason: string
+): Promise<SafeUser> {
+  const agent = await prisma.user.findUnique({ where: { id: agentId } });
+  if (!agent || agent.userType !== 'AGENT') {
+    throw new AppError(404, 'AGENT_NOT_FOUND', 'Agent not found');
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: agentId },
+    data: { suspended: true, suspensionReason: reason },
+  });
+
+  // Kills their refresh token immediately (blocks /auth/refresh once the short-lived access
+  // token expires) — and if they're actively using the portal, authenticate() below rejects
+  // their very next request with ACCOUNT_SUSPENDED anyway since it re-reads `suspended` from
+  // the DB on every call, so in practice this logs them out within seconds, not 15 minutes.
+  await revokeRefreshToken(agentId);
+
+  await logAdminAction(adminId, 'DEACTIVATE_AGENT', agentId, reason);
+
+  return toSafeUser(updated);
+}
+
+export async function sendAgentNotification(
+  adminId: string,
+  agentId: string,
+  message: string
+): Promise<void> {
+  const agent = await prisma.user.findUnique({ where: { id: agentId } });
+  if (!agent || agent.userType !== 'AGENT') {
+    throw new AppError(404, 'AGENT_NOT_FOUND', 'Agent not found');
+  }
+
+  await createNotification(agentId, 'Message from Admin', message, 'ADMIN_MESSAGE');
+
+  await logAdminAction(adminId, 'NOTIFY_AGENT', agentId, message);
+}
+
+export async function reactivateAgent(adminId: string, agentId: string): Promise<SafeUser> {
+  const agent = await prisma.user.findUnique({ where: { id: agentId } });
+  if (!agent || agent.userType !== 'AGENT') {
+    throw new AppError(404, 'AGENT_NOT_FOUND', 'Agent not found');
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: agentId },
+    data: { suspended: false, suspensionReason: null },
+  });
+
+  await logAdminAction(adminId, 'REACTIVATE_AGENT', agentId);
+
+  return toSafeUser(updated);
 }

@@ -1,8 +1,12 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { ApiResponse, ProcessWithdrawalResult, StudentLookup, TransactionCategory } from '../types';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Modal } from '../components/Modal';
+import { AgentStatsCard } from '../components/AgentStatsCard';
+import type { AgentStatsCardHandle } from '../components/AgentStatsCard';
+import { useAuth } from '../context/AuthContext';
+import { IconCheckCircle, IconSearch, IconUserSearch, IconWallet } from '../components/icons';
 
 function formatMoney(amount: string): string {
   return `$${Number(amount).toFixed(2)}`;
@@ -93,10 +97,13 @@ function ConfirmDispenseModal({
 }
 
 export function ProcessWithdrawal() {
+  const { agent } = useAuth();
+  const statsRef = useRef<AgentStatsCardHandle>(null);
   const [query, setQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [student, setStudent] = useState<StudentLookup | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
 
   const [category, setCategory] = useState<TransactionCategory | null>(null);
   const [amount, setAmount] = useState('');
@@ -112,6 +119,7 @@ export function ProcessWithdrawal() {
     setSearchError(null);
     setStudent(null);
     setResultMessage(null);
+    setHasSearched(true);
     try {
       const res = await api.get<ApiResponse<StudentLookup>>('/withdrawals/lookup-student', {
         params: { query: query.trim() },
@@ -168,57 +176,104 @@ export function ProcessWithdrawal() {
     setQuery('');
     setCategory(null);
     setAmount('');
+    setHasSearched(false);
+    statsRef.current?.refresh();
   };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-lg font-semibold text-slate-900">Process Withdrawal</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Search for a student to dispense cash from their wallet.
+      <div className="overflow-hidden rounded-xl bg-gradient-to-br from-primary to-primary-700 px-6 py-6 text-white shadow-sm">
+        <p className="text-sm font-medium text-primary-100">Welcome back</p>
+        <div className="mt-1 flex items-center gap-3">
+          <h1 className="text-xl font-semibold">{agent?.fullName ?? 'Agent'}</h1>
+          <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide">
+            Agent
+          </span>
+        </div>
+        <p className="mt-1 text-sm text-primary-100">
+          Search for a student to dispense a cash withdrawal from their wallet.
         </p>
       </div>
 
+      <AgentStatsCard ref={statsRef} />
+
       {resultMessage && (
-        <p
-          className={`rounded-md px-3 py-2 text-sm ${
+        <div
+          className={`flex items-start gap-2 rounded-md px-3 py-2.5 text-sm ${
             resultMessage.tone === 'success'
               ? 'bg-emerald-50 text-emerald-700'
               : 'bg-amber-50 text-amber-700'
           }`}
         >
-          {resultMessage.text}
-        </p>
+          <IconCheckCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{resultMessage.text}</span>
+        </div>
       )}
 
-      <form onSubmit={handleSearch} className="flex gap-2">
-        <input
-          type="text"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Student email or student number"
-          className="w-full max-w-md rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-        />
-        <button
-          type="submit"
-          disabled={isSearching || !query.trim()}
-          className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-60"
-        >
-          {isSearching ? 'Searching…' : 'Search'}
-        </button>
-      </form>
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="mb-4 flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-50 text-primary">
+            <IconSearch className="h-4 w-4" />
+          </div>
+          <h2 className="text-sm font-semibold text-slate-900">Find a Student</h2>
+        </div>
+        <form onSubmit={handleSearch} className="flex gap-2">
+          <input
+            type="text"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Student email or student number"
+            className="w-full max-w-md rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+          <button
+            type="submit"
+            disabled={isSearching || !query.trim()}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-60"
+          >
+            {isSearching ? 'Searching…' : 'Search'}
+          </button>
+        </form>
 
-      {searchError && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{searchError}</p>}
+        {searchError && (
+          <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{searchError}</p>
+        )}
+      </div>
+
+      {!hasSearched && !student && (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white py-14 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-50 text-primary">
+            <IconUserSearch className="h-6 w-6" />
+          </div>
+          <p className="mt-3 text-sm font-medium text-slate-700">No student selected yet</p>
+          <p className="mt-1 max-w-xs text-sm text-slate-400">
+            Search by email or student number above to get started.
+          </p>
+        </div>
+      )}
 
       {student && (
-        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-            <div>
-              <p className="text-base font-semibold text-slate-900">{student.user.fullName}</p>
-              <p className="text-sm text-slate-500">{student.user.email}</p>
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary-100 text-sm font-semibold text-primary">
+                {student.user.fullName
+                  .split(/\s+/)
+                  .map((part) => part[0])
+                  .filter(Boolean)
+                  .slice(0, 2)
+                  .join('')
+                  .toUpperCase()}
+              </div>
+              <div>
+                <p className="text-base font-semibold text-slate-900">{student.user.fullName}</p>
+                <p className="text-sm text-slate-500">{student.user.email}</p>
+              </div>
             </div>
             <div className="text-right">
-              <p className="text-xs text-slate-500">Wallet Balance</p>
+              <div className="flex items-center justify-end gap-1 text-xs text-slate-500">
+                <IconWallet className="h-3.5 w-3.5" />
+                Wallet Balance
+              </div>
               <p className="text-lg font-semibold text-slate-900">{formatMoney(student.wallet.balance)}</p>
               <p className="mt-1 text-xs text-slate-500">Free (unlocked)</p>
               <p className="text-sm font-medium text-slate-700">{formatMoney(student.freeBalance)}</p>
