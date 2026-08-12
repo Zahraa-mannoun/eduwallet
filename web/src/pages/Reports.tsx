@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
-import { Modal } from '../components/Modal';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { formatDate } from '../lib/format';
 import { reportStatusTone } from '../lib/badgeTones';
@@ -222,42 +221,58 @@ export function Reports() {
       </div>
 
       {previewReport && (
-        <Modal
-          title={`Report Preview — ${previewReport.student.fullName}`}
-          onClose={closePreview}
-          maxWidthClassName="max-w-4xl"
-        >
-          <div className="space-y-3">
-            <p className="text-sm text-slate-500">
-              For {previewReport.parent.fullName} · {REPORT_PERIOD_LABELS[previewReport.period]}
-            </p>
-
-            {previewError && (
-              <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{previewError}</p>
-            )}
-
-            <div className="h-[70vh] w-full overflow-hidden rounded-md border border-slate-200 bg-slate-50">
-              {isPreviewLoading && (
-                <p className="flex h-full items-center justify-center text-sm text-slate-400">
-                  Loading preview…
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="flex h-[90vh] w-[90vw] flex-col overflow-hidden rounded-lg bg-white shadow-xl">
+            <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Report Preview — {previewReport.student.fullName}
+                </h2>
+                <p className="mt-0.5 text-sm text-slate-500">
+                  For {previewReport.parent.fullName} · {REPORT_PERIOD_LABELS[previewReport.period]}
                 </p>
-              )}
-              {!isPreviewLoading && previewUrl && (
-                <iframe src={previewUrl} title="Report preview" className="h-full w-full" />
-              )}
-              {!isPreviewLoading && !previewUrl && !previewError && (
-                <p className="flex h-full items-center justify-center text-sm text-slate-400">
-                  Could not load the report preview.
-                </p>
-              )}
-            </div>
-
-            <div className="flex justify-end gap-2">
+              </div>
               <button
                 type="button"
                 onClick={closePreview}
                 disabled={isSending}
-                className="rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                aria-label="Close"
+                className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-40"
+              >
+                ✕
+              </button>
+            </div>
+
+            {previewError && (
+              <p className="mx-5 mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                {previewError}
+              </p>
+            )}
+
+            <div className="min-h-0 flex-1 bg-slate-50 p-4">
+              <div className="h-full w-full overflow-hidden rounded-md border border-slate-200 bg-white">
+                {isPreviewLoading && (
+                  <p className="flex h-full items-center justify-center text-sm text-slate-400">
+                    Loading preview…
+                  </p>
+                )}
+                {!isPreviewLoading && previewUrl && (
+                  <iframe src={previewUrl} title="Report preview" className="h-full w-full" />
+                )}
+                {!isPreviewLoading && !previewUrl && !previewError && (
+                  <p className="flex h-full items-center justify-center text-sm text-slate-400">
+                    Could not load the report preview.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
+              <button
+                type="button"
+                onClick={closePreview}
+                disabled={isSending}
+                className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
               >
                 Cancel
               </button>
@@ -266,14 +281,14 @@ export function Reports() {
                   type="button"
                   onClick={() => void handleSendToParent()}
                   disabled={isSending || !previewUrl}
-                  className="rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-40"
+                  className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-40"
                 >
                   {isSending ? 'Sending…' : 'Send to Parent'}
                 </button>
               )}
             </div>
           </div>
-        </Modal>
+        </div>
       )}
     </div>
   );

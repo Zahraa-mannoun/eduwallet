@@ -78,6 +78,27 @@ export function CreateAgentModal({
   return (
     <Modal title="Create Agent" onClose={onClose}>
       <form className="space-y-4" onSubmit={handleSubmit} autoComplete="off">
+        {/* Chrome ignores autoComplete="off" on real fields it thinks are a login form —
+            these decoys sit first in the DOM so its autofill heuristics target them instead
+            of the actual name/email/password inputs below. Kept out of tab order and hidden
+            from screen readers since they're never meant to be seen or filled by a person. */}
+        <input
+          type="text"
+          name="fake-name"
+          tabIndex={-1}
+          autoComplete="off"
+          aria-hidden="true"
+          style={{ display: 'none' }}
+        />
+        <input
+          type="password"
+          name="fake-password"
+          tabIndex={-1}
+          autoComplete="off"
+          aria-hidden="true"
+          style={{ display: 'none' }}
+        />
+
         <div>
           <label htmlFor="agent-name" className="mb-1 block text-sm font-medium text-slate-700">
             Full Name
@@ -122,7 +143,7 @@ export function CreateAgentModal({
               type={passwordVisible ? 'text' : 'password'}
               required
               minLength={8}
-              autoComplete="off"
+              autoComplete="new-password"
               value={password}
               onChange={(event) => {
                 setPasswordEdited(true);

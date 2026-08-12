@@ -3,7 +3,7 @@ import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Sharing from 'expo-sharing';
-import { ActivityIndicator, Button, Chip, IconButton, Text } from 'react-native-paper';
+import { ActivityIndicator, Button, Card, Chip, Divider, IconButton, Text } from 'react-native-paper';
 import type { ReportPeriod, ReportRequest, ReportStatus } from '../types/api';
 import IconBadge from '../components/IconBadge';
 import * as reportService from '../services/reportService';
@@ -95,14 +95,16 @@ export default function ReportHistoryScreen({
           reports.map((report) => {
             const statusMeta = STATUS_META[report.status];
             return (
-              <View key={report.id} style={styles.row}>
-                <IconBadge icon="file-document-outline" color={colors.primary} size={44} />
-                <View style={styles.rowMiddle}>
-                  <Text style={styles.rowTitle}>{report.student.fullName}</Text>
-                  <Text style={styles.rowSubtitle}>{PERIOD_LABELS[report.period]}</Text>
-                  <Text style={styles.rowDate}>Requested {formatDate(report.createdAt)}</Text>
-                </View>
-                <View style={styles.rowRight}>
+              <Card key={report.id} style={styles.card} mode="elevated">
+                <Card.Content style={styles.cardContent}>
+                  <IconBadge icon="file-document-outline" color={colors.primary} size={44} />
+                  <View style={styles.cardMiddle}>
+                    <Text style={styles.rowTitle} numberOfLines={1}>
+                      {report.student.fullName}
+                    </Text>
+                    <Text style={styles.rowSubtitle}>{PERIOD_LABELS[report.period]}</Text>
+                    <Text style={styles.rowDate}>Requested {formatDate(report.createdAt)}</Text>
+                  </View>
                   <Chip
                     compact
                     style={[styles.statusChip, { backgroundColor: `${statusMeta.color}1F` }]}
@@ -110,20 +112,27 @@ export default function ReportHistoryScreen({
                   >
                     {statusMeta.label}
                   </Chip>
-                  {report.status === 'SENT' ? (
-                    <Button
-                      mode="text"
-                      compact
-                      loading={downloadingId === report.id}
-                      disabled={downloadingId === report.id}
-                      onPress={() => void handleDownload(report)}
-                      style={styles.downloadButton}
-                    >
-                      Download
-                    </Button>
-                  ) : null}
-                </View>
-              </View>
+                </Card.Content>
+
+                {report.status === 'SENT' ? (
+                  <>
+                    <Divider />
+                    <Card.Actions style={styles.cardActions}>
+                      <Button
+                        mode="contained-tonal"
+                        icon="download"
+                        loading={downloadingId === report.id}
+                        disabled={downloadingId === report.id}
+                        onPress={() => void handleDownload(report)}
+                        style={styles.downloadButton}
+                        contentStyle={styles.downloadButtonContent}
+                      >
+                        Download
+                      </Button>
+                    </Card.Actions>
+                  </>
+                ) : null}
+              </Card>
             );
           })
         ) : (
@@ -173,15 +182,17 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: 12,
   },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  card: {
     backgroundColor: colors.surface,
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 10,
+    borderRadius: 16,
+    marginBottom: 14,
   },
-  rowMiddle: {
+  cardContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 14,
+  },
+  cardMiddle: {
     flex: 1,
     marginLeft: 12,
     marginRight: 8,
@@ -189,25 +200,35 @@ const styles = StyleSheet.create({
   rowTitle: {
     fontWeight: '700',
     color: colors.heading,
-    fontSize: 13,
+    fontSize: 14,
+    lineHeight: 19,
   },
   rowSubtitle: {
     fontSize: 12,
     color: colors.muted,
-    marginTop: 2,
+    marginTop: 4,
+    lineHeight: 16,
   },
   rowDate: {
     fontSize: 11,
     color: colors.muted,
     marginTop: 4,
-  },
-  rowRight: {
-    alignItems: 'flex-end',
+    lineHeight: 15,
   },
   statusChip: {
-    height: 24,
+    height: 26,
+    marginTop: 2,
+  },
+  cardActions: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 14,
   },
   downloadButton: {
-    marginTop: 4,
+    flex: 1,
+    borderRadius: 10,
+  },
+  downloadButtonContent: {
+    paddingVertical: 2,
   },
 });

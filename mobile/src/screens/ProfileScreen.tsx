@@ -1,8 +1,8 @@
-import { useCallback, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Alert, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Avatar, Button, Chip, Divider, List, Text } from 'react-native-paper';
+import { Avatar, Button, Chip, Divider, IconButton, List, Text } from 'react-native-paper';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NavigationProp } from '@react-navigation/native';
 import { USER_TYPES } from '../constants/userTypes';
@@ -53,11 +53,25 @@ type ProfileScreenProps = Readonly<{
   navigation: NavigationProp<RootStackParamList>;
 }>;
 
+const NO_LINKED_STUDENTS_MESSAGE =
+  'You have no linked students yet. Link a student first to view their receipts.';
+const NO_LINKED_STUDENTS_MESSAGE_TIMEOUT_MS = 3000;
+
 export default function ProfileScreen({ navigation }: ProfileScreenProps) {
   const { user, logout, refreshUser } = useAuth();
   const displayName = user?.fullName || 'there';
   const typeDefinition = USER_TYPES.find((type) => type.key === user?.userType) ?? USER_TYPES[0];
   const [hasKycDocuments, setHasKycDocuments] = useState(false);
+  // react-native-web's Alert.alert() is a no-op — this is the web fallback for the
+  // "no linked students" case, shown as a dismissible inline banner instead. Native keeps the
+  // real Alert.alert() popup.
+  const [noStudentsMessage, setNoStudentsMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!noStudentsMessage) return;
+    const timer = setTimeout(() => setNoStudentsMessage(null), NO_LINKED_STUDENTS_MESSAGE_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [noStudentsMessage]);
 
   const loadKycDocuments = useCallback(async () => {
     if (user?.userType !== 'STUDENT') return;
@@ -93,15 +107,21 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
     navigation.navigate('ParentStudentDetail', { studentId, studentName, studentEmail });
   };
 
+  const showNoLinkedStudentsMessage = () => {
+    if (Platform.OS === 'web') {
+      setNoStudentsMessage(NO_LINKED_STUDENTS_MESSAGE);
+    } else {
+      Alert.alert('No Linked Students', NO_LINKED_STUDENTS_MESSAGE, [{ text: 'OK' }]);
+    }
+  };
+
   const handleStudentReceiptsPress = async () => {
+    console.log('Student Receipts pressed');
     try {
       const students = await parentalService.getLinkedStudents();
+      console.log('Student Receipts pressed — loaded students', students);
       if (students.length === 0) {
-        Alert.alert(
-          'No Linked Students',
-          'You have no linked students yet. Link a student first to view their receipts.',
-          [{ text: 'OK' }]
-        );
+        showNoLinkedStudentsMessage();
         return;
       }
       if (students.length === 1) {
@@ -119,12 +139,9 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
         })),
         { text: 'Cancel', style: 'cancel' as const },
       ]);
-    } catch {
-      Alert.alert(
-        'No Linked Students',
-        'You have no linked students yet. Link a student first to view their receipts.',
-        [{ text: 'OK' }]
-      );
+    } catch (err) {
+      console.log('Student Receipts pressed — getLinkedStudents threw', err);
+      showNoLinkedStudentsMessage();
     }
   };
 
@@ -236,6 +253,19 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
                 left={renderLeftIcon(item.icon)}
                 right={renderRightWithBadge('badge' in item ? item.badge : undefined)}
               />
+              {item.title === 'Student Receipts' && noStudentsMessage ? (
+                <View style={styles.inlineMessageBanner}>
+                  <Text style={styles.inlineMessageText}>{noStudentsMessage}</Text>
+                  <IconButton
+                    icon="close"
+                    size={14}
+                    iconColor={colors.danger}
+                    style={styles.inlineMessageClose}
+                    accessibilityLabel="Dismiss"
+                    onPress={() => setNoStudentsMessage(null)}
+                  />
+                </View>
+              ) : null}
               {index < ACCOUNT_LINKS.length - 1 && <Divider />}
             </View>
           ))}
@@ -286,6 +316,25 @@ const styles = StyleSheet.create({
   menuBadgeText: {
     fontSize: 11,
     fontWeight: '700',
+  },
+  inlineMessageBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: `${colors.danger}1F`,
+    borderRadius: 10,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingVertical: 8,
+    paddingLeft: 12,
+  },
+  inlineMessageText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.danger,
+  },
+  inlineMessageClose: {
+    margin: 0,
   },
   secondSection: {
     marginTop: 16,
