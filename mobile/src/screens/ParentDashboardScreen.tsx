@@ -4,19 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import {
-  ActivityIndicator,
-  Avatar,
-  Badge,
-  Button,
-  Card,
-  Chip,
-  Dialog,
-  IconButton,
-  Portal,
-  Text,
-} from 'react-native-paper';
-import type { Transaction } from '../types/api';
+import { ActivityIndicator, Avatar, Badge, Card, Dialog, IconButton, Portal, Text } from 'react-native-paper';
 import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryKey } from '../constants/budgetCategories';
@@ -26,19 +14,53 @@ import { colors } from '../theme/colors';
 import { getInitials } from '../utils/getInitials';
 import * as parentalService from '../services/parentalService';
 import type { LinkedStudent, StudentSpendingBreakdown } from '../services/parentalService';
+import * as savingsService from '../services/savingsService';
+import * as walletService from '../services/walletService';
+import * as withdrawalService from '../services/withdrawalService';
 import { ApiError } from '../services/api';
-import { classifyTransaction, transactionStatusMeta } from '../utils/transactionDisplay';
 import { progressColorFor } from '../utils/progressColor';
 import type { ParentTabScreenProps } from '../navigation/types';
 
 const categoryLookup = new Map(BUDGET_CATEGORIES.map((category) => [category.key, category]));
-const PENDING_PREVIEW_COUNT = 2;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 
-function transactionTitle(transaction: Transaction): string {
-  if (transaction.note) return transaction.note;
-  const category = categoryLookup.get(transaction.category.toLowerCase() as BudgetCategoryKey);
-  return category?.label ?? 'Payment';
+function isThisMonth(isoDate: string): boolean {
+  const date = new Date(isoDate);
+  const now = new Date();
+  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+}
+
+function StatCard({
+  icon,
+  color,
+  value,
+  label,
+  onPress,
+}: Readonly<{
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  color: string;
+  value: string;
+  label: string;
+  onPress?: () => void;
+}>) {
+  return (
+    <TouchableOpacity
+      style={styles.statCard}
+      activeOpacity={onPress ? 0.85 : 1}
+      disabled={!onPress}
+      onPress={onPress}
+    >
+      <View style={[styles.statIconCircle, { backgroundColor: `${color}1F` }]}>
+        <MaterialCommunityIcons name={icon} size={18} color={color} />
+      </View>
+      <Text style={styles.statValue} numberOfLines={1}>
+        {value}
+      </Text>
+      <Text style={styles.statLabel} numberOfLines={1}>
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
 }
 
 export default function ParentDashboardScreen({
@@ -47,7 +69,9 @@ export default function ParentDashboardScreen({
   const { wallet: parentWallet, refresh: refreshParentWallet } = useWallet();
   const { unreadCount } = useNotifications();
   const [students, setStudents] = useState<LinkedStudent[]>([]);
-  const [approvals, setApprovals] = useState<Transaction[]>([]);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
+  const [totalSentThisMonth, setTotalSentThisMonth] = useState(0);
+  const [totalLockedFunds, setTotalLockedFunds] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [breakdownVisible, setBreakdownVisible] = useState(false);
@@ -60,18 +84,39 @@ export default function ParentDashboardScreen({
     setIsLoading(true);
     setError(null);
     try {
-      const [studentsResult, approvalsResult] = await Promise.all([
-        parentalService.getLinkedStudents(),
-        parentalService.getPendingApprovals(),
-      ]);
+      const [studentsResult, approvalsResult, savingsResult, cashResult, transactionsResult] =
+        await Promise.all([
+          parentalService.getLinkedStudents(),
+          parentalService.getPendingApprovals(),
+          savingsService.getWithdrawalRequests(),
+          withdrawalService.getPendingApprovals(),
+          walletService.getTransactions({ limit: 100 }),
+        ]);
       setStudents(studentsResult);
-      setApprovals(approvalsResult);
+      setPendingApprovalsCount(approvalsResult.length + savingsResult.length + cashResult.length);
+
+      const sentThisMonth = transactionsResult.transactions
+        .filter(
+          (t) =>
+            t.fromWalletId === parentWallet?.id &&
+            (t.status === 'AUTO_APPROVED' || t.status === 'APPROVED') &&
+            isThisMonth(t.createdAt)
+        )
+        .reduce((sum, t) => sum + Number(t.amount), 0);
+      setTotalSentThisMonth(sentThisMonth);
+
+      const lockedTotal = studentsResult.reduce(
+        (sum, { wallets }) =>
+          sum + wallets.reduce((s2, w) => s2 + w.lockedFunds.reduce((s3, f) => s3 + Number(f.amount), 0), 0),
+        0
+      );
+      setTotalLockedFunds(lockedTotal);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to load your dashboard.');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [parentWallet?.id]);
 
   const refreshDashboard = useCallback(() => {
     void load();
@@ -85,16 +130,6 @@ export default function ParentDashboardScreen({
       refreshDashboard();
     }, [refreshDashboard])
   );
-
-  const walletToStudentName = useMemo(() => {
-    const map = new Map<string, string>();
-    students.forEach(({ student, wallets }) => {
-      wallets.forEach((wallet) => map.set(wallet.id, student.fullName));
-    });
-    return map;
-  }, [students]);
-
-  const pendingPreview = approvals.slice(0, PENDING_PREVIEW_COUNT);
 
   const openBreakdown = useCallback(async (linkedStudent: LinkedStudent) => {
     setSelectedStudent(linkedStudent);
@@ -223,76 +258,33 @@ export default function ParentDashboardScreen({
           </Card>
         )}
 
-        <View style={[styles.pendingHeaderRow, styles.pendingHeaderRowSpacing]}>
-          <View style={styles.sectionLabelRow}>
-            <Text style={styles.sectionLabel}>Pending Approvals</Text>
-            {approvals.length > 0 ? (
-              <View style={styles.pendingCountBadge}>
-                <Text style={styles.pendingCountBadgeText}>{approvals.length}</Text>
-              </View>
-            ) : null}
-          </View>
-          <Button
-            mode="text"
-            compact
-            textColor={colors.primary}
+        <Text style={[styles.sectionLabel, styles.statsSectionSpacing]}>This Month's Overview</Text>
+        <View style={styles.statsGrid}>
+          <StatCard
+            icon="send-outline"
+            color={colors.primary}
+            value={`$${totalSentThisMonth.toFixed(2)}`}
+            label="Total Sent"
+          />
+          <StatCard
+            icon="clock-alert-outline"
+            color="#F59E0B"
+            value={String(pendingApprovalsCount)}
+            label="Pending Approvals"
             onPress={() => navigation.navigate('Approvals')}
-          >
-            See All
-          </Button>
-        </View>
-        <View style={styles.pendingCard}>
-          {pendingPreview.length > 0 ? (
-            pendingPreview.map((transaction) => {
-              const category = categoryLookup.get(
-                transaction.category.toLowerCase() as BudgetCategoryKey
-              );
-              const type = classifyTransaction(transaction, false);
-              const statusMeta = transactionStatusMeta(transaction, type);
-              const studentName = transaction.fromWalletId
-                ? (walletToStudentName.get(transaction.fromWalletId) ?? 'Student')
-                : 'Student';
-              return (
-                <TouchableOpacity
-                  key={transaction.id}
-                  style={styles.approvalRow}
-                  onPress={() =>
-                    navigation.navigate('ApprovalRequest', { transaction, studentName })
-                  }
-                >
-                  <IconBadge
-                    icon={category?.icon ?? 'wallet-outline'}
-                    color={category?.color ?? colors.primary}
-                    size={44}
-                  />
-                  <View style={styles.approvalMiddle}>
-                    <Text style={styles.approvalTitle}>{transactionTitle(transaction)}</Text>
-                    <Text style={styles.approvalSubtitle}>
-                      {studentName} • ${Number(transaction.amount).toFixed(2)}
-                    </Text>
-                  </View>
-                  <Chip
-                    compact
-                    style={[styles.approvalChip, { backgroundColor: statusMeta.bg }]}
-                    textStyle={{ color: statusMeta.fg, fontSize: 11, fontWeight: '700' }}
-                  >
-                    {statusMeta.label}
-                  </Chip>
-                </TouchableOpacity>
-              );
-            })
-          ) : (
-            <View style={styles.emptyState}>
-              <Avatar.Icon
-                icon="check-circle-outline"
-                size={48}
-                style={styles.emptyIcon}
-                color={colors.accent}
-              />
-              <Text style={styles.emptyTitle}>No pending approvals</Text>
-              <Text style={styles.emptySubtitle}>You&apos;re all caught up.</Text>
-            </View>
-          )}
+          />
+          <StatCard
+            icon="account-group-outline"
+            color={colors.accent}
+            value={String(students.length)}
+            label="Linked Students"
+          />
+          <StatCard
+            icon="lock-outline"
+            color="#8B5CF6"
+            value={`$${totalLockedFunds.toFixed(2)}`}
+            label="Active Locked Funds"
+          />
         </View>
       </ScrollView>
 
@@ -700,63 +692,43 @@ const styles = StyleSheet.create({
     color: colors.label,
     marginBottom: 10,
   },
-  pendingHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  pendingHeaderRowSpacing: {
+  statsSectionSpacing: {
     marginTop: 10,
   },
-  pendingCountBadge: {
-    minWidth: 22,
-    height: 22,
-    borderRadius: 11,
-    paddingHorizontal: 6,
-    backgroundColor: `${colors.danger}1F`,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 8,
-    marginBottom: 10,
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
   },
-  pendingCountBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.danger,
-  },
-  pendingCard: {
+  statCard: {
+    width: '48%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 12,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  approvalRow: {
-    flexDirection: 'row',
+  statIconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    padding: 12,
+    justifyContent: 'center',
     marginBottom: 10,
   },
-  approvalMiddle: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  approvalTitle: {
-    fontWeight: '700',
+  statValue: {
+    fontSize: 19,
+    fontWeight: '800',
     color: colors.heading,
   },
-  approvalSubtitle: {
-    fontSize: 12,
+  statLabel: {
+    fontSize: 11,
     color: colors.muted,
     marginTop: 2,
-  },
-  approvalChip: {
-    height: 26,
   },
   emptyCard: {
     borderRadius: 16,

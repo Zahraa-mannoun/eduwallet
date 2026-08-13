@@ -272,6 +272,15 @@ export async function runRollover(): Promise<RolloverResult> {
           data: { amount: 0 },
         });
 
+        // The locked-fund balance being rolled over was still counted in Wallet.balance (locked
+        // funds are a ring-fenced portion of the wallet, not a separate pot) — without this
+        // decrement, the same money would exist in both Wallet.balance and
+        // PersonalSavings.balance simultaneously.
+        await tx.wallet.update({
+          where: { id: wallet.id },
+          data: { balance: { decrement: totalUnspent } },
+        });
+
         await tx.personalSavings.upsert({
           where: { walletId: wallet.id },
           create: { walletId: wallet.id, balance: totalUnspent },

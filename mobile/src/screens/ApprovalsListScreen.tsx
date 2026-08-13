@@ -1,9 +1,9 @@
 import { useCallback, useMemo, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { ActivityIndicator, Button, Chip, Dialog, Portal, Snackbar, Text, TextInput } from 'react-native-paper';
+import { ActivityIndicator, Button, Snackbar, Text, TextInput } from 'react-native-paper';
 import type { PersonalSavingsHistory, Transaction, WithdrawalRequestWithStudent } from '../types/api';
 import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
@@ -14,7 +14,6 @@ import type { LinkedStudent } from '../services/parentalService';
 import * as savingsService from '../services/savingsService';
 import * as withdrawalService from '../services/withdrawalService';
 import { ApiError } from '../services/api';
-import { classifyTransaction, transactionStatusMeta } from '../utils/transactionDisplay';
 import type { ParentTabScreenProps } from '../navigation/types';
 
 const categoryLookup = new Map(BUDGET_CATEGORIES.map((category) => [category.key, category]));
@@ -37,7 +36,7 @@ function SectionHeader({
   return (
     <View style={styles.sectionHeaderRow}>
       <View style={styles.sectionHeaderLeft}>
-        <MaterialCommunityIcons name={icon} size={18} color={colors.primary} />
+        <MaterialCommunityIcons name={icon} size={17} color={colors.primary} />
         <Text style={styles.sectionHeaderTitle}>{title}</Text>
       </View>
       <View style={styles.countBadge}>
@@ -50,7 +49,7 @@ function SectionHeader({
 function InfoBanner({ text }: Readonly<{ text: string }>) {
   return (
     <View style={styles.infoBanner}>
-      <Text style={styles.infoBannerIcon}>ℹ️</Text>
+      <MaterialCommunityIcons name="information-outline" size={13} color={colors.muted} />
       <Text style={styles.infoBannerText}>{text}</Text>
     </View>
   );
@@ -71,28 +70,112 @@ function EmptyState({
 }: Readonly<{ icon: keyof typeof MaterialCommunityIcons.glyphMap; color: string; title: string }>) {
   return (
     <View style={styles.emptyState}>
-      <MaterialCommunityIcons name={icon} size={40} color={color} />
+      <MaterialCommunityIcons name={icon} size={30} color={color} />
       <Text style={styles.emptyTitle}>{title}</Text>
-      <Text style={styles.emptySubtitle}>You&apos;re all caught up.</Text>
     </View>
   );
 }
 
-export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps<'Approvals'>) {
+// The one action surface shared by all three approval types (Transfers, Savings Withdrawal,
+// Cash Withdrawal) — Approve fires immediately, Reject swaps the button row for an inline
+// reason field in place rather than opening a separate dialog, so the whole decision stays on
+// the card the parent is already looking at.
+function InlineApprovalActions({
+  isProcessing,
+  isRejecting,
+  rejectReason,
+  onChangeReason,
+  onApprove,
+  onStartReject,
+  onCancelReject,
+  onSubmitReject,
+}: Readonly<{
+  isProcessing: boolean;
+  isRejecting: boolean;
+  rejectReason: string;
+  onChangeReason: (text: string) => void;
+  onApprove: () => void;
+  onStartReject: () => void;
+  onCancelReject: () => void;
+  onSubmitReject: () => void;
+}>) {
+  if (isRejecting) {
+    return (
+      <View style={styles.rejectInlineWrap}>
+        <TextInput
+          mode="outlined"
+          dense
+          placeholder="Reason for rejecting"
+          value={rejectReason}
+          onChangeText={onChangeReason}
+          style={styles.rejectInlineInput}
+          outlineColor={colors.border}
+          activeOutlineColor={colors.danger}
+        />
+        <View style={styles.rejectInlineButtons}>
+          <Button mode="text" compact textColor={colors.muted} disabled={isProcessing} onPress={onCancelReject}>
+            Cancel
+          </Button>
+          <Button
+            mode="contained"
+            compact
+            buttonColor={colors.danger}
+            style={styles.rejectInlineSubmit}
+            disabled={!rejectReason.trim() || isProcessing}
+            onPress={onSubmitReject}
+          >
+            {isProcessing ? <ActivityIndicator size={14} color="#FFFFFF" /> : 'Submit'}
+          </Button>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.cardActionsRow}>
+      <Button
+        mode="outlined"
+        compact
+        textColor={colors.danger}
+        style={[styles.cardActionButton, styles.cardRejectButton]}
+        disabled={isProcessing}
+        onPress={onStartReject}
+      >
+        Reject
+      </Button>
+      <Button
+        mode="contained"
+        compact
+        buttonColor={colors.accent}
+        style={styles.cardActionButton}
+        disabled={isProcessing}
+        onPress={onApprove}
+      >
+        {isProcessing ? <ActivityIndicator size={14} color={colors.onPrimary} /> : 'Approve'}
+      </Button>
+    </View>
+  );
+}
+
+export default function ApprovalsListScreen({ navigation: _navigation }: ParentTabScreenProps<'Approvals'>) {
   const [approvals, setApprovals] = useState<Transaction[]>([]);
   const [savingsRequests, setSavingsRequests] = useState<PersonalSavingsHistory[]>([]);
   const [cashWithdrawals, setCashWithdrawals] = useState<WithdrawalRequestWithStudent[]>([]);
   const [students, setStudents] = useState<LinkedStudent[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [processingId, setProcessingId] = useState<string | null>(null);
-  const [rejectTarget, setRejectTarget] = useState<PersonalSavingsHistory | null>(null);
-  const [rejectReason, setRejectReason] = useState('');
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
 
+  const [transferProcessingId, setTransferProcessingId] = useState<string | null>(null);
+  const [transferRejectId, setTransferRejectId] = useState<string | null>(null);
+  const [transferRejectReason, setTransferRejectReason] = useState('');
+
+  const [savingsProcessingId, setSavingsProcessingId] = useState<string | null>(null);
+  const [savingsRejectId, setSavingsRejectId] = useState<string | null>(null);
+  const [savingsRejectReason, setSavingsRejectReason] = useState('');
+
   const [cashProcessingId, setCashProcessingId] = useState<string | null>(null);
-  const [cashRejectTarget, setCashRejectTarget] = useState<WithdrawalRequestWithStudent | null>(null);
+  const [cashRejectId, setCashRejectId] = useState<string | null>(null);
   const [cashRejectReason, setCashRejectReason] = useState('');
 
   const load = useCallback(async () => {
@@ -117,8 +200,8 @@ export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps
     }
   }, []);
 
-  // Unthrottled: a transaction approved/rejected in ApprovalRequestScreen must disappear from
-  // this list the instant the parent taps back, not up to 30s later.
+  // Unthrottled: an approve/reject action must drop the row from this list the instant it
+  // resolves, not up to 30s later.
   useFocusEffect(
     useCallback(() => {
       void load();
@@ -133,8 +216,50 @@ export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps
     return map;
   }, [students]);
 
+  // --- Transfers ---
+
+  const handleApproveTransfer = async (transaction: Transaction) => {
+    setTransferProcessingId(transaction.id);
+    try {
+      await parentalService.approveTransaction(transaction.id);
+      setSnackbarMessage('Transfer approved.');
+      await load();
+    } catch (err) {
+      setSnackbarMessage(err instanceof ApiError ? err.message : 'Could not approve this transfer.');
+    } finally {
+      setTransferProcessingId(null);
+    }
+  };
+
+  const openTransferReject = (transactionId: string) => {
+    setTransferRejectId(transactionId);
+    setTransferRejectReason('');
+  };
+
+  const cancelTransferReject = () => {
+    if (transferProcessingId) return;
+    setTransferRejectId(null);
+  };
+
+  const handleRejectTransfer = async () => {
+    if (!transferRejectId || !transferRejectReason.trim()) return;
+    setTransferProcessingId(transferRejectId);
+    try {
+      await parentalService.rejectTransaction(transferRejectId, transferRejectReason.trim());
+      setTransferRejectId(null);
+      setSnackbarMessage('Transfer rejected.');
+      await load();
+    } catch (err) {
+      setSnackbarMessage(err instanceof ApiError ? err.message : 'Could not reject this transfer.');
+    } finally {
+      setTransferProcessingId(null);
+    }
+  };
+
+  // --- Savings withdrawal requests ---
+
   const handleApproveSavings = async (request: PersonalSavingsHistory) => {
-    setProcessingId(request.id);
+    setSavingsProcessingId(request.id);
     try {
       await savingsService.approveWithdrawal(request.id);
       setSnackbarMessage('Withdrawal approved.');
@@ -142,34 +267,36 @@ export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps
     } catch (err) {
       setSnackbarMessage(err instanceof ApiError ? err.message : 'Could not approve this request.');
     } finally {
-      setProcessingId(null);
+      setSavingsProcessingId(null);
     }
   };
 
-  const openRejectDialog = (request: PersonalSavingsHistory) => {
-    setRejectTarget(request);
-    setRejectReason('');
+  const openSavingsReject = (requestId: string) => {
+    setSavingsRejectId(requestId);
+    setSavingsRejectReason('');
   };
 
-  const closeRejectDialog = () => {
-    if (processingId) return;
-    setRejectTarget(null);
+  const cancelSavingsReject = () => {
+    if (savingsProcessingId) return;
+    setSavingsRejectId(null);
   };
 
   const handleRejectSavings = async () => {
-    if (!rejectTarget || !rejectReason.trim()) return;
-    setProcessingId(rejectTarget.id);
+    if (!savingsRejectId || !savingsRejectReason.trim()) return;
+    setSavingsProcessingId(savingsRejectId);
     try {
-      await savingsService.rejectWithdrawal(rejectTarget.id, rejectReason.trim());
-      setRejectTarget(null);
+      await savingsService.rejectWithdrawal(savingsRejectId, savingsRejectReason.trim());
+      setSavingsRejectId(null);
       setSnackbarMessage('Withdrawal rejected.');
       await load();
     } catch (err) {
       setSnackbarMessage(err instanceof ApiError ? err.message : 'Could not reject this request.');
     } finally {
-      setProcessingId(null);
+      setSavingsProcessingId(null);
     }
   };
+
+  // --- Cash withdrawals ---
 
   const handleApproveCashWithdrawal = async (request: WithdrawalRequestWithStudent) => {
     setCashProcessingId(request.id);
@@ -184,22 +311,22 @@ export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps
     }
   };
 
-  const openCashRejectDialog = (request: WithdrawalRequestWithStudent) => {
-    setCashRejectTarget(request);
+  const openCashReject = (requestId: string) => {
+    setCashRejectId(requestId);
     setCashRejectReason('');
   };
 
-  const closeCashRejectDialog = () => {
+  const cancelCashReject = () => {
     if (cashProcessingId) return;
-    setCashRejectTarget(null);
+    setCashRejectId(null);
   };
 
   const handleRejectCashWithdrawal = async () => {
-    if (!cashRejectTarget || !cashRejectReason.trim()) return;
-    setCashProcessingId(cashRejectTarget.id);
+    if (!cashRejectId || !cashRejectReason.trim()) return;
+    setCashProcessingId(cashRejectId);
     try {
-      await withdrawalService.rejectWithdrawal(cashRejectTarget.id, cashRejectReason.trim());
-      setCashRejectTarget(null);
+      await withdrawalService.rejectWithdrawal(cashRejectId, cashRejectReason.trim());
+      setCashRejectId(null);
       setSnackbarMessage('Cash withdrawal rejected.');
       await load();
     } catch (err) {
@@ -224,9 +351,9 @@ export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps
       >
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        <View style={styles.sectionCard}>
-          <SectionHeader icon="swap-horizontal" title="Approvals" count={approvals.length} />
-          <InfoBanner text="These are general transfers your student made above your approval threshold. Education-locked spending is handled automatically." />
+        <View style={styles.section}>
+          <SectionHeader icon="swap-horizontal" title="Transfers" count={approvals.length} />
+          <InfoBanner text="General transfers above your approval threshold. Education-locked spending is handled automatically." />
 
           {isLoading && approvals.length === 0 ? (
             <ActivityIndicator color={colors.primary} style={styles.loading} />
@@ -235,42 +362,43 @@ export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps
               const category = categoryLookup.get(
                 transaction.category.toLowerCase() as BudgetCategoryKey
               );
-              const type = classifyTransaction(transaction, false);
-              const statusMeta = transactionStatusMeta(transaction, type);
               const studentName = transaction.fromWalletId
                 ? (walletToStudentName.get(transaction.fromWalletId) ?? 'Student')
                 : 'Student';
+              const isProcessing = transferProcessingId === transaction.id;
+              const isRejecting = transferRejectId === transaction.id;
               return (
-                <TouchableOpacity
-                  key={transaction.id}
-                  style={styles.itemRow}
-                  onPress={() =>
-                    navigation.navigate('ApprovalRequest', { transaction, studentName })
-                  }
-                >
-                  <IconBadge
-                    icon={category?.icon ?? 'wallet-outline'}
-                    color={category?.color ?? colors.primary}
-                    size={44}
-                  />
-                  <View style={styles.itemMiddle}>
-                    <Text style={styles.itemTitle}>{transactionTitle(transaction)}</Text>
-                    <Text style={styles.itemSubtitle}>
-                      {studentName} • ${Number(transaction.amount).toFixed(2)}
-                    </Text>
-                    <View style={styles.itemMetaRow}>
-                      {category ? <CategoryBadge label={category.label} color={category.color} /> : null}
-                      <Text style={styles.itemDate}>{formatDate(transaction.createdAt)}</Text>
+                <View key={transaction.id} style={styles.approvalCard}>
+                  <View style={styles.cardTopRow}>
+                    <IconBadge
+                      icon={category?.icon ?? 'wallet-outline'}
+                      color={category?.color ?? colors.primary}
+                      size={40}
+                    />
+                    <View style={styles.cardMiddle}>
+                      <Text style={styles.itemTitle} numberOfLines={1}>
+                        {transactionTitle(transaction)}
+                      </Text>
+                      <Text style={styles.itemSubtitle}>
+                        {studentName} • ${Number(transaction.amount).toFixed(2)}
+                      </Text>
+                      <View style={styles.itemMetaRow}>
+                        {category ? <CategoryBadge label={category.label} color={category.color} /> : null}
+                        <Text style={styles.itemDate}>{formatDate(transaction.createdAt)}</Text>
+                      </View>
                     </View>
                   </View>
-                  <Chip
-                    compact
-                    style={[styles.approvalChip, { backgroundColor: statusMeta.bg }]}
-                    textStyle={{ color: statusMeta.fg, fontSize: 11, fontWeight: '700' }}
-                  >
-                    {statusMeta.label}
-                  </Chip>
-                </TouchableOpacity>
+                  <InlineApprovalActions
+                    isProcessing={isProcessing}
+                    isRejecting={isRejecting}
+                    rejectReason={isRejecting ? transferRejectReason : ''}
+                    onChangeReason={setTransferRejectReason}
+                    onApprove={() => handleApproveTransfer(transaction)}
+                    onStartReject={() => openTransferReject(transaction.id)}
+                    onCancelReject={cancelTransferReject}
+                    onSubmitReject={handleRejectTransfer}
+                  />
+                </View>
               );
             })
           ) : (
@@ -278,7 +406,7 @@ export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps
           )}
         </View>
 
-        <View style={styles.sectionCard}>
+        <View style={styles.section}>
           <SectionHeader
             icon="piggy-bank-outline"
             title="Savings Withdrawal Requests"
@@ -291,48 +419,35 @@ export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps
           ) : savingsRequests.length > 0 ? (
             savingsRequests.map((request) => {
               const studentName = walletToStudentName.get(request.walletId) ?? 'Student';
-              const isProcessing = processingId === request.id;
+              const isProcessing = savingsProcessingId === request.id;
+              const isRejecting = savingsRejectId === request.id;
               return (
-                <View key={request.id} style={styles.itemRow}>
-                  <IconBadge icon="piggy-bank-outline" color={colors.accent} size={44} />
-                  <View style={styles.itemMiddle}>
-                    <Text style={styles.itemTitle}>
-                      {studentName} • ${Number(request.amount).toFixed(2)}
-                    </Text>
-                    <Text style={styles.itemSubtitle} numberOfLines={2}>
-                      {request.reason}
-                    </Text>
-                    <View style={styles.itemMetaRow}>
-                      <CategoryBadge label="Personal Savings" color={colors.accent} />
-                      <Text style={styles.itemDate}>{formatDate(request.createdAt)}</Text>
-                    </View>
-                    <View style={styles.actionsRow}>
-                      <Button
-                        mode="outlined"
-                        textColor={colors.danger}
-                        compact
-                        style={[styles.actionButton, styles.rejectButton]}
-                        disabled={isProcessing}
-                        onPress={() => openRejectDialog(request)}
-                      >
-                        Reject
-                      </Button>
-                      <Button
-                        mode="contained"
-                        buttonColor={colors.accent}
-                        compact
-                        style={styles.actionButton}
-                        disabled={isProcessing}
-                        onPress={() => handleApproveSavings(request)}
-                      >
-                        {isProcessing ? (
-                          <ActivityIndicator size={14} color={colors.onPrimary} />
-                        ) : (
-                          'Approve'
-                        )}
-                      </Button>
+                <View key={request.id} style={styles.approvalCard}>
+                  <View style={styles.cardTopRow}>
+                    <IconBadge icon="piggy-bank-outline" color={colors.accent} size={40} />
+                    <View style={styles.cardMiddle}>
+                      <Text style={styles.itemTitle}>
+                        {studentName} • ${Number(request.amount).toFixed(2)}
+                      </Text>
+                      <Text style={styles.itemSubtitle} numberOfLines={2}>
+                        {request.reason}
+                      </Text>
+                      <View style={styles.itemMetaRow}>
+                        <CategoryBadge label="Personal Savings" color={colors.accent} />
+                        <Text style={styles.itemDate}>{formatDate(request.createdAt)}</Text>
+                      </View>
                     </View>
                   </View>
+                  <InlineApprovalActions
+                    isProcessing={isProcessing}
+                    isRejecting={isRejecting}
+                    rejectReason={isRejecting ? savingsRejectReason : ''}
+                    onChangeReason={setSavingsRejectReason}
+                    onApprove={() => handleApproveSavings(request)}
+                    onStartReject={() => openSavingsReject(request.id)}
+                    onCancelReject={cancelSavingsReject}
+                    onSubmitReject={handleRejectSavings}
+                  />
                 </View>
               );
             })
@@ -341,57 +456,44 @@ export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps
           )}
         </View>
 
-        <View style={styles.sectionCard}>
+        <View style={styles.section}>
           <SectionHeader
             icon="cash-multiple"
             title="Pending Cash Withdrawal Approvals"
             count={cashWithdrawals.length}
           />
-          <InfoBanner text="Your student is at an agent trying to withdraw general cash above your approval threshold. The agent can't dispense it until you approve." />
+          <InfoBanner text="Your student is at an agent trying to withdraw general cash above your approval threshold." />
 
           {isLoading && cashWithdrawals.length === 0 ? (
             <ActivityIndicator color={colors.primary} style={styles.loading} />
           ) : cashWithdrawals.length > 0 ? (
             cashWithdrawals.map((request) => {
               const isProcessing = cashProcessingId === request.id;
+              const isRejecting = cashRejectId === request.id;
               return (
-                <View key={request.id} style={styles.itemRow}>
-                  <IconBadge icon="cash-multiple" color={colors.primary} size={44} />
-                  <View style={styles.itemMiddle}>
-                    <Text style={styles.itemTitle}>
-                      {request.wallet.user.fullName} • ${Number(request.amount).toFixed(2)}
-                    </Text>
-                    <View style={styles.itemMetaRow}>
-                      <CategoryBadge label="General" color={colors.primary} />
-                      <Text style={styles.itemDate}>{formatDate(request.createdAt)}</Text>
-                    </View>
-                    <View style={styles.actionsRow}>
-                      <Button
-                        mode="outlined"
-                        textColor={colors.danger}
-                        compact
-                        style={[styles.actionButton, styles.rejectButton]}
-                        disabled={isProcessing}
-                        onPress={() => openCashRejectDialog(request)}
-                      >
-                        Reject
-                      </Button>
-                      <Button
-                        mode="contained"
-                        buttonColor={colors.accent}
-                        compact
-                        style={styles.actionButton}
-                        disabled={isProcessing}
-                        onPress={() => handleApproveCashWithdrawal(request)}
-                      >
-                        {isProcessing ? (
-                          <ActivityIndicator size={14} color={colors.onPrimary} />
-                        ) : (
-                          'Approve'
-                        )}
-                      </Button>
+                <View key={request.id} style={styles.approvalCard}>
+                  <View style={styles.cardTopRow}>
+                    <IconBadge icon="cash-multiple" color={colors.primary} size={40} />
+                    <View style={styles.cardMiddle}>
+                      <Text style={styles.itemTitle}>
+                        {request.wallet.user.fullName} • ${Number(request.amount).toFixed(2)}
+                      </Text>
+                      <View style={styles.itemMetaRow}>
+                        <CategoryBadge label="General" color={colors.primary} />
+                        <Text style={styles.itemDate}>{formatDate(request.createdAt)}</Text>
+                      </View>
                     </View>
                   </View>
+                  <InlineApprovalActions
+                    isProcessing={isProcessing}
+                    isRejecting={isRejecting}
+                    rejectReason={isRejecting ? cashRejectReason : ''}
+                    onChangeReason={setCashRejectReason}
+                    onApprove={() => handleApproveCashWithdrawal(request)}
+                    onStartReject={() => openCashReject(request.id)}
+                    onCancelReject={cancelCashReject}
+                    onSubmitReject={handleRejectCashWithdrawal}
+                  />
                 </View>
               );
             })
@@ -400,60 +502,6 @@ export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps
           )}
         </View>
       </ScrollView>
-
-      <Portal>
-        <Dialog visible={Boolean(rejectTarget)} onDismiss={closeRejectDialog}>
-          <Dialog.Title>Reject Withdrawal</Dialog.Title>
-          <Dialog.Content>
-            <TextInput
-              mode="outlined"
-              label="Reason"
-              value={rejectReason}
-              onChangeText={setRejectReason}
-              outlineColor={colors.border}
-              activeOutlineColor={colors.primary}
-              multiline
-            />
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={closeRejectDialog} disabled={Boolean(processingId)}>
-              Cancel
-            </Button>
-            <Button
-              onPress={handleRejectSavings}
-              disabled={!rejectReason.trim() || Boolean(processingId)}
-            >
-              {processingId ? <ActivityIndicator size={16} color={colors.danger} /> : 'Reject'}
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-
-        <Dialog visible={Boolean(cashRejectTarget)} onDismiss={closeCashRejectDialog}>
-          <Dialog.Title>Reject Cash Withdrawal</Dialog.Title>
-          <Dialog.Content>
-            <TextInput
-              mode="outlined"
-              label="Reason"
-              value={cashRejectReason}
-              onChangeText={setCashRejectReason}
-              outlineColor={colors.border}
-              activeOutlineColor={colors.primary}
-              multiline
-            />
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={closeCashRejectDialog} disabled={Boolean(cashProcessingId)}>
-              Cancel
-            </Button>
-            <Button
-              onPress={handleRejectCashWithdrawal}
-              disabled={!cashRejectReason.trim() || Boolean(cashProcessingId)}
-            >
-              {cashProcessingId ? <ActivityIndicator size={16} color={colors.danger} /> : 'Reject'}
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
 
       <Snackbar
         visible={Boolean(snackbarMessage)}
@@ -488,29 +536,21 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
   },
   loading: {
-    marginTop: 24,
+    marginTop: 16,
   },
   errorText: {
     color: colors.danger,
     textAlign: 'center',
     marginBottom: 12,
   },
-  sectionCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
+  section: {
+    marginBottom: 22,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   sectionHeaderLeft: {
     flexDirection: 'row',
@@ -518,57 +558,61 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   sectionHeaderTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.heading,
-    marginLeft: 8,
+    marginLeft: 7,
   },
   countBadge: {
-    minWidth: 24,
-    height: 24,
-    borderRadius: 12,
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
     paddingHorizontal: 7,
     backgroundColor: `${colors.primary}1F`,
     alignItems: 'center',
     justifyContent: 'center',
   },
   countBadgeText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     color: colors.primary,
   },
   infoBanner: {
     flexDirection: 'row',
-    backgroundColor: `${colors.primary}14`,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 14,
-  },
-  infoBannerIcon: {
-    fontSize: 14,
-    marginRight: 8,
+    alignItems: 'flex-start',
+    paddingVertical: 2,
+    marginBottom: 10,
   },
   infoBannerText: {
     flex: 1,
-    fontSize: 12,
-    color: colors.primaryDark,
-    lineHeight: 17,
+    fontSize: 11,
+    color: colors.muted,
+    lineHeight: 15,
+    marginLeft: 6,
   },
-  itemRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: colors.surface,
+  approvalCard: {
+    backgroundColor: '#FFFFFF',
     borderRadius: 14,
     padding: 12,
-    marginBottom: 10,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  itemMiddle: {
+  cardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  cardMiddle: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 10,
   },
   itemTitle: {
     fontWeight: '700',
     color: colors.heading,
+    fontSize: 13.5,
   },
   itemSubtitle: {
     fontSize: 12,
@@ -578,7 +622,7 @@ const styles = StyleSheet.create({
   itemMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 6,
   },
   itemDate: {
     fontSize: 11,
@@ -594,33 +638,45 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
   },
-  actionsRow: {
+  cardActionsRow: {
     flexDirection: 'row',
     marginTop: 10,
   },
-  actionButton: {
+  cardActionButton: {
     flex: 1,
     marginRight: 8,
     borderRadius: 8,
   },
-  rejectButton: {
+  cardRejectButton: {
     borderColor: colors.danger,
+    marginRight: 8,
   },
-  approvalChip: {
-    height: 26,
+  rejectInlineWrap: {
+    marginTop: 10,
+  },
+  rejectInlineInput: {
+    backgroundColor: '#FFFFFF',
+    fontSize: 13,
+    height: 40,
+  },
+  rejectInlineButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginTop: 6,
+  },
+  rejectInlineSubmit: {
+    marginLeft: 4,
+    borderRadius: 8,
   },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 20,
+    paddingVertical: 14,
   },
   emptyTitle: {
     fontWeight: '700',
     color: colors.heading,
-    marginTop: 10,
-    marginBottom: 4,
-  },
-  emptySubtitle: {
-    color: colors.muted,
-    fontSize: 12,
+    fontSize: 12.5,
+    marginTop: 6,
   },
 });

@@ -42,11 +42,12 @@ function titleCaseEnum(value: string): string {
 }
 
 // TransactionStatus labels specifically — titleCaseEnum() alone would print "Auto Approved"
-// (space) instead of the hyphenated "Auto-Approved" used everywhere else in the app, and
-// PENDING here is a system queue state ("Processing"), not the parent-approval wording used
-// for WithdrawalStatus's PENDING_PARENT_APPROVAL.
+// (space) instead of the hyphenated "Auto-Approved" used everywhere else in the app. PENDING
+// only ever fires when a P2P transfer is over the parent's threshold and waiting on them, so it
+// gets the same "Awaiting Parent Approval" wording as every other surface in the app (mobile's
+// transactionDisplay.ts, web's transactionStatus.ts) — kept in lockstep with those on purpose.
 const TRANSACTION_STATUS_LABELS: Record<string, string> = {
-  PENDING: 'Processing',
+  PENDING: 'Awaiting Parent Approval',
   AUTO_APPROVED: 'Auto-Approved',
   APPROVED: 'Approved',
   REJECTED: 'Rejected',
@@ -55,6 +56,35 @@ const TRANSACTION_STATUS_LABELS: Record<string, string> = {
 
 function transactionStatusLabel(status: string): string {
   return TRANSACTION_STATUS_LABELS[status] ?? titleCaseEnum(status);
+}
+
+// ReceiptVerificationStatus labels — kept byte-identical to mobile's RECEIPT_STATUS_META
+// (mobile/src/utils/receiptStatus.ts), since titleCaseEnum() alone would print "Auto Verified"
+// and "Pending" instead of the shorter, parent-facing wording used everywhere else.
+const RECEIPT_STATUS_LABELS: Record<string, string> = {
+  AUTO_VERIFIED: 'Verified',
+  MANUALLY_VERIFIED: 'Verified',
+  FLAGGED: 'Flagged for Review',
+  PENDING: 'Pending Review',
+  PROCESSING: 'Verifying...',
+  REJECTED: 'Rejected',
+  NOT_UPLOADED: 'No Receipt',
+};
+
+function receiptStatusLabel(status: string): string {
+  return RECEIPT_STATUS_LABELS[status] ?? titleCaseEnum(status);
+}
+
+// SavingsHistoryStatus labels — kept in lockstep with mobile's PersonalSavingsScreen.tsx
+// STATUS_META. PENDING is a parent-approval wait state here too, not a generic "Pending".
+const SAVINGS_STATUS_LABELS: Record<string, string> = {
+  PENDING: 'Awaiting Parent Approval',
+  APPROVED: 'Approved',
+  REJECTED: 'Rejected',
+};
+
+function savingsStatusLabel(status: string): string {
+  return SAVINGS_STATUS_LABELS[status] ?? titleCaseEnum(status);
 }
 
 export type ReportData = {
@@ -226,7 +256,7 @@ export function renderReportPdf(doc: PDFKit.PDFDocument, data: ReportData): void
         formatDate(w.createdAt),
         titleCaseEnum(w.category),
         formatMoney(w.amount),
-        titleCaseEnum(w.receiptVerificationStatus),
+        receiptStatusLabel(w.receiptVerificationStatus),
       ]),
       y
     );
@@ -290,7 +320,7 @@ export function renderReportPdf(doc: PDFKit.PDFDocument, data: ReportData): void
         formatDate(entry.createdAt),
         entry.type === 'ROLLOVER' ? 'Rollover' : 'Withdrawal',
         formatMoney(entry.amount),
-        titleCaseEnum(entry.status),
+        savingsStatusLabel(entry.status),
       ]),
       y
     );
