@@ -69,3 +69,7 @@ export async function uploadReceipt(input: UploadReceiptInput): Promise<Withdraw
     timeoutMs: 60000,
   });
 }
+
+export async function deleteReceipt(withdrawalId: string): Promise<WithdrawalRequest> {
+  return apiRequest<WithdrawalRequest>(`/withdrawals/${withdrawalId}/receipt`, { method: 'DELETE' });
+}

@@ -4,6 +4,7 @@ import { AppError } from '../../utils/AppError';
 import { errorResponse, successResponse } from '../../utils/apiResponse';
 import { documentFileParamsSchema, reviewKYCSchema, submitKYCSchema } from './kyc.schema';
 import {
+  deleteDocument,
   getDocumentFile,
   getKYCStatus,
   getMyDocuments,
@@ -167,12 +168,34 @@ export async function getDocumentFileHandler(request: FastifyRequest, reply: Fas
   }
 
   try {
-    requireAuthUser(request);
+    const authUser = requireAuthUser(request);
     const { document, absolutePath } = await getDocumentFile(parsed.data.documentId);
+    if (authUser.userType !== 'ADMIN' && document.userId !== authUser.id) {
+      throw new AppError(403, 'FORBIDDEN', 'You do not have access to this document');
+    }
     const safeFileName = document.fileName.replaceAll('"', '');
+    // inline (not attachment) so a mobile <Image>/web <img> can render it directly for the
+    // in-app preview, rather than the browser/OS treating every request as a download.
     reply.header('Content-Type', document.fileType ?? 'application/octet-stream');
-    reply.header('Content-Disposition', `attachment; filename="${safeFileName}"`);
+    reply.header('Content-Disposition', `inline; filename="${safeFileName}"`);
     return reply.send(createReadStream(absolutePath));
+  } catch (error) {
+    return handleKYCError(request, reply, error);
+  }
+}
+
+export async function deleteDocumentHandler(request: FastifyRequest, reply: FastifyReply) {
+  const parsed = documentFileParamsSchema.safeParse(request.params);
+  if (!parsed.success) {
+    return reply
+      .status(400)
+      .send(errorResponse(parsed.error.issues[0]?.message ?? 'Invalid input', 'VALIDATION_ERROR'));
+  }
+
+  try {
+    const authUser = requireAuthUser(request);
+    await deleteDocument(authUser.id, parsed.data.documentId);
+    return reply.status(200).send(successResponse({ deleted: true }));
   } catch (error) {
     return handleKYCError(request, reply, error);
   }

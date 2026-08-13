@@ -89,6 +89,33 @@ export async function getDocumentFile(
   return { document, absolutePath };
 }
 
+// Only lets a student remove a document while their KYC is still PENDING review — once VERIFIED
+// the document is their proof of identity and must not be deletable, and once REJECTED the old
+// (pre-rejection) document is already hidden from getKYCStatus()'s response, so there's nothing
+// left for the client to show a delete button next to anyway.
+export async function deleteDocument(userId: string, documentId: string): Promise<void> {
+  const document = await prisma.academicDocument.findUnique({ where: { id: documentId } });
+  if (!document || document.userId !== userId || !KYC_DOCUMENT_TYPES.has(document.documentType ?? '')) {
+    throw new AppError(404, 'DOCUMENT_NOT_FOUND', 'Document not found');
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (user?.kycStatus !== 'PENDING') {
+    throw new AppError(
+      400,
+      'KYC_NOT_PENDING',
+      'You can only remove a document while your verification is still pending review'
+    );
+  }
+
+  await prisma.academicDocument.delete({ where: { id: documentId } });
+
+  if (document.filePath) {
+    const absolutePath = path.join(BACKEND_ROOT, document.filePath);
+    await fs.unlink(absolutePath).catch(() => {});
+  }
+}
+
 export async function getMyDocuments(userId: string): Promise<AcademicDocument[]> {
   return prisma.academicDocument.findMany({
     where: { userId },

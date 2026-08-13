@@ -25,9 +25,11 @@ import {
 } from 'react-native-paper';
 import type { TransactionCategory, WithdrawalRequest } from '../types/api';
 import IconBadge from '../components/IconBadge';
+import ImagePreviewModal from '../components/ImagePreviewModal';
+import { useAuthenticatedImage } from '../hooks/useAuthenticatedImage';
 import { categoryColors, colors } from '../theme/colors';
 import * as withdrawalService from '../services/withdrawalService';
-import { ApiError } from '../services/api';
+import { API_BASE_URL, ApiError, getAccessToken } from '../services/api';
 import { receiptBadgeFor } from '../utils/receiptStatus';
 import type { ReceiptBadgeMeta } from '../utils/receiptStatus';
 import { withdrawalStatusMeta } from '../utils/transactionDisplay';
@@ -47,6 +49,14 @@ const CATEGORY_META: Record<
   PERSONAL_SAVINGS: { icon: 'piggy-bank-outline', color: categoryColors.personalSavings },
   GENERAL: { icon: 'wallet-outline', color: categoryColors.general },
 };
+
+// A receipt can only be removed and replaced while it's still unresolved — once an admin or the
+// auto-verification pipeline has acted on it (AUTO_VERIFIED/MANUALLY_VERIFIED/FLAGGED/REJECTED),
+// the file is the record of what was reviewed and must stay in place. Kept in lockstep with the
+// backend's own DELETABLE_RECEIPT_STATUSES (withdrawals.service.ts).
+const DELETABLE_RECEIPT_STATUSES = new Set(['PENDING', 'PROCESSING']);
+
+type DialogMode = 'VIEW' | 'CONFIRM_DELETE' | 'UPLOAD';
 
 function formatDateTime(isoDate: string): string {
   const date = new Date(isoDate);
@@ -78,7 +88,9 @@ export default function WithdrawalScreen({
   const [error, setError] = useState<string | null>(null);
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
 
-  const [receiptTarget, setReceiptTarget] = useState<WithdrawalRequest | null>(null);
+  const [detailTarget, setDetailTarget] = useState<WithdrawalRequest | null>(null);
+  const [dialogMode, setDialogMode] = useState<DialogMode>('VIEW');
+  const [receiptToken, setReceiptToken] = useState<string | null>(null);
   const [receiptMerchantName, setReceiptMerchantName] = useState('');
   const [pendingReceipt, setPendingReceipt] = useState<{
     uri: string;
@@ -87,7 +99,10 @@ export default function WithdrawalScreen({
     file?: File;
   } | null>(null);
   const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
+  const [isDeletingReceipt, setIsDeletingReceipt] = useState(false);
   const [receiptError, setReceiptError] = useState<string | null>(null);
+
+  const [isFullPreviewVisible, setIsFullPreviewVisible] = useState(false);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -108,16 +123,28 @@ export default function WithdrawalScreen({
     }, [load])
   );
 
-  const openReceiptDialog = (request: WithdrawalRequest) => {
-    setReceiptTarget(request);
+  const openDetail = async (request: WithdrawalRequest) => {
+    setDetailTarget(request);
     setReceiptMerchantName('');
     setPendingReceipt(null);
     setReceiptError(null);
+    setDialogMode('VIEW');
+    setReceiptToken(await getAccessToken());
   };
 
-  const closeReceiptDialog = () => {
-    if (isUploadingReceipt) return;
-    setReceiptTarget(null);
+  const openUploadDirect = async (request: WithdrawalRequest) => {
+    setDetailTarget(request);
+    setReceiptMerchantName('');
+    setPendingReceipt(null);
+    setReceiptError(null);
+    setDialogMode('UPLOAD');
+    setReceiptToken(await getAccessToken());
+  };
+
+  const closeDetail = () => {
+    if (isUploadingReceipt || isDeletingReceipt) return;
+    setDetailTarget(null);
+    setDialogMode('VIEW');
   };
 
   const handlePickReceipt = async () => {
@@ -136,19 +163,20 @@ export default function WithdrawalScreen({
   };
 
   const handleSubmitReceipt = async () => {
-    if (!receiptTarget || !pendingReceipt) return;
+    if (!detailTarget || !pendingReceipt) return;
     setIsUploadingReceipt(true);
     setReceiptError(null);
     try {
       await withdrawalService.uploadReceipt({
-        withdrawalId: receiptTarget.id,
+        withdrawalId: detailTarget.id,
         fileUri: pendingReceipt.uri,
         fileName: pendingReceipt.name,
         fileType: pendingReceipt.mimeType,
         merchantName: receiptMerchantName.trim() || undefined,
         file: pendingReceipt.file,
       });
-      setReceiptTarget(null);
+      setDetailTarget(null);
+      setDialogMode('VIEW');
       setSnackbarMessage('Receipt uploaded.');
       await load();
     } catch (err) {
@@ -157,6 +185,50 @@ export default function WithdrawalScreen({
       setIsUploadingReceipt(false);
     }
   };
+
+  const startDeleteReceipt = () => setDialogMode('CONFIRM_DELETE');
+  const cancelDeleteReceipt = () => setDialogMode('VIEW');
+
+  const confirmDeleteReceipt = async () => {
+    if (!detailTarget) return;
+    setIsDeletingReceipt(true);
+    setReceiptError(null);
+    try {
+      await withdrawalService.deleteReceipt(detailTarget.id);
+      setSnackbarMessage('Receipt removed. Upload a new one when ready.');
+      setDetailTarget((prev) => (prev ? { ...prev, receiptPath: null } : prev));
+      setDialogMode('UPLOAD');
+      await load();
+    } catch (err) {
+      setReceiptError(err instanceof ApiError ? err.message : 'Could not remove that receipt.');
+      setDialogMode('VIEW');
+    } finally {
+      setIsDeletingReceipt(false);
+    }
+  };
+
+  const openFullReceiptPreview = () => setIsFullPreviewVisible(true);
+
+  const receiptImageUri =
+    dialogMode === 'VIEW' && detailTarget?.receiptPath
+      ? `${API_BASE_URL}/withdrawals/${detailTarget.id}/receipt-file`
+      : null;
+  const {
+    resolvedUri: inlineReceiptUri,
+    hasFetchError: inlineReceiptHasError,
+    nativeHeaders: inlineReceiptHeaders,
+  } = useAuthenticatedImage(receiptImageUri, receiptToken);
+
+  const canDeleteReceipt = Boolean(
+    detailTarget?.receiptPath &&
+      DELETABLE_RECEIPT_STATUSES.has(detailTarget.receiptVerificationStatus)
+  );
+  const canUploadReceipt = Boolean(
+    detailTarget &&
+      detailTarget.status === 'COMPLETED' &&
+      !detailTarget.receiptPath &&
+      detailTarget.category !== 'GENERAL'
+  );
 
   const renderWithdrawalItem = (request: WithdrawalRequest) => {
     const categoryMeta = CATEGORY_META[request.category];
@@ -167,7 +239,12 @@ export default function WithdrawalScreen({
       request.status === 'COMPLETED' && !request.receiptPath && request.category !== 'GENERAL';
 
     return (
-      <View key={request.id} style={[styles.card, { borderLeftColor: receiptMeta.fg }]}>
+      <TouchableOpacity
+        key={request.id}
+        style={[styles.card, { borderLeftColor: receiptMeta.fg }]}
+        activeOpacity={0.85}
+        onPress={() => void openDetail(request)}
+      >
         <View style={styles.cardTopRow}>
           <View style={styles.cardLeft}>
             <IconBadge icon={categoryMeta.icon} color={categoryMeta.color} size={44} />
@@ -197,12 +274,15 @@ export default function WithdrawalScreen({
             icon="camera-outline"
             style={styles.uploadButton}
             contentStyle={styles.uploadButtonContent}
-            onPress={() => openReceiptDialog(request)}
+            onPress={(event) => {
+              event.stopPropagation();
+              void openUploadDirect(request);
+            }}
           >
             Upload Receipt
           </Button>
         ) : null}
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -224,7 +304,7 @@ export default function WithdrawalScreen({
         <View style={styles.infoBanner}>
           <Text style={styles.infoBannerText}>
             Visit an agent in person to withdraw cash from your locked or free balance. Your
-            withdrawals will show up here once processed.
+            withdrawals will show up here once processed. Tap a withdrawal to see its receipt.
           </Text>
         </View>
 
@@ -242,121 +322,250 @@ export default function WithdrawalScreen({
 
       <Portal>
         <Dialog
-          visible={Boolean(receiptTarget)}
-          onDismiss={closeReceiptDialog}
+          visible={Boolean(detailTarget)}
+          onDismiss={closeDetail}
           style={styles.dialogContainer}
         >
           <View style={styles.dialogHeaderRow}>
             <View style={styles.dialogHeaderIconCircle}>
-              <MaterialCommunityIcons name="receipt-text-outline" size={22} color={colors.primary} />
+              <MaterialCommunityIcons
+                name={dialogMode === 'CONFIRM_DELETE' ? 'alert-circle-outline' : 'receipt-text-outline'}
+                size={22}
+                color={dialogMode === 'CONFIRM_DELETE' ? colors.danger : colors.primary}
+              />
             </View>
             <View style={styles.dialogHeaderTextColumn}>
-              <Text style={styles.dialogTitleText}>Upload Receipt</Text>
-              <Text style={styles.dialogHeaderSubtitle}>
-                Take a photo of your receipt — we&apos;ll verify it matches your withdrawal category
+              <Text style={styles.dialogTitleText}>
+                {dialogMode === 'CONFIRM_DELETE'
+                  ? 'Remove Receipt?'
+                  : dialogMode === 'UPLOAD'
+                    ? detailTarget?.receiptPath
+                      ? 'Replace Receipt'
+                      : 'Upload Receipt'
+                    : 'Withdrawal Details'}
               </Text>
+              {detailTarget ? (
+                <Text style={styles.dialogHeaderSubtitle}>
+                  ${Number(detailTarget.amount).toFixed(2)} · {detailTarget.category}
+                </Text>
+              ) : null}
             </View>
           </View>
           <Dialog.Content>
             {receiptError ? <Text style={styles.errorText}>{receiptError}</Text> : null}
 
-            <TouchableOpacity activeOpacity={0.85} onPress={handlePickReceipt} style={styles.uploadArea}>
-              {pendingReceipt ? (
-                <View style={styles.uploadAreaSelectedRow}>
-                  <Image
-                    key={pendingReceipt.uri}
-                    source={{ uri: pendingReceipt.uri }}
-                    style={styles.uploadThumbnail}
-                    fadeDuration={0}
-                  />
-                  <View style={styles.uploadSelectedTextColumn}>
-                    <View style={styles.uploadSelectedTitleRow}>
-                      <MaterialCommunityIcons name="check-circle" size={16} color={colors.accent} />
-                      <Text style={styles.uploadSelectedFilename} numberOfLines={1}>
-                        {pendingReceipt.name}
-                      </Text>
+            {dialogMode === 'VIEW' && detailTarget ? (
+              detailTarget.receiptPath ? (
+                <>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={openFullReceiptPreview}
+                    style={styles.receiptPreviewBox}
+                  >
+                    {inlineReceiptUri && !inlineReceiptHasError ? (
+                      <Image
+                        key={inlineReceiptUri}
+                        source={{ uri: inlineReceiptUri, headers: inlineReceiptHeaders }}
+                        style={styles.receiptPreviewImage}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={styles.receiptPreviewPlaceholder}>
+                        <MaterialCommunityIcons name="file-image-outline" size={28} color={colors.primary} />
+                      </View>
+                    )}
+                    <View style={styles.receiptPreviewOverlay}>
+                      <MaterialCommunityIcons name="magnify-plus-outline" size={14} color="#FFFFFF" />
+                      <Text style={styles.receiptPreviewOverlayText}>View full size</Text>
                     </View>
-                    <Text style={styles.changePhotoLink}>Change photo</Text>
+                  </TouchableOpacity>
+
+                  <View style={styles.detailReceiptBadgeRow}>
+                    <ReceiptBadge
+                      meta={receiptBadgeFor(detailTarget.receiptPath, detailTarget.receiptVerificationStatus)}
+                      isProcessing={detailTarget.receiptVerificationStatus === 'PROCESSING'}
+                    />
+                    {canDeleteReceipt ? (
+                      <TouchableOpacity onPress={startDeleteReceipt} style={styles.deleteReceiptLink} hitSlop={8}>
+                        <MaterialCommunityIcons name="delete-outline" size={15} color={colors.danger} />
+                        <Text style={styles.deleteReceiptLinkText}>Remove &amp; Replace</Text>
+                      </TouchableOpacity>
+                    ) : null}
                   </View>
-                </View>
+                </>
               ) : (
                 <>
-                  <MaterialCommunityIcons name="camera-plus-outline" size={40} color={colors.primary} />
-                  <Text style={styles.uploadAreaTitle}>Select Receipt Photo</Text>
-                  <Text style={styles.uploadAreaSubtitle}>JPG or PNG accepted</Text>
+                  <View style={styles.noReceiptBox}>
+                    <MaterialCommunityIcons name="receipt-text-outline" size={32} color={colors.muted} />
+                    <Text style={styles.noReceiptText}>No receipt uploaded</Text>
+                  </View>
+                  {canUploadReceipt ? (
+                    <Button
+                      mode="contained"
+                      icon="camera-outline"
+                      buttonColor={colors.primary}
+                      style={styles.uploadFromDetailButton}
+                      onPress={() => setDialogMode('UPLOAD')}
+                    >
+                      Upload Receipt
+                    </Button>
+                  ) : null}
                 </>
-              )}
-            </TouchableOpacity>
+              )
+            ) : null}
 
-            <Text style={styles.fieldLabel}>Merchant Name (Optional)</Text>
-            <TextInput
-              mode="outlined"
-              placeholder="e.g. Campus Café"
-              value={receiptMerchantName}
-              onChangeText={setReceiptMerchantName}
-              outlineColor={colors.border}
-              activeOutlineColor={colors.primary}
-              theme={{ roundness: 12 }}
-              style={styles.dialogInput}
-              left={<TextInput.Icon icon="store-outline" color={colors.muted} />}
-            />
-            <Text style={styles.fieldHelperText}>
-              Our system will auto-detect the merchant from your receipt
-            </Text>
-
-            <View style={styles.infoBannerBlue}>
-              <Text style={styles.infoBannerBlueIcon}>ℹ️</Text>
-              <Text style={styles.infoBannerBlueText}>
-                Receipt will be verified against our merchant database automatically
-              </Text>
-            </View>
-
-            {isUploadingReceipt ? (
-              <View style={styles.verifyingRow}>
-                <ActivityIndicator size={16} color={colors.primary} />
-                <Text style={styles.verifyingText}>Verifying your receipt...</Text>
+            {dialogMode === 'CONFIRM_DELETE' ? (
+              <View style={styles.confirmDeleteBox}>
+                <Text style={styles.confirmDeleteText}>
+                  Remove this receipt? You&apos;ll be able to upload a new one right after.
+                </Text>
               </View>
+            ) : null}
+
+            {dialogMode === 'UPLOAD' ? (
+              <>
+                <TouchableOpacity activeOpacity={0.85} onPress={handlePickReceipt} style={styles.uploadArea}>
+                  {pendingReceipt ? (
+                    <View style={styles.uploadAreaSelectedRow}>
+                      <Image
+                        key={pendingReceipt.uri}
+                        source={{ uri: pendingReceipt.uri }}
+                        style={styles.uploadThumbnail}
+                        fadeDuration={0}
+                      />
+                      <View style={styles.uploadSelectedTextColumn}>
+                        <View style={styles.uploadSelectedTitleRow}>
+                          <MaterialCommunityIcons name="check-circle" size={16} color={colors.accent} />
+                          <Text style={styles.uploadSelectedFilename} numberOfLines={1}>
+                            {pendingReceipt.name}
+                          </Text>
+                        </View>
+                        <Text style={styles.changePhotoLink}>Change photo</Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <>
+                      <MaterialCommunityIcons name="camera-plus-outline" size={40} color={colors.primary} />
+                      <Text style={styles.uploadAreaTitle}>Select Receipt Photo</Text>
+                      <Text style={styles.uploadAreaSubtitle}>JPG or PNG accepted</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                <Text style={styles.fieldLabel}>Merchant Name (Optional)</Text>
+                <TextInput
+                  mode="outlined"
+                  placeholder="e.g. Campus Café"
+                  value={receiptMerchantName}
+                  onChangeText={setReceiptMerchantName}
+                  outlineColor={colors.border}
+                  activeOutlineColor={colors.primary}
+                  theme={{ roundness: 12 }}
+                  style={styles.dialogInput}
+                  left={<TextInput.Icon icon="store-outline" color={colors.muted} />}
+                />
+                <Text style={styles.fieldHelperText}>
+                  Our system will auto-detect the merchant from your receipt
+                </Text>
+
+                <View style={styles.infoBannerBlue}>
+                  <Text style={styles.infoBannerBlueIcon}>ℹ️</Text>
+                  <Text style={styles.infoBannerBlueText}>
+                    Receipt will be verified against our merchant database automatically
+                  </Text>
+                </View>
+
+                {isUploadingReceipt ? (
+                  <View style={styles.verifyingRow}>
+                    <ActivityIndicator size={16} color={colors.primary} />
+                    <Text style={styles.verifyingText}>Verifying your receipt...</Text>
+                  </View>
+                ) : null}
+              </>
             ) : null}
           </Dialog.Content>
           <Dialog.Actions style={styles.dialogActions}>
-            <Button
-              mode="outlined"
-              textColor={colors.muted}
-              style={styles.dialogCancelButton}
-              disabled={isUploadingReceipt}
-              onPress={closeReceiptDialog}
-            >
-              Cancel
-            </Button>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              disabled={!pendingReceipt || isUploadingReceipt}
-              onPress={handleSubmitReceipt}
-              style={styles.dialogPrimaryButtonWrapper}
-            >
-              <LinearGradient
-                colors={
-                  pendingReceipt && !isUploadingReceipt
-                    ? [colors.gradientStart, colors.gradientEnd]
-                    : [colors.border, colors.border]
-                }
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.dialogPrimaryButton}
-              >
-                <Text
-                  style={[
-                    styles.dialogPrimaryButtonText,
-                    { color: pendingReceipt && !isUploadingReceipt ? '#FFFFFF' : colors.muted },
-                  ]}
+            {dialogMode === 'CONFIRM_DELETE' ? (
+              <>
+                <Button
+                  mode="outlined"
+                  textColor={colors.muted}
+                  style={styles.dialogCancelButton}
+                  disabled={isDeletingReceipt}
+                  onPress={cancelDeleteReceipt}
                 >
-                  Upload
-                </Text>
-              </LinearGradient>
-            </TouchableOpacity>
+                  Cancel
+                </Button>
+                <Button
+                  mode="contained"
+                  buttonColor={colors.danger}
+                  style={styles.dialogCancelButton}
+                  loading={isDeletingReceipt}
+                  disabled={isDeletingReceipt}
+                  onPress={confirmDeleteReceipt}
+                >
+                  Remove
+                </Button>
+              </>
+            ) : dialogMode === 'UPLOAD' ? (
+              <>
+                <Button
+                  mode="outlined"
+                  textColor={colors.muted}
+                  style={styles.dialogCancelButton}
+                  disabled={isUploadingReceipt}
+                  onPress={closeDetail}
+                >
+                  Cancel
+                </Button>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  disabled={!pendingReceipt || isUploadingReceipt}
+                  onPress={handleSubmitReceipt}
+                  style={styles.dialogPrimaryButtonWrapper}
+                >
+                  <LinearGradient
+                    colors={
+                      pendingReceipt && !isUploadingReceipt
+                        ? [colors.gradientStart, colors.gradientEnd]
+                        : [colors.border, colors.border]
+                    }
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.dialogPrimaryButton}
+                  >
+                    <Text
+                      style={[
+                        styles.dialogPrimaryButtonText,
+                        { color: pendingReceipt && !isUploadingReceipt ? '#FFFFFF' : colors.muted },
+                      ]}
+                    >
+                      Upload
+                    </Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <Button
+                mode="outlined"
+                textColor={colors.muted}
+                style={styles.dialogCloseButtonFull}
+                onPress={closeDetail}
+              >
+                Close
+              </Button>
+            )}
           </Dialog.Actions>
         </Dialog>
       </Portal>
+
+      <ImagePreviewModal
+        visible={isFullPreviewVisible}
+        uri={receiptImageUri}
+        authToken={receiptToken}
+        title="Receipt"
+        onClose={() => setIsFullPreviewVisible(false)}
+      />
 
       <Snackbar
         visible={Boolean(snackbarMessage)}
@@ -564,6 +773,82 @@ const styles = StyleSheet.create({
     marginTop: 2,
     lineHeight: 16,
   },
+  receiptPreviewBox: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    height: 160,
+    marginTop: 16,
+    backgroundColor: colors.surface,
+  },
+  receiptPreviewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  receiptPreviewPlaceholder: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  receiptPreviewOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    backgroundColor: 'rgba(10,14,20,0.55)',
+  },
+  receiptPreviewOverlayText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+    marginLeft: 6,
+  },
+  detailReceiptBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  deleteReceiptLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  deleteReceiptLinkText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.danger,
+    marginLeft: 4,
+  },
+  noReceiptBox: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    marginTop: 12,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+  },
+  noReceiptText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.muted,
+    marginTop: 8,
+  },
+  uploadFromDetailButton: {
+    marginTop: 16,
+    borderRadius: 10,
+  },
+  confirmDeleteBox: {
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  confirmDeleteText: {
+    fontSize: 13,
+    color: colors.label,
+    lineHeight: 19,
+  },
   uploadArea: {
     borderWidth: 1.5,
     borderStyle: 'dashed',
@@ -661,6 +946,11 @@ const styles = StyleSheet.create({
   dialogCancelButton: {
     flex: 1,
     marginRight: 10,
+    borderRadius: 12,
+    borderColor: colors.border,
+  },
+  dialogCloseButtonFull: {
+    flex: 1,
     borderRadius: 12,
     borderColor: colors.border,
   },

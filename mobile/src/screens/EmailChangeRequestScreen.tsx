@@ -8,6 +8,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { ActivityIndicator, Button, Chip, IconButton, Text, TextInput } from 'react-native-paper';
 import type { EmailChangeRequest } from '../types/api';
 import { useAuth } from '../context/AuthContext';
+import ImagePreviewModal from '../components/ImagePreviewModal';
 import * as emailChangeService from '../services/emailChangeService';
 import { ApiError } from '../services/api';
 import { colors } from '../theme/colors';
@@ -41,6 +42,7 @@ export default function EmailChangeRequestScreen({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [justSubmitted, setJustSubmitted] = useState(false);
+  const [isProofPreviewVisible, setIsProofPreviewVisible] = useState(false);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -254,11 +256,18 @@ export default function EmailChangeRequestScreen({
                 <Text style={styles.inputLabel}>Upload Proof</Text>
                 {pendingProof ? (
                   <View style={styles.uploadedBox}>
-                    <MaterialCommunityIcons name="check-circle" size={18} color={colors.accent} />
-                    <Text style={styles.uploadedFileName} numberOfLines={1}>
-                      {pendingProof.name}
-                    </Text>
-                    <TouchableOpacity onPress={() => setPendingProof(null)}>
+                    <TouchableOpacity
+                      style={styles.uploadedBoxTapArea}
+                      activeOpacity={0.7}
+                      onPress={() => setIsProofPreviewVisible(true)}
+                    >
+                      <MaterialCommunityIcons name="check-circle" size={18} color={colors.accent} />
+                      <Text style={styles.uploadedFileName} numberOfLines={1}>
+                        {pendingProof.name}
+                      </Text>
+                      <Text style={styles.uploadedPreviewHint}>Preview</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => setPendingProof(null)} hitSlop={8}>
                       <MaterialCommunityIcons name="close-circle" size={20} color={colors.muted} />
                     </TouchableOpacity>
                   </View>
@@ -318,6 +327,13 @@ export default function EmailChangeRequestScreen({
           </>
         ) : null}
       </ScrollView>
+
+      <ImagePreviewModal
+        visible={isProofPreviewVisible}
+        uri={pendingProof?.uri ?? null}
+        title={pendingProof?.name}
+        onClose={() => setIsProofPreviewVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -512,12 +528,23 @@ const styles = StyleSheet.create({
     backgroundColor: `${colors.accent}0D`,
     marginBottom: 16,
   },
+  uploadedBoxTapArea: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   uploadedFileName: {
     flex: 1,
     fontSize: 13,
     fontWeight: '600',
     color: colors.heading,
     marginLeft: 8,
+    marginRight: 8,
+  },
+  uploadedPreviewHint: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primary,
     marginRight: 8,
   },
   infoBanner: {

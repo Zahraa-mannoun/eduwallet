@@ -41,3 +41,7 @@ export async function getKYCStatus(): Promise<{
 export async function getMyDocuments(): Promise<AcademicDocument[]> {
   return apiRequest<AcademicDocument[]>('/kyc/documents');
 }
+
+export async function deleteDocument(documentId: string): Promise<void> {
+  await apiRequest<{ deleted: boolean }>(`/kyc/documents/${documentId}`, { method: 'DELETE' });
+}

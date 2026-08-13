@@ -13,6 +13,7 @@ import {
 import {
   approveWithdrawal,
   completeWithdrawal,
+  deleteReceipt,
   getAllWithdrawals,
   getAllWithdrawalsForAdmin,
   getPendingApprovalsForParent,
@@ -233,6 +234,23 @@ export async function uploadReceiptHandler(request: FastifyRequest, reply: Fasti
       fileBuffer,
       fields.merchantName?.trim() || undefined
     );
+    return reply.status(200).send(successResponse(result));
+  } catch (error) {
+    return handleWithdrawalsError(request, reply, error);
+  }
+}
+
+export async function deleteReceiptHandler(request: FastifyRequest, reply: FastifyReply) {
+  const parsed = withdrawalIdParamsSchema.safeParse(request.params);
+  if (!parsed.success) {
+    return reply
+      .status(400)
+      .send(errorResponse(parsed.error.issues[0]?.message ?? 'Invalid input', 'VALIDATION_ERROR'));
+  }
+
+  try {
+    const authUser = requireAuthUser(request);
+    const result = await deleteReceipt(authUser.id, parsed.data.id);
     return reply.status(200).send(successResponse(result));
   } catch (error) {
     return handleWithdrawalsError(request, reply, error);

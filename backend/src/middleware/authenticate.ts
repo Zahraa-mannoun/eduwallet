@@ -5,13 +5,28 @@ import { AppError } from '../utils/AppError';
 import { errorResponse } from '../utils/apiResponse';
 import type { AccessTokenPayload } from '../modules/auth/auth.types';
 
+function extractToken(request: FastifyRequest): string {
+  const authHeader = request.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    return authHeader.slice(7);
+  }
+
+  // Fallback for requests that can't attach a custom header at all — specifically, handing a
+  // file-serving URL (a KYC document, a receipt) to Linking.openURL() so the device's own
+  // browser/PDF viewer opens it directly. The access token is short-lived (15 min) and this is
+  // a demonstration prototype, so accepting it in the query string here is an accepted
+  // trade-off, not something every route needs — only ever used by file-preview links.
+  const queryToken = (request.query as Record<string, unknown> | undefined)?.token;
+  if (typeof queryToken === 'string' && queryToken.length > 0) {
+    return queryToken;
+  }
+
+  throw new AppError(401, 'UNAUTHORIZED', 'Missing or invalid Authorization header');
+}
+
 export async function authenticate(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   try {
-    const authHeader = request.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw new AppError(401, 'UNAUTHORIZED', 'Missing or invalid Authorization header');
-    }
-    const token = authHeader.slice(7);
+    const token = extractToken(request);
 
     let payload: AccessTokenPayload;
     try {

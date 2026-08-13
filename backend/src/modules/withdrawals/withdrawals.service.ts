@@ -889,6 +889,52 @@ export async function uploadReceipt(
   return updated;
 }
 
+// Only lets a student clear their own receipt while it's still in an unresolved state —
+// PENDING (auto-detection couldn't match a merchant, awaiting manual review) or PROCESSING
+// (OCR still running). Once AUTO_VERIFIED/MANUALLY_VERIFIED/FLAGGED/REJECTED, an admin or the
+// verification pipeline has already acted on this exact file, so it must stay in place as the
+// record of what was reviewed.
+const DELETABLE_RECEIPT_STATUSES = new Set<ReceiptVerificationStatus>(['PENDING', 'PROCESSING']);
+
+export async function deleteReceipt(
+  studentUserId: string,
+  requestId: string
+): Promise<WithdrawalRequest> {
+  const request = await prisma.withdrawalRequest.findUnique({ where: { id: requestId } });
+  const wallet = request
+    ? await prisma.wallet.findUnique({ where: { id: request.walletId } })
+    : null;
+  if (!request || !wallet || wallet.userId !== studentUserId) {
+    throw new AppError(404, 'WITHDRAWAL_REQUEST_NOT_FOUND', 'Withdrawal request not found');
+  }
+  if (!request.receiptPath) {
+    throw new AppError(400, 'RECEIPT_NOT_FOUND', 'No receipt has been uploaded for this withdrawal');
+  }
+  if (!DELETABLE_RECEIPT_STATUSES.has(request.receiptVerificationStatus)) {
+    throw new AppError(
+      400,
+      'RECEIPT_ALREADY_RESOLVED',
+      'This receipt has already been verified or flagged and can no longer be removed'
+    );
+  }
+
+  const updated = await prisma.withdrawalRequest.update({
+    where: { id: request.id },
+    data: {
+      receiptPath: null,
+      receiptVerificationStatus: 'PENDING',
+      receiptVerificationNote: null,
+      merchantName: null,
+      detectedCategory: null,
+    },
+  });
+
+  const absolutePath = path.join(BACKEND_ROOT, request.receiptPath);
+  await fs.unlink(absolutePath).catch(() => {});
+
+  return updated;
+}
+
 export async function getReceiptFile(
   requestId: string,
   requester: { id: string; userType: UserType }

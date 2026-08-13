@@ -4,6 +4,7 @@ import { requireRole } from '../../middleware/requireRole';
 import {
   approveWithdrawalHandler,
   completeWithdrawalHandler,
+  deleteReceiptHandler,
   getAllWithdrawalsForAdminHandler,
   getAllWithdrawalsHandler,
   getMyWithdrawalsHandler,
@@ -36,6 +37,11 @@ export default async function withdrawalsRoutes(fastify: FastifyInstance): Promi
     '/:id/upload-receipt',
     { preHandler: requireRole('STUDENT') },
     uploadReceiptHandler
+  );
+  fastify.delete(
+    '/:id/receipt',
+    { preHandler: requireRole('STUDENT') },
+    deleteReceiptHandler
   );
 
   // Shared across ADMIN/STUDENT/PARENT — getReceiptFile() itself enforces who may see which
