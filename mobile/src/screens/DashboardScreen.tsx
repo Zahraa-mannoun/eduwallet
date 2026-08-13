@@ -1,13 +1,16 @@
 import { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Path } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { ActivityIndicator, Avatar, Badge, Button, Card, IconButton, Text } from 'react-native-paper';
+import { ActivityIndicator, Avatar, Badge, Button, Chip, IconButton, Text } from 'react-native-paper';
 import type { Transaction, TransactionCategory } from '../types/api';
 import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES, VISIBLE_BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryDefinition, BudgetCategoryKey } from '../constants/budgetCategories';
+import { TRANSACTION_STATUS_META } from '../constants/mockTransactions';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationsContext';
 import { useWallet } from '../context/WalletContext';
@@ -17,27 +20,39 @@ import type { MyPermissions } from '../services/parentalService';
 import { colors } from '../theme/colors';
 import { getEffectiveKYCStatus } from '../utils/kycStatus';
 import { getInitials } from '../utils/getInitials';
+import { progressColorFor } from '../utils/progressColor';
+import {
+  classifyTransaction,
+  RECEIVED_AMOUNT_COLOR,
+  SENT_AMOUNT_COLOR,
+  STATUS_BADGE_COLORS,
+  TX_TYPE_META,
+  transactionDisplayTitle,
+} from '../utils/transactionDisplay';
 import type { StudentTabScreenProps } from '../navigation/types';
+
+// This screen deliberately avoids react-native-paper's Card component for section containers
+// (see BudgetScreen.tsx for the full story) — its elevation/shadow-driven internals were
+// confirmed via live screenshots to break on the web renderer here, so every "card" below is a
+// plain View styled with its own shadow instead.
+
+const SCREEN_BACKGROUND = '#F8FAFC';
 
 const categoryLookup = new Map(BUDGET_CATEGORIES.map((category) => [category.key, category]));
 
-function transactionTitle(transaction: Transaction): string {
-  if (transaction.note) return transaction.note;
-  if (!transaction.fromWalletId) return 'Wallet Top-up';
-  const category = categoryLookup.get(transaction.category.toLowerCase() as BudgetCategoryKey);
-  return category?.label ?? 'Transfer';
-}
-
-function transactionSubtitle(transaction: Transaction): string {
-  if (transaction.status === 'PENDING') return 'Awaiting parent approval';
-  if (transaction.status === 'REJECTED') return 'Rejected';
-  return new Date(transaction.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' });
+function formatShortDate(isoDate: string): string {
+  return new Date(isoDate).toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 type QuickAction = {
   key: string;
   label: string;
-  icon: string;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
   onPress: () => void;
 };
 
@@ -95,9 +110,10 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
     .map((fund) => ({
       category: categoryLookup.get(fund.category.toLowerCase() as BudgetCategoryKey),
       amount: Number(fund.amount),
+      totalLocked: Number(fund.totalLocked),
     }))
     .filter(
-      (row): row is { category: BudgetCategoryDefinition; amount: number } =>
+      (row): row is { category: BudgetCategoryDefinition; amount: number; totalLocked: number } =>
         row.category !== undefined
     );
 
@@ -115,6 +131,7 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
   ];
 
   const balanceLabel = wallet ? `${Number(wallet.balance).toFixed(2)} ${wallet.currency}` : '0.00';
+  const approvalThreshold = myPermissions ? Number(myPermissions.approvalThreshold) : 0;
 
   return (
     <View style={styles.flex}>
@@ -174,6 +191,12 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
             )}
           </View>
         </SafeAreaView>
+
+        <View style={styles.headerWave} pointerEvents="none">
+          <Svg width="100%" height="22" viewBox="0 0 100 22" preserveAspectRatio="none">
+            <Path d="M0,9 C25,20 75,0 100,11 L100,22 L0,22 Z" fill={SCREEN_BACKGROUND} />
+          </Svg>
+        </View>
       </LinearGradient>
 
       <ScrollView
@@ -224,159 +247,203 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
           </View>
         )}
 
-        <View style={styles.quickActionsRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.quickActionsRow}
+        >
           {quickActions.map((action) => (
-            <View key={action.key} style={styles.quickAction}>
-              <IconButton
-                icon={action.icon}
-                mode="contained"
-                containerColor={colors.surface}
-                iconColor={colors.primary}
-                size={26}
-                onPress={action.onPress}
-              />
+            <TouchableOpacity
+              key={action.key}
+              style={styles.quickActionCard}
+              activeOpacity={0.7}
+              onPress={action.onPress}
+            >
+              <View style={styles.quickActionIconCircle}>
+                <MaterialCommunityIcons name={action.icon} size={22} color={colors.primary} />
+              </View>
               <Text style={styles.quickActionLabel}>{action.label}</Text>
-            </View>
+            </TouchableOpacity>
           ))}
-        </View>
+        </ScrollView>
 
         {wallet ? (
-          <Card style={styles.breakdownCard} mode="elevated">
-            <Card.Content>
-              <Text variant="titleMedium" style={styles.breakdownTitle}>
-                Balance Breakdown
-              </Text>
+          <>
+            <Text style={styles.sectionTitle}>Balance Breakdown</Text>
 
-              <View style={styles.breakdownRow}>
-                <IconBadge icon="lock-open-variant-outline" color={colors.accent} size={36} />
+            <View style={[styles.breakdownItemCard, styles.freeToUseCard]}>
+              <View style={styles.breakdownItemHeader}>
+                <IconBadge icon="wallet-outline" color={colors.accent} size={44} />
                 <View style={styles.breakdownMiddle}>
                   <Text style={styles.breakdownLabel}>Free to use</Text>
                   <Text style={styles.breakdownSublabel}>No spending restrictions</Text>
                 </View>
                 <Text style={styles.breakdownAmount}>${freeToUse.toFixed(2)}</Text>
               </View>
+            </View>
 
-              {lockedCategoryRows.map(({ category, amount }) => (
-                <View key={category.key} style={styles.breakdownRow}>
-                  <IconBadge icon={category.icon} color={category.color} size={36} />
-                  <View style={styles.breakdownMiddle}>
-                    <Text style={styles.breakdownLabel}>{category.label} locked</Text>
+            {lockedCategoryRows.map(({ category, amount, totalLocked: categoryTotal }) => {
+              const spent = Math.max(categoryTotal - amount, 0);
+              const percent = categoryTotal > 0 ? Math.min(Math.round((spent / categoryTotal) * 100), 100) : 0;
+              return (
+                <View key={category.key} style={styles.breakdownItemCard}>
+                  <View style={styles.breakdownItemHeader}>
+                    <IconBadge icon={category.icon} color={category.color} size={44} />
+                    <View style={styles.breakdownMiddle}>
+                      <Text style={styles.breakdownLabel}>{category.label}</Text>
+                      <Text style={styles.breakdownSublabel}>Locked funds</Text>
+                    </View>
+                    <Text style={styles.breakdownAmount}>${amount.toFixed(2)}</Text>
                   </View>
-                  <Text style={styles.breakdownAmount}>${amount.toFixed(2)}</Text>
+                  <View style={styles.progressTrack}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        { width: `${percent}%`, backgroundColor: progressColorFor(percent) },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.breakdownSpentText}>
+                    ${spent.toFixed(2)} spent of ${categoryTotal.toFixed(2)}
+                  </Text>
                 </View>
-              ))}
-            </Card.Content>
-          </Card>
+              );
+            })}
+          </>
         ) : null}
 
         {myPermissions ? (
-          <Card style={styles.permissionsCard} mode="elevated">
-            <Card.Content>
-              <Text variant="titleMedium" style={styles.permissionsTitle}>
-                Spending Permissions
-              </Text>
-
-              {VISIBLE_BUDGET_CATEGORIES.filter((category) => category.key !== 'general').map(
-                (category) => {
-                  const txCategory = category.key.toUpperCase() as TransactionCategory;
-                  const isAllowed = myPermissions.allowedCategories.includes(txCategory);
-                  return (
-                    <View key={category.key} style={styles.permissionRow}>
-                      <IconBadge
-                        icon={isAllowed ? 'check-circle-outline' : 'close-circle-outline'}
-                        color={isAllowed ? colors.accent : colors.muted}
-                        size={32}
-                      />
-                      <Text
+          <>
+            <Text style={styles.sectionTitle}>Spending Permissions</Text>
+            <View style={styles.sectionCard}>
+              <View style={styles.permissionsGrid}>
+                {VISIBLE_BUDGET_CATEGORIES.filter((category) => category.key !== 'general').map(
+                  (category) => {
+                    const txCategory = category.key.toUpperCase() as TransactionCategory;
+                    const isAllowed = myPermissions.allowedCategories.includes(txCategory);
+                    return (
+                      <View
+                        key={category.key}
                         style={[
-                          styles.permissionLabel,
-                          !isAllowed && styles.permissionLabelBlocked,
+                          styles.permissionPill,
+                          isAllowed
+                            ? { backgroundColor: `${category.color}1F`, borderColor: category.color }
+                            : styles.permissionPillBlocked,
                         ]}
                       >
-                        {category.label}
-                      </Text>
-                    </View>
-                  );
-                }
+                        <MaterialCommunityIcons
+                          name={isAllowed ? 'check' : 'close'}
+                          size={13}
+                          color={isAllowed ? category.color : colors.muted}
+                        />
+                        <Text
+                          style={[
+                            styles.permissionPillText,
+                            { color: isAllowed ? category.color : colors.muted },
+                            !isAllowed && styles.permissionPillTextBlocked,
+                          ]}
+                        >
+                          {category.label}
+                        </Text>
+                      </View>
+                    );
+                  }
+                )}
+              </View>
+
+              {approvalThreshold > 0 ? (
+                <View style={[styles.approvalBadge, styles.approvalBadgeBlue]}>
+                  <Text style={styles.approvalBadgeText}>
+                    ⚡ ${approvalThreshold.toFixed(0)} approval limit
+                  </Text>
+                </View>
+              ) : (
+                <View style={[styles.approvalBadge, styles.approvalBadgeGreen]}>
+                  <Text style={styles.approvalBadgeText}>✅ No approval limit</Text>
+                </View>
               )}
-
-              <View style={styles.permissionsDivider} />
-
-              <Text style={styles.permissionsThreshold}>
-                {Number(myPermissions.approvalThreshold) > 0
-                  ? `Free transfers up to $${Number(myPermissions.approvalThreshold).toFixed(0)} without approval`
-                  : 'No approval limit'}
-              </Text>
-            </Card.Content>
-          </Card>
+            </View>
+          </>
         ) : null}
 
-        <Card style={styles.transactionsCard} mode="elevated">
-          <Card.Content>
-            <View style={styles.transactionsHeader}>
-              <Text variant="titleMedium" style={styles.transactionsTitle}>
-                Recent Transactions
-              </Text>
-              <Button
-                mode="text"
-                compact
-                textColor={colors.primary}
-                onPress={() => navigation.navigate('TransactionHistory')}
-              >
-                See All
-              </Button>
-            </View>
-
-            {error ? (
-              <Text style={styles.errorText}>{error}</Text>
-            ) : transactions.length > 0 ? (
-              transactions.map((transaction) => {
-                const category = categoryLookup.get(transaction.category.toLowerCase() as BudgetCategoryKey);
-                const isReceived = wallet !== null && transaction.toWalletId === wallet.id;
-                return (
-                  <TouchableOpacity
-                    key={transaction.id}
-                    style={styles.transactionRow}
-                    onPress={() =>
-                      navigation.navigate('TransactionDetail', { transactionId: transaction.id })
-                    }
-                  >
-                    <IconBadge
-                      icon={category?.icon ?? 'wallet-outline'}
-                      color={category?.color ?? colors.primary}
-                      size={40}
-                    />
-                    <View style={styles.transactionMiddle}>
-                      <Text style={styles.transactionTitle}>{transactionTitle(transaction)}</Text>
-                      <Text style={styles.transactionSubtitle}>{transactionSubtitle(transaction)}</Text>
-                    </View>
+        <View style={styles.sectionTitleRow}>
+          <Text style={styles.sectionTitle}>Recent Transactions</Text>
+          <Button
+            mode="text"
+            compact
+            textColor={colors.primary}
+            onPress={() => navigation.navigate('TransactionHistory')}
+          >
+            See All
+          </Button>
+        </View>
+        <View style={styles.sectionCard}>
+          {error ? (
+            <Text style={styles.errorText}>{error}</Text>
+          ) : transactions.length > 0 ? (
+            transactions.map((transaction: Transaction) => {
+              const category = categoryLookup.get(transaction.category.toLowerCase() as BudgetCategoryKey);
+              const isReceived = wallet !== null && transaction.toWalletId === wallet.id;
+              const type = classifyTransaction(transaction, isReceived);
+              const typeMeta = TX_TYPE_META[type];
+              const statusMeta = TRANSACTION_STATUS_META[transaction.status];
+              const statusBadgeColors = STATUS_BADGE_COLORS[transaction.status];
+              return (
+                <TouchableOpacity
+                  key={transaction.id}
+                  style={styles.transactionRow}
+                  onPress={() =>
+                    navigation.navigate('TransactionDetail', { transactionId: transaction.id })
+                  }
+                >
+                  <View style={[styles.transactionIconCircle, { backgroundColor: `${typeMeta.color}1F` }]}>
+                    <MaterialCommunityIcons name={typeMeta.icon} size={18} color={typeMeta.color} />
+                  </View>
+                  <View style={styles.transactionMiddle}>
+                    <Text style={styles.transactionTitle} numberOfLines={1}>
+                      {transactionDisplayTitle(transaction, type)}
+                    </Text>
+                    <Text style={styles.transactionSubtitle}>
+                      {category?.label ?? 'Other'} • {formatShortDate(transaction.createdAt)}
+                    </Text>
+                  </View>
+                  <View style={styles.transactionRight}>
                     <Text
                       style={[
                         styles.transactionAmount,
-                        { color: isReceived ? colors.accent : colors.heading },
+                        { color: isReceived ? RECEIVED_AMOUNT_COLOR : SENT_AMOUNT_COLOR },
                       ]}
                     >
                       {isReceived ? '+' : '-'}${Number(transaction.amount).toFixed(2)}
                     </Text>
-                  </TouchableOpacity>
-                );
-              })
-            ) : (
-              <View style={styles.emptyState}>
-                <Avatar.Icon
-                  icon="receipt-text-outline"
-                  size={56}
-                  style={styles.emptyIcon}
-                  color={colors.primary}
-                />
-                <Text style={styles.emptyTitle}>No transactions yet</Text>
-                <Text style={styles.emptySubtitle}>
-                  Your recent activity will show up here once you start using your wallet.
-                </Text>
+                    <Chip
+                      compact
+                      style={[styles.statusChip, { backgroundColor: statusBadgeColors.bg }]}
+                      textStyle={{
+                        color: statusBadgeColors.fg,
+                        fontSize: 10,
+                        fontWeight: '700',
+                        textAlign: 'center',
+                      }}
+                    >
+                      {statusMeta.label}
+                    </Chip>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          ) : (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIconCircle}>
+                <MaterialCommunityIcons name="receipt-text-outline" size={36} color={colors.primary} />
               </View>
-            )}
-          </Card.Content>
-        </Card>
+              <Text style={styles.emptyTitle}>No transactions yet</Text>
+              <Text style={styles.emptySubtitle}>
+                Your recent activity will show up here once you start using your wallet.
+              </Text>
+            </View>
+          )}
+        </View>
       </ScrollView>
     </View>
   );
@@ -385,13 +452,17 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: SCREEN_BACKGROUND,
   },
   headerGradient: {
     paddingHorizontal: 20,
     paddingBottom: 28,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
+  },
+  headerWave: {
+    position: 'absolute',
+    bottom: -1,
+    left: 0,
+    right: 0,
   },
   headerTop: {
     flexDirection: 'row',
@@ -400,7 +471,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   greeting: {
-    color: 'rgba(255,255,255,0.8)',
+    color: '#DBEAFE',
     fontSize: 14,
   },
   userName: {
@@ -444,7 +515,7 @@ const styles = StyleSheet.create({
   },
   balanceValue: {
     color: colors.onPrimary,
-    fontSize: 40,
+    fontSize: 32,
     fontWeight: '800',
     marginTop: 4,
   },
@@ -453,8 +524,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   body: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
+    paddingHorizontal: 16,
+    paddingTop: 20,
     paddingBottom: 32,
   },
   kycBanner: {
@@ -463,7 +534,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     padding: 12,
-    marginBottom: 20,
+    marginBottom: 12,
   },
   kycBannerPending: {
     backgroundColor: '#FEF3C7',
@@ -486,35 +557,75 @@ const styles = StyleSheet.create({
     color: colors.danger,
   },
   quickActionsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: 16,
-    marginBottom: 24,
+    paddingBottom: 4,
+    marginBottom: 8,
   },
-  quickAction: {
+  quickActionCard: {
+    width: 76,
     alignItems: 'center',
-    width: 64,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingVertical: 14,
+    marginRight: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  quickActionIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: `${colors.primary}1F`,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   quickActionLabel: {
     fontSize: 12,
-    color: colors.label,
-    fontWeight: '600',
-    marginTop: -4,
+    color: colors.heading,
+    fontWeight: '700',
+    marginTop: 8,
   },
-  breakdownCard: {
-    borderRadius: 16,
-    marginBottom: 20,
-  },
-  breakdownTitle: {
+  sectionTitle: {
+    fontSize: 15,
     fontWeight: '700',
     color: colors.heading,
-    marginBottom: 12,
+    marginBottom: 10,
   },
-  breakdownRow: {
+  sectionTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    justifyContent: 'space-between',
+  },
+  sectionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  breakdownItemCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  freeToUseCard: {
+    backgroundColor: `${colors.accent}14`,
+  },
+  breakdownItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   breakdownMiddle: {
     flex: 1,
@@ -533,51 +644,65 @@ const styles = StyleSheet.create({
   breakdownAmount: {
     fontWeight: '700',
     fontSize: 14,
-    color: colors.heading,
+    color: colors.primary,
   },
-  permissionsCard: {
-    borderRadius: 16,
-    marginBottom: 20,
+  breakdownSpentText: {
+    fontSize: 11,
+    color: colors.muted,
+    marginTop: 8,
   },
-  permissionsTitle: {
-    fontWeight: '700',
-    color: colors.heading,
+  progressTrack: {
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: colors.surface,
+    overflow: 'hidden',
+    marginTop: 12,
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  permissionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  permissionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginRight: 8,
     marginBottom: 8,
   },
-  permissionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  permissionPillBlocked: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+  },
+  permissionPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginLeft: 5,
+  },
+  permissionPillTextBlocked: {
+    textDecorationLine: 'line-through',
+  },
+  approvalBadge: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
     paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginTop: 4,
   },
-  permissionLabel: {
-    fontWeight: '600',
-    color: colors.heading,
-    fontSize: 14,
-    marginLeft: 12,
+  approvalBadgeGreen: {
+    backgroundColor: `${colors.accent}1F`,
   },
-  permissionLabelBlocked: {
-    color: colors.muted,
+  approvalBadgeBlue: {
+    backgroundColor: `${colors.primary}1F`,
   },
-  permissionsDivider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: 12,
-  },
-  permissionsThreshold: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.label,
-  },
-  transactionsCard: {
-    borderRadius: 16,
-  },
-  transactionsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  transactionsTitle: {
+  approvalBadgeText: {
+    fontSize: 12,
     fontWeight: '700',
     color: colors.heading,
   },
@@ -586,9 +711,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
   },
+  transactionIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   transactionMiddle: {
     flex: 1,
     marginLeft: 12,
+    marginRight: 8,
   },
   transactionTitle: {
     fontWeight: '700',
@@ -600,16 +733,29 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginTop: 2,
   },
+  transactionRight: {
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+  },
   transactionAmount: {
     fontWeight: '700',
     fontSize: 14,
   },
+  statusChip: {
+    height: 22,
+    marginTop: 4,
+  },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 24,
+    paddingVertical: 20,
   },
-  emptyIcon: {
-    backgroundColor: colors.surface,
+  emptyIconCircle: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: `${colors.primary}1A`,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 14,
   },
   emptyTitle: {

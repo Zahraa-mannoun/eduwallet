@@ -1,5 +1,14 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator as RNActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator as RNActivityIndicator,
+  Image,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -255,30 +264,76 @@ export default function WithdrawalScreen({
       </ScrollView>
 
       <Portal>
-        <Dialog visible={Boolean(receiptTarget)} onDismiss={closeReceiptDialog}>
-          <Dialog.Title>Upload Receipt</Dialog.Title>
+        <Dialog
+          visible={Boolean(receiptTarget)}
+          onDismiss={closeReceiptDialog}
+          style={styles.dialogContainer}
+        >
+          <View style={styles.dialogHeaderRow}>
+            <View style={styles.dialogHeaderIconCircle}>
+              <MaterialCommunityIcons name="receipt-text-outline" size={22} color={colors.primary} />
+            </View>
+            <View style={styles.dialogHeaderTextColumn}>
+              <Text style={styles.dialogTitleText}>Upload Receipt</Text>
+              <Text style={styles.dialogHeaderSubtitle}>
+                Take a photo of your receipt — we&apos;ll verify it matches your withdrawal category
+              </Text>
+            </View>
+          </View>
           <Dialog.Content>
             {receiptError ? <Text style={styles.errorText}>{receiptError}</Text> : null}
-            <Text style={styles.dialogHint}>
-              Take a photo of your receipt — we&apos;ll check it matches the declared category.
-            </Text>
-            <Button
-              mode="outlined"
-              icon="camera-outline"
-              style={styles.dialogInput}
-              onPress={handlePickReceipt}
-            >
-              {pendingReceipt ? pendingReceipt.name : 'Select Receipt Photo'}
-            </Button>
+
+            <TouchableOpacity activeOpacity={0.85} onPress={handlePickReceipt} style={styles.uploadArea}>
+              {pendingReceipt ? (
+                <View style={styles.uploadAreaSelectedRow}>
+                  <Image
+                    key={pendingReceipt.uri}
+                    source={{ uri: pendingReceipt.uri }}
+                    style={styles.uploadThumbnail}
+                    fadeDuration={0}
+                  />
+                  <View style={styles.uploadSelectedTextColumn}>
+                    <View style={styles.uploadSelectedTitleRow}>
+                      <MaterialCommunityIcons name="check-circle" size={16} color={colors.accent} />
+                      <Text style={styles.uploadSelectedFilename} numberOfLines={1}>
+                        {pendingReceipt.name}
+                      </Text>
+                    </View>
+                    <Text style={styles.changePhotoLink}>Change photo</Text>
+                  </View>
+                </View>
+              ) : (
+                <>
+                  <MaterialCommunityIcons name="camera-plus-outline" size={40} color={colors.primary} />
+                  <Text style={styles.uploadAreaTitle}>Select Receipt Photo</Text>
+                  <Text style={styles.uploadAreaSubtitle}>JPG or PNG accepted</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <Text style={styles.fieldLabel}>Merchant Name (Optional)</Text>
             <TextInput
               mode="outlined"
-              label="Merchant name (optional)"
+              placeholder="e.g. Campus Café"
               value={receiptMerchantName}
               onChangeText={setReceiptMerchantName}
               outlineColor={colors.border}
               activeOutlineColor={colors.primary}
+              theme={{ roundness: 12 }}
               style={styles.dialogInput}
+              left={<TextInput.Icon icon="store-outline" color={colors.muted} />}
             />
+            <Text style={styles.fieldHelperText}>
+              Our system will auto-detect the merchant from your receipt
+            </Text>
+
+            <View style={styles.infoBannerBlue}>
+              <Text style={styles.infoBannerBlueIcon}>ℹ️</Text>
+              <Text style={styles.infoBannerBlueText}>
+                Receipt will be verified against our merchant database automatically
+              </Text>
+            </View>
+
             {isUploadingReceipt ? (
               <View style={styles.verifyingRow}>
                 <ActivityIndicator size={16} color={colors.primary} />
@@ -286,13 +341,42 @@ export default function WithdrawalScreen({
               </View>
             ) : null}
           </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={closeReceiptDialog} disabled={isUploadingReceipt}>
+          <Dialog.Actions style={styles.dialogActions}>
+            <Button
+              mode="outlined"
+              textColor={colors.muted}
+              style={styles.dialogCancelButton}
+              disabled={isUploadingReceipt}
+              onPress={closeReceiptDialog}
+            >
               Cancel
             </Button>
-            <Button onPress={handleSubmitReceipt} disabled={!pendingReceipt || isUploadingReceipt}>
-              Upload
-            </Button>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              disabled={!pendingReceipt || isUploadingReceipt}
+              onPress={handleSubmitReceipt}
+              style={styles.dialogPrimaryButtonWrapper}
+            >
+              <LinearGradient
+                colors={
+                  pendingReceipt && !isUploadingReceipt
+                    ? [colors.gradientStart, colors.gradientEnd]
+                    : [colors.border, colors.border]
+                }
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.dialogPrimaryButton}
+              >
+                <Text
+                  style={[
+                    styles.dialogPrimaryButtonText,
+                    { color: pendingReceipt && !isUploadingReceipt ? '#FFFFFF' : colors.muted },
+                  ]}
+                >
+                  Upload
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
           </Dialog.Actions>
         </Dialog>
       </Portal>
@@ -435,24 +519,172 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   dialogInput: {
-    backgroundColor: colors.inputBackground,
-    marginBottom: 12,
-  },
-  dialogHint: {
-    fontSize: 12,
-    color: colors.muted,
-    marginBottom: 12,
-    lineHeight: 18,
+    backgroundColor: '#FFFFFF',
+    marginBottom: 4,
   },
   verifyingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    marginTop: 12,
   },
   verifyingText: {
     fontSize: 12,
     fontWeight: '600',
     color: colors.primary,
     marginLeft: 8,
+  },
+  dialogContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  dialogHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 4,
+  },
+  dialogHeaderIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: `${colors.primary}1A`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dialogHeaderTextColumn: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  dialogTitleText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  dialogHeaderSubtitle: {
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  uploadArea: {
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.primary,
+    borderRadius: 8,
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    marginBottom: 16,
+  },
+  uploadAreaTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.primary,
+    marginTop: 8,
+  },
+  uploadAreaSubtitle: {
+    fontSize: 11,
+    color: colors.muted,
+    marginTop: 2,
+  },
+  uploadAreaSelectedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+  },
+  uploadThumbnail: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: colors.inputBackground,
+  },
+  uploadSelectedTextColumn: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  uploadSelectedTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  uploadSelectedFilename: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.heading,
+    marginLeft: 6,
+    flexShrink: 1,
+  },
+  changePhotoLink: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+    marginTop: 4,
+  },
+  fieldLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 6,
+  },
+  fieldHelperText: {
+    fontSize: 11,
+    color: colors.muted,
+    marginTop: 4,
+    marginBottom: 16,
+    lineHeight: 16,
+  },
+  infoBannerBlue: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#DBEAFE',
+    borderRadius: 12,
+    padding: 12,
+  },
+  infoBannerBlueIcon: {
+    fontSize: 14,
+    marginRight: 8,
+  },
+  infoBannerBlueText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#1E40AF',
+    lineHeight: 18,
+    fontWeight: '600',
+  },
+  dialogActions: {
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    paddingTop: 12,
+  },
+  dialogCancelButton: {
+    flex: 1,
+    marginRight: 10,
+    borderRadius: 12,
+    borderColor: colors.border,
+  },
+  dialogPrimaryButtonWrapper: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  dialogPrimaryButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 11,
+    borderRadius: 12,
+  },
+  dialogPrimaryButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

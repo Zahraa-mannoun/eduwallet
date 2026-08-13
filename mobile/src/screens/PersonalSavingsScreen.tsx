@@ -1,7 +1,9 @@
 import { useCallback, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   ActivityIndicator,
   Button,
@@ -14,17 +16,34 @@ import {
   TextInput,
 } from 'react-native-paper';
 import type { PersonalSavingsHistory } from '../types/api';
-import IconBadge from '../components/IconBadge';
 import { colors } from '../theme/colors';
 import * as savingsService from '../services/savingsService';
 import { ApiError } from '../services/api';
 import type { RootStackScreenProps } from '../navigation/types';
+
+const SCREEN_BACKGROUND = '#F8FAFC';
+// A deep green gradient distinguishes Personal Savings from the app's usual blue theme —
+// savings is conceptually a different "place" than the everyday wallet.
+const SAVINGS_GRADIENT_START = '#059669';
+const SAVINGS_GRADIENT_END = '#065F46';
+const WITHDRAWAL_AMOUNT_COLOR = '#9A3412';
+const SAVINGS_AMOUNT_COLOR = '#065F46';
 
 const STATUS_META: Record<PersonalSavingsHistory['status'], { label: string; color: string }> = {
   PENDING: { label: 'Pending', color: '#F59E0B' },
   APPROVED: { label: 'Approved', color: colors.accent },
   REJECTED: { label: 'Rejected', color: colors.danger },
 };
+
+const HOW_IT_WORKS_STEPS: Array<{
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  color: string;
+  text: string;
+}> = [
+  { icon: 'calculator-variant-outline', color: colors.primary, text: 'Set a monthly budget for each category' },
+  { icon: 'chart-bar', color: colors.accent, text: 'Unspent money at month end is saved automatically' },
+  { icon: 'piggy-bank-outline', color: '#8B5CF6', text: 'Withdraw anytime with parent approval' },
+];
 
 function formatMonthLabel(month: string): string {
   const [year, monthNum] = month.split('-').map(Number);
@@ -86,6 +105,7 @@ export default function PersonalSavingsScreen({
   const parsedAmount = Number(amount);
   const canSubmit =
     parsedAmount > 0 && parsedAmount <= Number(balance) && reason.trim().length > 0 && !isSubmitting;
+  const isBalanceZero = Number(balance) <= 0;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -103,42 +123,57 @@ export default function PersonalSavingsScreen({
     }
   };
 
-  const renderHistoryItem = (entry: PersonalSavingsHistory) => {
+  const renderHistoryItem = (entry: PersonalSavingsHistory, index: number) => {
     const isRollover = entry.type === 'ROLLOVER';
     const statusMeta = STATUS_META[entry.status];
 
     return (
-      <View key={entry.id} style={styles.historyRow}>
-        <IconBadge
-          icon={isRollover ? 'piggy-bank-outline' : 'cash-minus'}
-          color={isRollover ? colors.accent : colors.primary}
-          size={44}
-        />
-        <View style={styles.historyMiddle}>
-          <Text style={styles.historyTitle}>
-            {isRollover ? `Rollover — ${formatMonthLabel(entry.month ?? '')}` : 'Withdrawal Request'}
-          </Text>
-          {!isRollover && entry.reason ? (
-            <Text style={styles.historyReason} numberOfLines={2}>
-              {entry.reason}
+      <View key={entry.id}>
+        <View style={styles.historyRow}>
+          <View
+            style={[
+              styles.historyIconCircle,
+              { backgroundColor: isRollover ? `${colors.accent}1F` : '#FFEDD5' },
+            ]}
+          >
+            <MaterialCommunityIcons
+              name={isRollover ? 'arrow-down' : 'arrow-up'}
+              size={18}
+              color={isRollover ? colors.accent : '#F97316'}
+            />
+          </View>
+          <View style={styles.historyMiddle}>
+            <Text style={styles.historyTitle}>
+              {isRollover ? `Rollover — ${formatMonthLabel(entry.month ?? '')}` : 'Withdrawal Request'}
             </Text>
-          ) : null}
-          <Text style={styles.historyDate}>{formatDate(entry.createdAt)}</Text>
-        </View>
-        <View style={styles.historyRight}>
-          <Text style={[styles.historyAmount, isRollover && { color: colors.accent }]}>
-            {isRollover ? '+' : '-'}${Number(entry.amount).toFixed(2)}
-          </Text>
-          {!isRollover ? (
-            <Chip
-              compact
-              style={[styles.statusChip, { backgroundColor: `${statusMeta.color}1F` }]}
-              textStyle={{ color: statusMeta.color, fontSize: 11, fontWeight: '700' }}
+            {!isRollover && entry.reason ? (
+              <Text style={styles.historyReason} numberOfLines={2}>
+                {entry.reason}
+              </Text>
+            ) : null}
+            <Text style={styles.historyDate}>{formatDate(entry.createdAt)}</Text>
+          </View>
+          <View style={styles.historyRight}>
+            <Text
+              style={[
+                styles.historyAmount,
+                { color: isRollover ? SAVINGS_AMOUNT_COLOR : WITHDRAWAL_AMOUNT_COLOR },
+              ]}
             >
-              {statusMeta.label}
-            </Chip>
-          ) : null}
+              {isRollover ? '+' : '-'}${Number(entry.amount).toFixed(2)}
+            </Text>
+            {!isRollover ? (
+              <Chip
+                compact
+                style={[styles.statusChip, { backgroundColor: `${statusMeta.color}1F` }]}
+                textStyle={{ color: statusMeta.color, fontSize: 11, fontWeight: '700' }}
+              >
+                {statusMeta.label}
+              </Chip>
+            ) : null}
+          </View>
         </View>
+        {index < history.length - 1 && <View style={styles.historyDivider} />}
       </View>
     );
   };
@@ -158,34 +193,66 @@ export default function PersonalSavingsScreen({
       >
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        <View style={styles.balanceCard}>
-          <IconBadge icon="piggy-bank-outline" color={colors.accent} size={64} iconSize={32} />
+        <LinearGradient
+          colors={[SAVINGS_GRADIENT_START, SAVINGS_GRADIENT_END]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.balanceCard}
+        >
+          <View style={styles.balanceIconCircle}>
+            <MaterialCommunityIcons name="piggy-bank-outline" size={32} color="#FFFFFF" />
+          </View>
           <Text style={styles.balanceLabel}>Current Balance</Text>
           <Text style={styles.balanceAmount}>${Number(balance).toFixed(2)}</Text>
           <Text style={styles.balanceExplanation}>
-            Unspent funds from your monthly budget are automatically saved here.
+            Unspent locked funds are automatically transferred to your savings at the end of each month
           </Text>
-          <Button
-            mode="contained"
-            buttonColor={colors.primary}
-            style={styles.requestButton}
-            contentStyle={styles.requestButtonContent}
-            disabled={Number(balance) <= 0}
+          <TouchableOpacity
+            style={[styles.requestButton, isBalanceZero && styles.requestButtonDisabled]}
+            activeOpacity={0.85}
+            disabled={isBalanceZero}
             onPress={openDialog}
           >
-            Request Withdrawal
-          </Button>
+            <MaterialCommunityIcons
+              name="piggy-bank-outline"
+              size={18}
+              color={isBalanceZero ? colors.muted : SAVINGS_GRADIENT_END}
+            />
+            <Text
+              style={[styles.requestButtonText, isBalanceZero && styles.requestButtonTextDisabled]}
+            >
+              Request Withdrawal
+            </Text>
+          </TouchableOpacity>
+        </LinearGradient>
+
+        <View style={styles.howItWorksCard}>
+          <Text style={styles.howItWorksTitle}>How it works</Text>
+          {HOW_IT_WORKS_STEPS.map((step) => (
+            <View key={step.text} style={styles.stepRow}>
+              <View style={[styles.stepIconCircle, { backgroundColor: `${step.color}1F` }]}>
+                <MaterialCommunityIcons name={step.icon} size={17} color={step.color} />
+              </View>
+              <Text style={styles.stepText}>{step.text}</Text>
+            </View>
+          ))}
         </View>
 
-        <Text style={styles.sectionLabel}>History</Text>
+        <Text style={styles.sectionTitle}>Savings History</Text>
         {isLoading && history.length === 0 ? (
           <ActivityIndicator color={colors.primary} style={styles.loading} />
         ) : history.length > 0 ? (
-          <View style={styles.historyList}>{history.map(renderHistoryItem)}</View>
+          <View style={styles.historyCard}>{history.map(renderHistoryItem)}</View>
         ) : (
-          <Text style={styles.emptyText}>
-            No savings activity yet. Unspent funds are added here at the end of each month.
-          </Text>
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIconCircle}>
+              <MaterialCommunityIcons name="piggy-bank-outline" size={40} color={colors.accent} />
+            </View>
+            <Text style={styles.emptyTitle}>No savings activity yet</Text>
+            <Text style={styles.emptySubtitle}>
+              Unspent funds are added here at the end of each month
+            </Text>
+          </View>
         )}
       </ScrollView>
 
@@ -245,7 +312,7 @@ export default function PersonalSavingsScreen({
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: SCREEN_BACKGROUND,
   },
   header: {
     flexDirection: 'row',
@@ -262,7 +329,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   content: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingBottom: 32,
   },
   errorText: {
@@ -277,63 +344,129 @@ const styles = StyleSheet.create({
   },
   balanceCard: {
     alignItems: 'center',
-    backgroundColor: colors.surface,
     borderRadius: 20,
     paddingVertical: 28,
     paddingHorizontal: 20,
-    marginTop: 12,
-    marginBottom: 24,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  balanceIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   balanceLabel: {
     fontSize: 13,
-    color: colors.muted,
-    marginTop: 12,
+    color: '#A7F3D0',
+    marginTop: 14,
   },
   balanceAmount: {
-    fontSize: 40,
+    fontSize: 32,
     fontWeight: '800',
-    color: colors.heading,
+    color: '#FFFFFF',
     marginTop: 4,
   },
   balanceExplanation: {
     fontSize: 12,
-    color: colors.muted,
+    color: 'rgba(255,255,255,0.8)',
     textAlign: 'center',
     marginTop: 8,
     marginBottom: 20,
     lineHeight: 18,
   },
   requestButton: {
-    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: SAVINGS_GRADIENT_END,
+    borderRadius: 12,
+    paddingVertical: 13,
   },
-  requestButtonContent: {
-    paddingVertical: 6,
+  requestButtonDisabled: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
   },
-  sectionLabel: {
+  requestButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: SAVINGS_GRADIENT_END,
+    marginLeft: 8,
+  },
+  requestButtonTextDisabled: {
+    color: colors.muted,
+  },
+  howItWorksCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  howItWorksTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.primary,
+    marginBottom: 12,
+  },
+  stepRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  stepIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  stepText: {
+    flex: 1,
     fontSize: 13,
-    fontWeight: '600',
     color: colors.label,
+    lineHeight: 18,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.heading,
     marginBottom: 10,
   },
   loading: {
     marginTop: 24,
   },
-  emptyText: {
-    color: colors.muted,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  historyList: {
-    marginBottom: 8,
+  historyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
   },
   historyRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 10,
+    paddingVertical: 12,
+  },
+  historyIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   historyMiddle: {
     flex: 1,
@@ -360,12 +493,47 @@ const styles = StyleSheet.create({
   },
   historyAmount: {
     fontWeight: '700',
-    color: colors.heading,
     fontSize: 14,
+  },
+  historyDivider: {
+    height: 1,
+    backgroundColor: colors.border,
   },
   statusChip: {
     height: 24,
     marginTop: 6,
+  },
+  emptyState: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingVertical: 32,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  emptyIconCircle: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: `${colors.accent}1A`,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontWeight: '700',
+    color: colors.heading,
+    marginBottom: 6,
+  },
+  emptySubtitle: {
+    color: colors.muted,
+    fontSize: 13,
+    textAlign: 'center',
+    paddingHorizontal: 24,
+    lineHeight: 18,
   },
   dialogBalance: {
     fontSize: 13,

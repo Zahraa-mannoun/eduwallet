@@ -6,7 +6,6 @@ import {
   Avatar,
   Button,
   Card,
-  Chip,
   Dialog,
   HelperText,
   IconButton,
@@ -68,52 +67,30 @@ function toggleInSet<T>(set: Set<T>, value: T): Set<T> {
   return next;
 }
 
-type CategoryChipsSelectorProps = Readonly<{
+type CategoryToggleGridProps = Readonly<{
   selected: Set<TransactionCategory>;
   onToggle: (category: TransactionCategory) => void;
 }>;
 
-function CategoryChipsSelector({ selected, onToggle }: CategoryChipsSelectorProps) {
+// Shared by both the Link-a-Student and Student Settings dialogs — a 3-column toggle-chip grid
+// (blue+checkmark when selected, white+gray when not).
+function CategoryToggleGrid({ selected, onToggle }: CategoryToggleGridProps) {
   return (
-    <View style={styles.categoryChipsRow}>
-      {LOCKABLE_BUDGET_CATEGORIES.map((category) => {
-        const txCategory = category.key.toUpperCase() as TransactionCategory;
-        const isSelected = selected.has(txCategory);
-        return (
-          <Chip
-            key={category.key}
-            selected={isSelected}
-            onPress={() => onToggle(txCategory)}
-            style={styles.categoryChoiceChip}
-          >
-            {category.label}
-          </Chip>
-        );
-      })}
-    </View>
-  );
-}
-
-// Settings-dialog-only category selector — visually distinct (3-column toggle chips) from
-// CategoryChipsSelector above, which the Link-a-Student dialog still uses unchanged.
-function SettingsCategoryGrid({ selected, onToggle }: CategoryChipsSelectorProps) {
-  return (
-    <View style={styles.settingsCategoryGrid}>
+    <View style={styles.categoryToggleGrid}>
       {LOCKABLE_BUDGET_CATEGORIES.map((cat, index) => {
         const txCategory = cat.key.toUpperCase() as TransactionCategory;
         const isSelected = selected.has(txCategory);
-        // Same ragged-last-row fix as the category grid in ParentSendMoneyScreen — explicit
-        // per-item margins instead of space-between so an 8-item/3-column grid's 2-item last
-        // row still sits evenly spaced instead of pushed to opposite edges.
+        // A plain space-between 3-column grid pushes an 8-item list's ragged 2-item last row to
+        // opposite edges — explicit per-item margins instead keep every row evenly spaced.
         const isLastInRow = (index + 1) % 3 === 0;
         return (
           <TouchableOpacity
             key={cat.key}
             onPress={() => onToggle(txCategory)}
             style={[
-              styles.settingsCategoryChip,
-              !isLastInRow && styles.settingsCategoryChipGap,
-              isSelected && styles.settingsCategoryChipSelected,
+              styles.categoryToggleChip,
+              !isLastInRow && styles.categoryToggleChipGap,
+              isSelected && styles.categoryToggleChipSelected,
             ]}
           >
             <MaterialCommunityIcons
@@ -123,8 +100,8 @@ function SettingsCategoryGrid({ selected, onToggle }: CategoryChipsSelectorProps
             />
             <Text
               style={[
-                styles.settingsCategoryChipText,
-                isSelected && styles.settingsCategoryChipTextSelected,
+                styles.categoryToggleChipText,
+                isSelected && styles.categoryToggleChipTextSelected,
               ]}
               numberOfLines={1}
             >
@@ -325,83 +302,123 @@ export default function StudentsListScreen(_props: ParentTabScreenProps<'Student
       </ScrollView>
 
       <Portal>
-        <Dialog visible={linkDialogVisible} onDismiss={closeLinkDialog}>
-          <Dialog.Title>Link a Student</Dialog.Title>
-          <Dialog.Content>
-            {linkError ? (
-              <View style={styles.errorBanner}>
-                <MaterialCommunityIcons name="alert-circle" size={18} color={colors.danger} />
-                <Text style={styles.errorBannerText}>{linkError}</Text>
+        <Dialog visible={linkDialogVisible} onDismiss={closeLinkDialog} style={styles.dialogContainer}>
+          <View style={styles.dialogTitleRow}>
+            <MaterialCommunityIcons name="account-plus-outline" size={20} color={colors.primary} />
+            <Text style={styles.linkTitleText}>Link a Student</Text>
+          </View>
+          <Dialog.ScrollArea style={styles.linkScrollArea}>
+            <ScrollView contentContainerStyle={styles.linkScrollContent}>
+              {linkError ? (
+                <View style={styles.errorBanner}>
+                  <MaterialCommunityIcons name="alert-circle" size={18} color={colors.danger} />
+                  <Text style={styles.errorBannerText}>{linkError}</Text>
+                </View>
+              ) : null}
+
+              <Text style={styles.dialogFieldLabel}>Student Email</Text>
+              <TextInput
+                mode="outlined"
+                placeholder="student@example.com"
+                value={studentEmail}
+                onChangeText={(text: string) => setStudentEmail(text)}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                left={<TextInput.Icon icon="email-outline" />}
+                outlineColor={colors.border}
+                activeOutlineColor={colors.primary}
+                theme={{ roundness: 12 }}
+                style={styles.dialogInput}
+              />
+
+              <Text style={styles.dialogFieldLabel}>Approval Threshold ($)</Text>
+              <TextInput
+                mode="outlined"
+                placeholder="0"
+                value={approvalThreshold}
+                onChangeText={(text: string) => setApprovalThreshold(text.replace(/[^0-9.]/g, ''))}
+                keyboardType="decimal-pad"
+                left={<TextInput.Icon icon="currency-usd" />}
+                outlineColor={colors.border}
+                activeOutlineColor={colors.primary}
+                theme={{ roundness: 12 }}
+                style={styles.dialogInputTight}
+              />
+              <Text style={styles.linkHelperText}>
+                Leave empty for no approval limit. Only applies to general unlocked transfers.
+              </Text>
+
+              <Text style={styles.dialogSectionLabel}>Allowed Spending Categories</Text>
+              <CategoryToggleGrid
+                selected={linkCategories}
+                onToggle={(category) => setLinkCategories((prev) => toggleInSet(prev, category))}
+              />
+              <Text style={styles.categoryExplanation}>{CATEGORY_EXPLANATION}</Text>
+
+              <View style={styles.infoBox}>
+                <View style={styles.infoBoxHeader}>
+                  <Text style={styles.infoBoxIcon}>ℹ️</Text>
+                  <Text style={styles.infoBoxTitle}>What is Approval Threshold?</Text>
+                </View>
+                <Text style={styles.infoBoxText}>
+                  When your student sends money from their general balance above this amount, you
+                  will be asked to approve it first. Education-locked funds you send are
+                  automatically approved when spent correctly — no double approval needed.
+                </Text>
+                <Text style={styles.infoBoxExample}>
+                  Example: Set $100 → student sending $50 is automatic, sending $200 needs your
+                  approval
+                </Text>
               </View>
-            ) : null}
-            <TextInput
+            </ScrollView>
+          </Dialog.ScrollArea>
+          <Dialog.Actions style={styles.dialogActions}>
+            <Button
               mode="outlined"
-              label="Student email"
-              value={studentEmail}
-              onChangeText={(text: string) => setStudentEmail(text)}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              outlineColor={colors.border}
-              activeOutlineColor={colors.primary}
-              style={styles.dialogInput}
-            />
-            <TextInput
-              mode="outlined"
-              label="Approval threshold ($)"
-              value={approvalThreshold}
-              onChangeText={(text: string) => setApprovalThreshold(text.replace(/[^0-9.]/g, ''))}
-              keyboardType="decimal-pad"
-              outlineColor={colors.border}
-              activeOutlineColor={colors.primary}
-              style={styles.dialogInput}
-            />
-            <HelperText type="info" visible style={styles.thresholdHelperText}>
-              Leave empty for no approval limit. Only applies to general unlocked transfers.
-            </HelperText>
-
-            <Text style={styles.fieldLabel}>Allowed Spending Categories</Text>
-            <CategoryChipsSelector
-              selected={linkCategories}
-              onToggle={(category) => setLinkCategories((prev) => toggleInSet(prev, category))}
-            />
-            <Text style={styles.categoryExplanation}>{CATEGORY_EXPLANATION}</Text>
-
-            <View style={styles.thresholdInfoBox}>
-              <Text style={styles.thresholdInfoTitle}>What is Approval Threshold?</Text>
-              <Text style={styles.thresholdInfoText}>
-                When your student sends money from their general balance above this amount, you
-                will be asked to approve it first. Education-locked funds you send are
-                automatically approved when spent correctly — no double approval needed.
-              </Text>
-              <Text style={styles.thresholdInfoExample}>
-                Example: Set $100 → student sending $50 is automatic, sending $200 needs your
-                approval
-              </Text>
-            </View>
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={closeLinkDialog} disabled={isLinking}>
+              textColor={colors.muted}
+              style={styles.dialogCancelButton}
+              disabled={isLinking}
+              onPress={closeLinkDialog}
+            >
               Cancel
             </Button>
-            <Button onPress={handleLinkStudent} disabled={!canLink}>
-              {isLinking ? <ActivityIndicator size={16} color={colors.primary} /> : 'Link'}
-            </Button>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              disabled={!canLink}
+              onPress={handleLinkStudent}
+              style={styles.dialogPrimaryButtonWrapper}
+            >
+              <LinearGradient
+                colors={canLink ? [colors.gradientStart, colors.gradientEnd] : [colors.border, colors.border]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.dialogPrimaryButton}
+              >
+                {isLinking ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={[styles.dialogPrimaryButtonText, { color: canLink ? '#FFFFFF' : colors.muted }]}>
+                    Link
+                  </Text>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
           </Dialog.Actions>
         </Dialog>
 
         <Dialog
           visible={settingsStudent !== null}
           onDismiss={closeSettingsDialog}
-          style={styles.settingsDialog}
+          style={styles.dialogContainer}
         >
-          <View style={styles.settingsTitleRow}>
+          <View style={styles.dialogTitleRow}>
             <MaterialCommunityIcons name="cog-outline" size={20} color={colors.primary} />
             <Text style={styles.settingsTitleText}>
               {settingsStudent ? `${settingsStudent.student.fullName}'s Settings` : 'Student Settings'}
             </Text>
           </View>
           <Dialog.Content>
-            <Text style={styles.settingsFieldLabel}>Approval Threshold ($)</Text>
+            <Text style={styles.dialogFieldLabel}>Approval Threshold ($)</Text>
             <TextInput
               mode="outlined"
               placeholder="0"
@@ -419,18 +436,18 @@ export default function StudentsListScreen(_props: ParentTabScreenProps<'Student
               Education-locked funds are automatically approved when spent correctly.
             </HelperText>
 
-            <Text style={styles.settingsSectionLabel}>Allowed Spending Categories</Text>
-            <SettingsCategoryGrid
+            <Text style={styles.dialogSectionLabel}>Allowed Spending Categories</Text>
+            <CategoryToggleGrid
               selected={settingsCategories}
               onToggle={(category) => setSettingsCategories((prev) => toggleInSet(prev, category))}
             />
             <Text style={styles.categoryExplanation}>{CATEGORY_EXPLANATION}</Text>
           </Dialog.Content>
-          <Dialog.Actions style={styles.settingsActions}>
+          <Dialog.Actions style={styles.dialogActions}>
             <Button
               mode="outlined"
               textColor={colors.muted}
-              style={styles.settingsCancelButton}
+              style={styles.dialogCancelButton}
               disabled={isSavingSettings}
               onPress={closeSettingsDialog}
             >
@@ -440,7 +457,7 @@ export default function StudentsListScreen(_props: ParentTabScreenProps<'Student
               activeOpacity={0.85}
               disabled={!canSaveSettings}
               onPress={handleSaveSettings}
-              style={styles.settingsSaveButtonWrapper}
+              style={styles.dialogPrimaryButtonWrapper}
             >
               <LinearGradient
                 colors={
@@ -448,14 +465,14 @@ export default function StudentsListScreen(_props: ParentTabScreenProps<'Student
                 }
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
-                style={styles.settingsSaveButton}
+                style={styles.dialogPrimaryButton}
               >
                 {isSavingSettings ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <Text
                     style={[
-                      styles.settingsSaveButtonText,
+                      styles.dialogPrimaryButtonText,
                       { color: canSaveSettings ? '#FFFFFF' : colors.muted },
                     ]}
                   >
@@ -620,6 +637,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   dialogInput: {
+    backgroundColor: '#FFFFFF',
     marginBottom: 12,
   },
   errorBanner: {
@@ -638,26 +656,12 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   dialogInputTight: {
+    backgroundColor: '#FFFFFF',
     marginBottom: 0,
   },
   thresholdHelperText: {
     marginBottom: 12,
     paddingHorizontal: 0,
-  },
-  fieldLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.label,
-    marginBottom: 8,
-  },
-  categoryChipsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  categoryChoiceChip: {
-    marginRight: 4,
-    marginBottom: 4,
   },
   categoryExplanation: {
     fontSize: 12,
@@ -665,30 +669,7 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     marginTop: 8,
   },
-  thresholdInfoBox: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 12,
-    marginTop: 14,
-  },
-  thresholdInfoTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.heading,
-    marginBottom: 4,
-  },
-  thresholdInfoText: {
-    fontSize: 12,
-    color: colors.muted,
-    lineHeight: 17,
-  },
-  thresholdInfoExample: {
-    fontSize: 11,
-    color: colors.primary,
-    fontWeight: '600',
-    marginTop: 8,
-  },
-  settingsDialog: {
+  dialogContainer: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     shadowColor: '#000',
@@ -697,7 +678,7 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 6,
   },
-  settingsTitleRow: {
+  dialogTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 24,
@@ -711,7 +692,29 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     flexShrink: 1,
   },
-  settingsFieldLabel: {
+  linkTitleText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.primary,
+    marginLeft: 8,
+    flexShrink: 1,
+  },
+  linkScrollArea: {
+    paddingHorizontal: 0,
+    maxHeight: 420,
+  },
+  linkScrollContent: {
+    paddingHorizontal: 24,
+    paddingBottom: 8,
+  },
+  linkHelperText: {
+    fontSize: 11,
+    fontStyle: 'italic',
+    color: colors.muted,
+    marginTop: 6,
+    marginBottom: 12,
+  },
+  dialogFieldLabel: {
     fontSize: 11,
     fontWeight: '700',
     color: colors.muted,
@@ -719,19 +722,19 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
     marginBottom: 6,
   },
-  settingsSectionLabel: {
+  dialogSectionLabel: {
     fontSize: 14,
     fontWeight: '700',
     color: colors.primary,
     marginTop: 6,
     marginBottom: 10,
   },
-  settingsCategoryGrid: {
+  categoryToggleGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'flex-start',
   },
-  settingsCategoryChip: {
+  categoryToggleChip: {
     width: '31%',
     flexDirection: 'row',
     alignItems: 'center',
@@ -744,47 +747,82 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     marginBottom: 10,
   },
-  settingsCategoryChipGap: {
+  categoryToggleChipGap: {
     marginRight: '3.5%',
   },
-  settingsCategoryChipSelected: {
+  categoryToggleChipSelected: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  settingsCategoryChipText: {
+  categoryToggleChipText: {
     fontSize: 11,
     fontWeight: '700',
     color: colors.muted,
     marginLeft: 5,
     flexShrink: 1,
   },
-  settingsCategoryChipTextSelected: {
+  categoryToggleChipTextSelected: {
     color: '#FFFFFF',
   },
-  settingsActions: {
+  infoBox: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  infoBoxHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  infoBoxIcon: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  infoBoxTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  infoBoxText: {
+    fontSize: 12,
+    color: colors.heading,
+    lineHeight: 17,
+  },
+  infoBoxExample: {
+    fontSize: 11,
+    color: colors.primary,
+    fontWeight: '600',
+    fontStyle: 'italic',
+    marginTop: 8,
+  },
+  dialogActions: {
     justifyContent: 'space-between',
     paddingHorizontal: 24,
     paddingBottom: 24,
     paddingTop: 8,
   },
-  settingsCancelButton: {
+  dialogCancelButton: {
     flex: 1,
     marginRight: 10,
     borderRadius: 12,
     borderColor: colors.border,
   },
-  settingsSaveButtonWrapper: {
+  dialogPrimaryButtonWrapper: {
     flex: 1,
     borderRadius: 12,
     overflow: 'hidden',
   },
-  settingsSaveButton: {
+  dialogPrimaryButton: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 11,
     borderRadius: 12,
   },
-  settingsSaveButtonText: {
+  dialogPrimaryButtonText: {
     fontSize: 14,
     fontWeight: '700',
   },

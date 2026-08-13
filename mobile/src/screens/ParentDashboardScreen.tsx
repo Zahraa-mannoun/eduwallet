@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Dimensions, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -28,10 +28,12 @@ import { getInitials } from '../utils/getInitials';
 import * as parentalService from '../services/parentalService';
 import type { LinkedStudent, StudentSpendingBreakdown } from '../services/parentalService';
 import { ApiError } from '../services/api';
+import { progressColorFor } from '../utils/progressColor';
 import type { ParentTabScreenProps } from '../navigation/types';
 
 const categoryLookup = new Map(BUDGET_CATEGORIES.map((category) => [category.key, category]));
 const PENDING_PREVIEW_COUNT = 2;
+const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 function transactionTitle(transaction: Transaction): string {
   if (transaction.note) return transaction.note;
@@ -294,8 +296,22 @@ export default function ParentDashboardScreen({
       </ScrollView>
 
       <Portal>
-        <Dialog visible={breakdownVisible} onDismiss={closeBreakdown}>
-          <Dialog.Title>{selectedStudent?.student.fullName ?? 'Student'}</Dialog.Title>
+        <Dialog visible={breakdownVisible} onDismiss={closeBreakdown} style={styles.breakdownDialog}>
+          <View style={styles.breakdownHeader}>
+            <Avatar.Text
+              size={48}
+              label={getInitials(selectedStudent?.student.fullName ?? '?')}
+              style={styles.breakdownAvatar}
+              color={colors.onPrimary}
+            />
+            <View style={styles.breakdownHeaderText}>
+              <Text style={styles.breakdownStudentName} numberOfLines={1}>
+                {selectedStudent?.student.fullName ?? 'Student'}
+              </Text>
+              <Text style={styles.breakdownSubtitle}>Spending Overview</Text>
+            </View>
+          </View>
+
           <Dialog.ScrollArea style={styles.breakdownScrollArea}>
             <ScrollView contentContainerStyle={styles.breakdownContent}>
               {isLoadingBreakdown ? (
@@ -305,20 +321,30 @@ export default function ParentDashboardScreen({
               ) : breakdown ? (
                 <>
                   <Text style={styles.breakdownSectionLabel}>Allowed Categories</Text>
-                  <View style={styles.allowedCategoriesRow}>
-                    {breakdown.allowedCategories.length > 0 ? (
-                      breakdown.allowedCategories.map((cat) => {
+                  {breakdown.allowedCategories.length > 0 ? (
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.allowedCategoriesRow}
+                    >
+                      {breakdown.allowedCategories.map((cat) => {
                         const category = categoryLookup.get(cat.toLowerCase() as BudgetCategoryKey);
+                        const color = category?.color ?? colors.muted;
                         return (
-                          <Chip key={cat} compact style={styles.allowedCategoryChip}>
-                            {category?.label ?? cat}
-                          </Chip>
+                          <View
+                            key={cat}
+                            style={[styles.allowedCategoryPill, { backgroundColor: `${color}1F` }]}
+                          >
+                            <Text style={[styles.allowedCategoryPillText, { color }]}>
+                              {category?.label ?? cat}
+                            </Text>
+                          </View>
                         );
-                      })
-                    ) : (
-                      <Text style={styles.emptySubtitle}>No categories authorized yet.</Text>
-                    )}
-                  </View>
+                      })}
+                    </ScrollView>
+                  ) : (
+                    <Text style={styles.emptySubtitle}>No categories authorized yet.</Text>
+                  )}
 
                   <Text style={[styles.breakdownSectionLabel, styles.breakdownSectionSpacing]}>
                     Locked Funds
@@ -331,19 +357,19 @@ export default function ParentDashboardScreen({
                       const total = entry.locked + entry.spent;
                       const progress = total > 0 ? Math.min(entry.spent / total, 1) : 0;
                       return (
-                        <View key={entry.category} style={styles.breakdownCategoryRow}>
+                        <View key={entry.category} style={styles.lockedCard}>
                           <View style={styles.breakdownCategoryHeader}>
                             <IconBadge
                               icon={category?.icon ?? 'wallet-outline'}
                               color={category?.color ?? colors.primary}
-                              size={32}
-                              iconSize={16}
+                              size={36}
+                              iconSize={18}
                             />
                             <Text style={styles.breakdownCategoryLabel}>
                               {category?.label ?? entry.category}
                             </Text>
                             <Text style={styles.breakdownCategoryAmount}>
-                              ${entry.locked.toFixed(2)} locked
+                              ${entry.locked.toFixed(2)}
                             </Text>
                           </View>
                           <View style={styles.progressTrack}>
@@ -352,7 +378,7 @@ export default function ParentDashboardScreen({
                                 styles.progressFill,
                                 {
                                   width: `${Math.round(progress * 100)}%`,
-                                  backgroundColor: category?.color ?? colors.primary,
+                                  backgroundColor: progressColorFor(progress * 100),
                                 },
                               ]}
                             />
@@ -370,9 +396,13 @@ export default function ParentDashboardScreen({
               ) : null}
             </ScrollView>
           </Dialog.ScrollArea>
-          <Dialog.Actions>
-            <Button onPress={closeBreakdown}>Close</Button>
-          </Dialog.Actions>
+
+          <View style={styles.breakdownFooter}>
+            <TouchableOpacity style={styles.breakdownCloseButton} onPress={closeBreakdown}>
+              <MaterialCommunityIcons name="close" size={16} color={colors.primary} />
+              <Text style={styles.breakdownCloseButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
         </Dialog>
       </Portal>
     </SafeAreaView>
@@ -529,20 +559,57 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 8,
   },
+  breakdownDialog: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  breakdownHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 14,
+  },
+  breakdownAvatar: {
+    backgroundColor: colors.primary,
+  },
+  breakdownHeaderText: {
+    marginLeft: 12,
+    flexShrink: 1,
+  },
+  breakdownStudentName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.heading,
+  },
+  breakdownSubtitle: {
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 2,
+  },
   breakdownScrollArea: {
     paddingHorizontal: 0,
+    maxHeight: SCREEN_HEIGHT * 0.55,
+    backgroundColor: colors.surface,
   },
   breakdownContent: {
-    paddingHorizontal: 24,
-    paddingBottom: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
   },
   breakdownLoading: {
     marginVertical: 24,
   },
   breakdownSectionLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
-    color: colors.label,
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
     marginBottom: 10,
   },
   breakdownSectionSpacing: {
@@ -550,15 +617,27 @@ const styles = StyleSheet.create({
   },
   allowedCategoriesRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
   },
-  allowedCategoryChip: {
+  allowedCategoryPill: {
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
     marginRight: 8,
-    marginBottom: 8,
-    backgroundColor: '#EAF0FA',
   },
-  breakdownCategoryRow: {
-    marginBottom: 16,
+  allowedCategoryPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  lockedCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 1,
   },
   breakdownCategoryHeader: {
     flexDirection: 'row',
@@ -572,9 +651,28 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   breakdownCategoryAmount: {
-    fontSize: 12,
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.primary,
+  },
+  breakdownFooter: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  breakdownCloseButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 12,
+  },
+  breakdownCloseButtonText: {
+    fontSize: 14,
     fontWeight: '700',
     color: colors.primary,
+    marginLeft: 8,
   },
   breakdownCategorySpent: {
     fontSize: 12,

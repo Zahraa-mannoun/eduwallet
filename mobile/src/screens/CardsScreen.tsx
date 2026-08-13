@@ -1,8 +1,9 @@
 import { useCallback, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import {
   ActivityIndicator,
@@ -12,10 +13,8 @@ import {
   Portal,
   Snackbar,
   Text,
-  TouchableRipple,
 } from 'react-native-paper';
-import type { NewVirtualCard, TransactionCategory, VirtualCard } from '../types/api';
-import IconBadge from '../components/IconBadge';
+import type { TransactionCategory, VirtualCard } from '../types/api';
 import KYCGate from '../components/KYCGate';
 import { BUDGET_CATEGORIES, LOCKABLE_BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryDefinition, BudgetCategoryKey } from '../constants/budgetCategories';
@@ -24,6 +23,8 @@ import * as cardService from '../services/cardService';
 import * as parentalService from '../services/parentalService';
 import { ApiError } from '../services/api';
 import type { StudentTabScreenProps } from '../navigation/types';
+
+const SCREEN_BACKGROUND = '#F8FAFC';
 
 const LOCK_CATEGORIES = LOCKABLE_BUDGET_CATEGORIES.filter((category) => category.key !== 'general');
 const categoryLookup = new Map(BUDGET_CATEGORIES.map((category) => [category.key, category]));
@@ -41,15 +42,44 @@ function lockBadgeText(categoryLock: TransactionCategory | null): string {
   return `${(category?.label ?? categoryLock).toUpperCase()} ONLY`;
 }
 
+function lockBadgeColor(categoryLock: TransactionCategory | null): string {
+  if (!categoryLock) return 'rgba(255,255,255,0.3)';
+  const category = categoryLookup.get(categoryLock.toLowerCase() as BudgetCategoryKey);
+  return category ? `${category.color}CC` : 'rgba(255,255,255,0.3)';
+}
+
+function categoryPillColor(categoryLock: TransactionCategory | null): string {
+  if (!categoryLock) return colors.primary;
+  const category = categoryLookup.get(categoryLock.toLowerCase() as BudgetCategoryKey);
+  return category?.color ?? colors.primary;
+}
+
+// Demo prototype: the CVV/full number are always included on VirtualCard itself (never hidden
+// after creation, see CLAUDE.md — no real money or PCI scope here), so the same "reveal" dialog
+// serves both a just-created card and re-viewing an existing one via "Use Card".
+function maskCardNumber(cardNumber: string): string {
+  const digitsOnly = cardNumber.replace(/\s+/g, '');
+  const last4 = digitsOnly.slice(-4) || digitsOnly;
+  return `•••• •••• •••• ${last4}`;
+}
+
+function groupCardNumber(cardNumber: string): string {
+  const digitsOnly = cardNumber.replace(/\s+/g, '');
+  return digitsOnly.replace(/(.{4})/g, '$1 ').trim();
+}
+
 export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Cards'>>) {
   const [cards, setCards] = useState<VirtualCard[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
-  const [newCard, setNewCard] = useState<NewVirtualCard | null>(null);
+  const [viewingCard, setViewingCard] = useState<VirtualCard | null>(null);
+  const [viewingCardIsNew, setViewingCardIsNew] = useState(false);
+  const [cvvRevealed, setCvvRevealed] = useState(false);
   const [createDialogVisible, setCreateDialogVisible] = useState(false);
-  const [selectedLock, setSelectedLock] = useState<BudgetCategoryDefinition | null>(null);
+  // undefined = nothing tapped yet (Create stays disabled); null = explicitly "No Lock".
+  const [selectedLock, setSelectedLock] = useState<BudgetCategoryDefinition | null | undefined>(undefined);
   const [allowedCategories, setAllowedCategories] = useState<TransactionCategory[] | null>(null);
 
   const loadCards = useCallback(async () => {
@@ -103,11 +133,14 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
     : LOCK_CATEGORIES;
 
   const openCreateDialog = () => {
-    setSelectedLock(null);
+    setSelectedLock(undefined);
     setCreateDialogVisible(true);
   };
 
+  const canCreate = selectedLock !== undefined && !isCreating;
+
   const handleGenerate = async () => {
+    if (!canCreate) return;
     setIsCreating(true);
     try {
       const created = await cardService.createCard({
@@ -117,13 +150,21 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
           : undefined,
       });
       setCreateDialogVisible(false);
-      setNewCard(created);
+      setViewingCard(created);
+      setViewingCardIsNew(true);
+      setCvvRevealed(false);
       await loadCards();
     } catch (err) {
       setSnackbarMessage(err instanceof ApiError ? err.message : 'Could not create a card.');
     } finally {
       setIsCreating(false);
     }
+  };
+
+  const openUseCard = (card: VirtualCard) => {
+    setViewingCard(card);
+    setViewingCardIsNew(false);
+    setCvvRevealed(false);
   };
 
   const handleToggleFreeze = async (card: VirtualCard) => {
@@ -179,57 +220,48 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
               colors={[colors.gradientStart, colors.gradientEnd]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
-              style={[styles.card, card.frozen && styles.cardFrozen]}
+              style={styles.card}
             >
               <View style={[styles.decorCircle, styles.decorCircleLarge]} />
               <View style={[styles.decorCircle, styles.decorCircleSmall]} />
 
               <View style={styles.cardTopRow}>
-                <Text style={styles.cardBrand}>EduWallet</Text>
                 <View style={styles.chip} />
+                <View style={[styles.categoryBadge, { backgroundColor: lockBadgeColor(card.categoryLock) }]}>
+                  <Text style={styles.categoryBadgeText}>{lockBadgeText(card.categoryLock)}</Text>
+                </View>
               </View>
 
-              <View style={styles.cardNumberRow}>
-                <Text style={styles.cardNumber}>{card.cardNumber}</Text>
-                <IconButton
-                  icon="content-copy"
-                  size={16}
-                  iconColor={colors.onPrimary}
-                  style={styles.copyIconButton}
-                  onPress={() => handleCopy(card.cardNumber, 'Card number')}
-                />
-              </View>
-
-              <View style={styles.lockBadge}>
-                <Text style={styles.lockBadgeText}>{lockBadgeText(card.categoryLock)}</Text>
-              </View>
+              <Text style={styles.maskedCardNumber}>{maskCardNumber(card.cardNumber)}</Text>
 
               <View style={styles.cardBottomRow}>
-                <View>
-                  <Text style={styles.fieldLabel}>STATUS</Text>
-                  <Text style={styles.fieldValue}>{card.frozen ? 'FROZEN' : card.used ? 'USED' : 'ACTIVE'}</Text>
-                </View>
-                <View>
+                <Text style={styles.cardBrandBottom}>EduWallet Virtual</Text>
+                <View style={styles.expiryColumn}>
                   <Text style={styles.fieldLabel}>EXPIRES</Text>
                   <Text style={styles.fieldValue}>{formatExpiry(card.expiry)}</Text>
                 </View>
-                <View>
-                  <Text style={styles.fieldLabel}>CVV</Text>
-                  <View style={styles.cvvRow}>
-                    <Text style={styles.fieldValue}>{card.cvv}</Text>
-                    <IconButton
-                      icon="content-copy"
-                      size={14}
-                      iconColor={colors.onPrimary}
-                      style={styles.copyIconButtonSmall}
-                      onPress={() => handleCopy(card.cvv, 'CVV')}
-                    />
+              </View>
+
+              {card.frozen ? (
+                <View style={styles.frozenOverlay} pointerEvents="none">
+                  <View style={styles.frozenBadge}>
+                    <MaterialCommunityIcons name="snowflake" size={15} color="#FFFFFF" />
+                    <Text style={styles.frozenBadgeText}>FROZEN</Text>
                   </View>
                 </View>
-              </View>
+              ) : null}
             </LinearGradient>
 
             <View style={styles.cardActions}>
+              <Button
+                mode="outlined"
+                compact
+                icon="credit-card-check-outline"
+                onPress={() => openUseCard(card)}
+                style={styles.cardActionButton}
+              >
+                Use Card
+              </Button>
               <Button
                 mode="outlined"
                 compact
@@ -245,114 +277,235 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
         ))}
 
         {visibleCards.length === 0 && !isLoading ? (
-          <Text style={styles.emptyText}>You don&apos;t have any virtual cards yet.</Text>
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIconCircle}>
+              <MaterialCommunityIcons name="credit-card-outline" size={40} color={colors.primary} />
+            </View>
+            <Text style={styles.emptyTitle}>No Cards Yet</Text>
+            <Text style={styles.emptySubtitle}>Create a virtual card to start making payments</Text>
+          </View>
         ) : null}
 
-        <Button
-          mode="contained"
-          buttonColor={colors.primary}
-          icon="plus-circle-outline"
-          style={styles.generateButton}
-          contentStyle={styles.generateButtonContent}
-          onPress={openCreateDialog}
-        >
-          Create New Card
-        </Button>
+        <TouchableOpacity activeOpacity={0.85} style={styles.generateButtonWrapper} onPress={openCreateDialog}>
+          <LinearGradient
+            colors={[colors.gradientStart, colors.gradientEnd]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.generateButton}
+          >
+            <MaterialCommunityIcons name="plus-circle-outline" size={18} color="#FFFFFF" />
+            <Text style={styles.generateButtonText}>Create New Card</Text>
+          </LinearGradient>
+        </TouchableOpacity>
       </ScrollView>
 
       <Portal>
-        <Dialog visible={createDialogVisible} onDismiss={() => setCreateDialogVisible(false)}>
-          <Dialog.Title>Category Lock</Dialog.Title>
+        <Dialog
+          visible={createDialogVisible}
+          onDismiss={() => setCreateDialogVisible(false)}
+          style={styles.dialogContainer}
+        >
+          <View style={styles.dialogTitleRow}>
+            <MaterialCommunityIcons name="lock-outline" size={20} color={colors.primary} />
+            <Text style={styles.dialogTitleText}>Category Lock</Text>
+          </View>
           <Dialog.Content>
             <Text style={styles.lockDialogSubtitle}>
               Lock this card to one spending category, or leave it unlocked for general use.
             </Text>
             <View style={styles.lockGrid}>
-              <TouchableRipple
+              <TouchableOpacity
+                activeOpacity={0.8}
                 onPress={() => setSelectedLock(null)}
                 style={[styles.lockItem, selectedLock === null && styles.lockItemSelected]}
-                borderless
               >
-                <View style={styles.lockItemContent}>
-                  <IconBadge icon="lock-open-variant-outline" color={colors.muted} size={36} iconSize={20} />
-                  <Text style={[styles.lockItemLabel, selectedLock === null && styles.lockItemLabelSelected]}>
-                    No Lock
-                  </Text>
-                </View>
-              </TouchableRipple>
+                <MaterialCommunityIcons
+                  name="lock-open-variant-outline"
+                  size={22}
+                  color={selectedLock === null ? '#FFFFFF' : colors.muted}
+                />
+                <Text
+                  style={[styles.lockItemLabel, selectedLock === null && styles.lockItemLabelSelected]}
+                  numberOfLines={2}
+                >
+                  No Lock
+                </Text>
+              </TouchableOpacity>
               {availableLockCategories.map((category) => {
                 const selected = selectedLock?.key === category.key;
                 return (
-                  <TouchableRipple
+                  <TouchableOpacity
                     key={category.key}
+                    activeOpacity={0.8}
                     onPress={() => setSelectedLock(category)}
-                    style={[
-                      styles.lockItem,
-                      selected && { borderColor: category.color, backgroundColor: `${category.color}14` },
-                    ]}
-                    borderless
+                    style={[styles.lockItem, selected && styles.lockItemSelected]}
                   >
-                    <View style={styles.lockItemContent}>
-                      <IconBadge icon={category.icon} color={category.color} size={36} iconSize={20} />
-                      <Text style={[styles.lockItemLabel, selected && { color: category.color }]}>
-                        {category.label}
-                      </Text>
-                    </View>
-                  </TouchableRipple>
+                    <MaterialCommunityIcons
+                      name={category.icon}
+                      size={22}
+                      color={selected ? '#FFFFFF' : category.color}
+                    />
+                    <Text
+                      style={[styles.lockItemLabel, selected && styles.lockItemLabelSelected]}
+                      numberOfLines={2}
+                    >
+                      {category.label}
+                    </Text>
+                  </TouchableOpacity>
                 );
               })}
             </View>
           </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setCreateDialogVisible(false)} disabled={isCreating}>
+          <Dialog.Actions style={styles.dialogActions}>
+            <Button
+              mode="outlined"
+              textColor={colors.muted}
+              style={styles.dialogCancelButton}
+              disabled={isCreating}
+              onPress={() => setCreateDialogVisible(false)}
+            >
               Cancel
             </Button>
-            <Button onPress={handleGenerate} disabled={isCreating}>
-              {isCreating ? <ActivityIndicator size={16} color={colors.primary} /> : 'Create'}
-            </Button>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              disabled={!canCreate}
+              onPress={handleGenerate}
+              style={styles.dialogPrimaryButtonWrapper}
+            >
+              <LinearGradient
+                colors={canCreate ? [colors.gradientStart, colors.gradientEnd] : [colors.border, colors.border]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.dialogPrimaryButton}
+              >
+                {isCreating ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={[styles.dialogPrimaryButtonText, { color: canCreate ? '#FFFFFF' : colors.muted }]}>
+                    Create
+                  </Text>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
           </Dialog.Actions>
         </Dialog>
 
-        <Dialog visible={newCard !== null} onDismiss={() => setNewCard(null)}>
-          <Dialog.Title>Card Created</Dialog.Title>
+        <Dialog
+          visible={viewingCard !== null}
+          onDismiss={() => setViewingCard(null)}
+          style={styles.dialogContainer}
+        >
+          <View style={styles.detailsHeaderRow}>
+            <View style={styles.detailsHeaderIconCircle}>
+              <MaterialCommunityIcons name="credit-card-outline" size={22} color={colors.primary} />
+            </View>
+            <View style={styles.detailsHeaderTextColumn}>
+              <Text style={styles.dialogTitleText}>{viewingCardIsNew ? 'Card Created' : 'Card Details'}</Text>
+              <Text style={styles.detailsHeaderSubtitle}>Keep this information secure</Text>
+            </View>
+          </View>
           <Dialog.Content>
+            {viewingCard ? (
+              <LinearGradient
+                colors={[colors.gradientStart, colors.gradientEnd]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.detailsCardPreview}
+              >
+                <Text style={styles.detailsCardPreviewNumber}>{maskCardNumber(viewingCard.cardNumber)}</Text>
+                <View style={styles.detailsCardPreviewBottomRow}>
+                  <Text style={styles.detailsCardPreviewMeta}>EXPIRES {formatExpiry(viewingCard.expiry)}</Text>
+                  <Text style={styles.detailsCardPreviewMeta}>{lockBadgeText(viewingCard.categoryLock)}</Text>
+                </View>
+              </LinearGradient>
+            ) : null}
+
             <View style={styles.dialogRow}>
               <Text style={styles.dialogLabel}>Card Number</Text>
               <View style={styles.dialogValueRow}>
-                <Text style={styles.dialogValue}>{newCard?.cardNumber}</Text>
+                <Text style={styles.dialogValueMono}>
+                  {viewingCard ? groupCardNumber(viewingCard.cardNumber) : ''}
+                </Text>
                 <IconButton
                   icon="content-copy"
                   size={16}
                   iconColor={colors.primary}
                   style={styles.copyIconButtonDialog}
-                  onPress={() => newCard && handleCopy(newCard.cardNumber, 'Card number')}
+                  onPress={() => viewingCard && handleCopy(viewingCard.cardNumber, 'Card number')}
                 />
               </View>
             </View>
+            <View style={styles.dialogDivider} />
+
             <View style={styles.dialogRow}>
               <Text style={styles.dialogLabel}>CVV</Text>
               <View style={styles.dialogValueRow}>
-                <Text style={styles.dialogValue}>{newCard?.cvv}</Text>
+                <Text style={styles.dialogValueMono}>
+                  {cvvRevealed ? viewingCard?.cvv : '•••'}
+                </Text>
+                <IconButton
+                  icon={cvvRevealed ? 'eye-off-outline' : 'eye-outline'}
+                  size={16}
+                  iconColor={colors.muted}
+                  style={styles.copyIconButtonDialog}
+                  onPress={() => setCvvRevealed((prev) => !prev)}
+                />
                 <IconButton
                   icon="content-copy"
                   size={16}
                   iconColor={colors.primary}
                   style={styles.copyIconButtonDialog}
-                  onPress={() => newCard && handleCopy(newCard.cvv, 'CVV')}
+                  onPress={() => viewingCard && handleCopy(viewingCard.cvv, 'CVV')}
                 />
               </View>
             </View>
+            <View style={styles.dialogDivider} />
+
             <View style={styles.dialogRow}>
               <Text style={styles.dialogLabel}>Expires</Text>
-              <Text style={styles.dialogValue}>{newCard?.expiryFormatted}</Text>
+              <Text style={styles.dialogValue}>{viewingCard ? formatExpiry(viewingCard.expiry) : ''}</Text>
             </View>
+            <View style={styles.dialogDivider} />
+
             <View style={styles.dialogRow}>
               <Text style={styles.dialogLabel}>Category Lock</Text>
-              <Text style={styles.dialogValue}>{lockBadgeText(newCard?.categoryLock ?? null)}</Text>
+              <View
+                style={[
+                  styles.categoryLockPill,
+                  { backgroundColor: `${categoryPillColor(viewingCard?.categoryLock ?? null)}1F` },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.categoryLockPillText,
+                    { color: categoryPillColor(viewingCard?.categoryLock ?? null) },
+                  ]}
+                >
+                  {lockBadgeText(viewingCard?.categoryLock ?? null)}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.securityNoteCard}>
+              <Text style={styles.securityNoteIcon}>🔒</Text>
+              <Text style={styles.securityNoteText}>Never share your card details with anyone</Text>
             </View>
           </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setNewCard(null)}>Done</Button>
+          <Dialog.Actions style={styles.detailsDialogActions}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => setViewingCard(null)}
+              style={styles.dialogPrimaryButtonWrapper}
+            >
+              <LinearGradient
+                colors={[colors.gradientStart, colors.gradientEnd]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.dialogPrimaryButton}
+              >
+                <Text style={[styles.dialogPrimaryButtonText, { color: '#FFFFFF' }]}>Done</Text>
+              </LinearGradient>
+            </TouchableOpacity>
           </Dialog.Actions>
         </Dialog>
       </Portal>
@@ -372,7 +525,7 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: SCREEN_BACKGROUND,
   },
   header: {
     paddingHorizontal: 20,
@@ -384,7 +537,7 @@ const styles = StyleSheet.create({
     color: colors.heading,
   },
   content: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingBottom: 32,
   },
   errorText: {
@@ -392,10 +545,29 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 12,
   },
-  emptyText: {
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  emptyIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: `${colors.primary}1A`,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.heading,
+    marginBottom: 6,
+  },
+  emptySubtitle: {
     color: colors.muted,
+    fontSize: 13,
     textAlign: 'center',
-    paddingVertical: 24,
   },
   cardWrapper: {
     marginBottom: 20,
@@ -406,9 +578,6 @@ const styles = StyleSheet.create({
     height: 180,
     justifyContent: 'space-between',
     overflow: 'hidden',
-  },
-  cardFrozen: {
-    opacity: 0.55,
   },
   decorCircle: {
     position: 'absolute',
@@ -432,65 +601,42 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
   },
-  cardBrand: {
-    color: colors.onPrimary,
-    fontSize: 16,
-    fontWeight: '700',
-  },
   chip: {
     width: 36,
     height: 26,
     borderRadius: 6,
     backgroundColor: 'rgba(255,255,255,0.85)',
   },
-  cardNumberRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  cardNumber: {
-    color: colors.onPrimary,
-    fontSize: 18,
-    fontWeight: '600',
-    letterSpacing: 1,
-  },
-  copyIconButton: {
-    margin: 0,
-    marginLeft: 2,
-  },
-  copyIconButtonSmall: {
-    margin: 0,
-    marginLeft: -4,
-    width: 20,
-    height: 20,
-  },
-  copyIconButtonDialog: {
-    margin: 0,
-    marginLeft: 4,
-  },
-  cvvRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  dialogValueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  lockBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.18)',
+  categoryBadge: {
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 4,
+    maxWidth: 160,
   },
-  lockBadgeText: {
-    color: colors.onPrimary,
-    fontSize: 10,
+  categoryBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
     fontWeight: '700',
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
+  },
+  maskedCardNumber: {
+    color: colors.onPrimary,
+    fontSize: 19,
+    fontWeight: '600',
+    letterSpacing: 1.5,
   },
   cardBottomRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'flex-end',
+  },
+  cardBrandBottom: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  expiryColumn: {
+    alignItems: 'flex-end',
   },
   fieldLabel: {
     color: 'rgba(255,255,255,0.7)',
@@ -503,26 +649,94 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
+  frozenOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 20,
+    backgroundColor: 'rgba(220,38,38,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  frozenBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(127,29,29,0.85)',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+  frozenBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 1,
+    marginLeft: 6,
+  },
+  copyIconButtonDialog: {
+    margin: 0,
+    marginLeft: 4,
+  },
+  dialogValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   cardActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    marginTop: 8,
+    marginTop: 10,
   },
   cardActionButton: {
-    marginRight: 4,
+    flex: 1,
+    marginRight: 6,
     borderRadius: 8,
   },
-  generateButton: {
-    borderRadius: 10,
+  generateButtonWrapper: {
+    borderRadius: 16,
+    overflow: 'hidden',
     marginTop: 8,
   },
-  generateButtonContent: {
-    paddingVertical: 6,
+  generateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 15,
+    borderRadius: 16,
+  },
+  generateButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+    marginLeft: 8,
+  },
+  dialogContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  dialogTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 4,
+  },
+  dialogTitleText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.primary,
+    marginLeft: 8,
   },
   lockDialogSubtitle: {
     fontSize: 12,
     color: colors.muted,
+    marginTop: 8,
     marginBottom: 14,
   },
   lockGrid: {
@@ -530,33 +744,57 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 10,
   },
-  // `justifyContent: 'space-between'` distributes leftover space per-row, so an incomplete
-  // last row (e.g. 2 items instead of 3) gets stretched apart instead of spaced like every
-  // other row — a fixed `gap` on the grid above keeps spacing identical whether a row is full
-  // or not. Width leaves room for two 10px gaps across three equal columns.
   lockItem: {
-    width: '31%',
+    width: 80,
+    height: 80,
     borderRadius: 14,
     borderWidth: 1.5,
     borderColor: colors.border,
-    backgroundColor: colors.inputBackground,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 6,
   },
   lockItemSelected: {
-    borderColor: colors.muted,
-    backgroundColor: colors.surface,
-  },
-  lockItemContent: {
-    alignItems: 'center',
-    paddingVertical: 14,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   lockItemLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     color: colors.muted,
     marginTop: 6,
+    textAlign: 'center',
   },
   lockItemLabelSelected: {
-    color: colors.heading,
+    color: '#FFFFFF',
+  },
+  dialogActions: {
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    paddingTop: 12,
+  },
+  dialogCancelButton: {
+    flex: 1,
+    marginRight: 10,
+    borderRadius: 12,
+    borderColor: colors.border,
+  },
+  dialogPrimaryButtonWrapper: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  dialogPrimaryButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 11,
+    borderRadius: 12,
+  },
+  dialogPrimaryButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   dialogRow: {
     flexDirection: 'row',
@@ -569,5 +807,93 @@ const styles = StyleSheet.create({
   dialogValue: {
     fontWeight: '700',
     color: colors.heading,
+  },
+  dialogValueMono: {
+    fontWeight: '700',
+    color: colors.heading,
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+  },
+  dialogDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  detailsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 4,
+  },
+  detailsHeaderIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: `${colors.primary}1A`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailsHeaderTextColumn: {
+    flex: 1,
+  },
+  detailsHeaderSubtitle: {
+    fontSize: 12,
+    color: colors.danger,
+    marginTop: 2,
+    marginLeft: 8,
+  },
+  detailsCardPreview: {
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+  },
+  detailsCardPreviewNumber: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+    letterSpacing: 1,
+  },
+  detailsCardPreviewBottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  detailsCardPreviewMeta: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  categoryLockPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  categoryLockPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  securityNoteCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 16,
+  },
+  securityNoteIcon: {
+    fontSize: 14,
+    marginRight: 8,
+  },
+  securityNoteText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#991B1B',
+    lineHeight: 18,
+    fontWeight: '600',
+  },
+  detailsDialogActions: {
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    paddingTop: 12,
   },
 });

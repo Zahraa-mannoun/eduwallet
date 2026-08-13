@@ -1,5 +1,6 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Animated,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -11,10 +12,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Clipboard from 'expo-clipboard';
 import {
   ActivityIndicator,
   Avatar,
-  Button,
   HelperText,
   Text,
   TextInput,
@@ -34,7 +35,15 @@ import { colors } from '../theme/colors';
 import { getInitials } from '../utils/getInitials';
 import type { ParentTabScreenProps } from '../navigation/types';
 
+const SCREEN_BACKGROUND = '#F8FAFC';
+
 const LOCK_CATEGORIES = LOCKABLE_BUDGET_CATEGORIES;
+
+function formatDateTime(date: Date): string {
+  const datePart = date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+  const timePart = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return `${datePart} at ${timePart}`;
+}
 
 const CATEGORY_EXPLANATIONS: Partial<Record<BudgetCategoryKey, string>> = {
   tuition: 'Student can only use these funds for tuition payments.',
@@ -57,7 +66,7 @@ type SentTransaction = {
   timestamp: Date;
 };
 
-export default function ParentSendMoneyScreen(_props: Readonly<ParentTabScreenProps<'Send'>>) {
+export default function ParentSendMoneyScreen({ navigation }: Readonly<ParentTabScreenProps<'Send'>>) {
   const { wallet } = useWallet();
   const [students, setStudents] = useState<LinkedStudent[]>([]);
   const [isLoadingStudents, setIsLoadingStudents] = useState(false);
@@ -70,6 +79,8 @@ export default function ParentSendMoneyScreen(_props: Readonly<ParentTabScreenPr
   const [sendError, setSendError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [transaction, setTransaction] = useState<SentTransaction | null>(null);
+  const [copiedId, setCopiedId] = useState(false);
+  const checkmarkScale = useRef(new Animated.Value(0)).current;
 
   const load = useCallback(async () => {
     setIsLoadingStudents(true);
@@ -138,6 +149,31 @@ export default function ParentSendMoneyScreen(_props: Readonly<ParentTabScreenPr
     setSendError(null);
   };
 
+  const handleGoToDashboard = () => {
+    handleSendAnother();
+    navigation.navigate('Home');
+  };
+
+  const handleCopyTransactionId = async () => {
+    if (!transaction) return;
+    await Clipboard.setStringAsync(transaction.id.slice(0, 8).toUpperCase());
+    setCopiedId(true);
+    setTimeout(() => setCopiedId(false), 1500);
+  };
+
+  useEffect(() => {
+    if (!transaction) {
+      checkmarkScale.setValue(0);
+      return;
+    }
+    Animated.spring(checkmarkScale, {
+      toValue: 1,
+      friction: 5,
+      tension: 60,
+      useNativeDriver: true,
+    }).start();
+  }, [transaction, checkmarkScale]);
+
   return (
     <SafeAreaView style={styles.flex} edges={['top']}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -148,49 +184,85 @@ export default function ParentSendMoneyScreen(_props: Readonly<ParentTabScreenPr
         </View>
 
         {transaction ? (
+          <View style={styles.successScreen}>
           <ScrollView contentContainerStyle={styles.successContent}>
-            <IconBadge
-              icon="check-circle-outline"
-              color={colors.accent}
-              size={88}
-              iconSize={48}
-            />
-            <Text variant="headlineSmall" style={styles.successTitle}>
-              Money Sent!
-            </Text>
-            <Text style={styles.successAmount}>
-              ${transaction.amount.toFixed(2)} to {transaction.studentName}
-            </Text>
+            <View style={styles.successCard}>
+              <Animated.View style={[styles.checkmarkCircle, { transform: [{ scale: checkmarkScale }] }]}>
+                <MaterialCommunityIcons name="check" size={44} color="#FFFFFF" />
+              </Animated.View>
+              <Text variant="headlineSmall" style={styles.successTitle}>
+                Money Sent!
+              </Text>
+              <Text style={styles.successAmount}>
+                ${transaction.amount.toFixed(2)} to {transaction.studentName}
+              </Text>
 
-            <View style={styles.receiptCard}>
-              <View style={styles.receiptRow}>
-                <Text style={styles.receiptLabel}>Transaction ID</Text>
-                <Text style={styles.receiptValue}>{transaction.id.slice(0, 8).toUpperCase()}</Text>
-              </View>
-              <View style={styles.receiptRow}>
-                <Text style={styles.receiptLabel}>Education Lock</Text>
-                <Text style={[styles.receiptValue, { color: transaction.category.color }]}>
-                  {transaction.category.label}
-                </Text>
-              </View>
-              {transaction.note ? (
+              <View style={styles.receiptDivider} />
+
+              <View style={styles.receiptCard}>
                 <View style={styles.receiptRow}>
-                  <Text style={styles.receiptLabel}>Note</Text>
-                  <Text style={styles.receiptValue}>{transaction.note}</Text>
+                  <Text style={styles.receiptLabel}>Transaction ID</Text>
+                  <View style={styles.receiptIdRow}>
+                    <Text style={styles.receiptIdValue}>{transaction.id.slice(0, 8).toUpperCase()}</Text>
+                    <TouchableOpacity onPress={handleCopyTransactionId} hitSlop={8}>
+                      <MaterialCommunityIcons
+                        name={copiedId ? 'check' : 'content-copy'}
+                        size={15}
+                        color={copiedId ? colors.accent : colors.primary}
+                        style={styles.receiptCopyIcon}
+                      />
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              ) : null}
+                <View style={styles.receiptRow}>
+                  <Text style={styles.receiptLabel}>Education Lock</Text>
+                  <View style={[styles.receiptPill, { backgroundColor: `${transaction.category.color}1F` }]}>
+                    <Text style={[styles.receiptPillText, { color: transaction.category.color }]}>
+                      {transaction.category.label}
+                    </Text>
+                  </View>
+                </View>
+                {transaction.note ? (
+                  <View style={styles.receiptRow}>
+                    <Text style={styles.receiptLabel}>Note</Text>
+                    <Text style={styles.receiptValue}>{transaction.note}</Text>
+                  </View>
+                ) : null}
+                <View style={styles.receiptRow}>
+                  <Text style={styles.receiptLabel}>Date</Text>
+                  <Text style={styles.receiptValue}>{formatDateTime(transaction.timestamp)}</Text>
+                </View>
+                <View style={styles.receiptRow}>
+                  <Text style={styles.receiptLabel}>Status</Text>
+                  <View style={styles.statusBadge}>
+                    <Text style={styles.statusBadgeText}>✅ Completed</Text>
+                  </View>
+                </View>
+              </View>
             </View>
 
-            <Button
-              mode="contained"
-              buttonColor={colors.primary}
-              style={styles.doneButton}
-              contentStyle={styles.doneButtonContent}
-              onPress={handleSendAnother}
+            <TouchableOpacity activeOpacity={0.85} style={styles.sendButtonWrapper} onPress={handleSendAnother}>
+              <LinearGradient
+                colors={[colors.gradientStart, colors.gradientEnd]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.sendButton}
+              >
+                <MaterialCommunityIcons name="send-outline" size={18} color="#FFFFFF" />
+                <Text style={[styles.sendButtonText, { color: '#FFFFFF' }]}>Send Another</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.dashboardButton}
+              onPress={handleGoToDashboard}
             >
-              Send Another
-            </Button>
+              <MaterialCommunityIcons name="home-outline" size={18} color={colors.primary} />
+              <Text style={styles.dashboardButtonText}>Go to Dashboard</Text>
+            </TouchableOpacity>
           </ScrollView>
+          </View>
         ) : (
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
             {loadError ? <Text style={styles.errorText}>{loadError}</Text> : null}
@@ -516,6 +588,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   sendButtonWrapper: {
+    width: '100%',
     borderRadius: 16,
     overflow: 'hidden',
     marginTop: 8,
@@ -532,11 +605,37 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginLeft: 8,
   },
+  successScreen: {
+    flex: 1,
+    backgroundColor: SCREEN_BACKGROUND,
+  },
   successContent: {
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingTop: 24,
     paddingBottom: 40,
+  },
+  successCard: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingVertical: 28,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+    marginBottom: 20,
+  },
+  checkmarkCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   successTitle: {
     fontWeight: '700',
@@ -547,20 +646,23 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.muted,
     marginTop: 4,
+    textAlign: 'center',
+  },
+  receiptDivider: {
+    width: '100%',
+    height: 1,
+    backgroundColor: colors.border,
+    marginTop: 20,
   },
   receiptCard: {
     width: '100%',
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 18,
-    marginTop: 24,
-    marginBottom: 24,
+    marginTop: 4,
   },
   receiptRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 9,
   },
   receiptLabel: {
     fontSize: 13,
@@ -571,11 +673,54 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.heading,
   },
-  doneButton: {
-    width: '100%',
-    borderRadius: 10,
+  receiptIdRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  doneButtonContent: {
-    paddingVertical: 6,
+  receiptIdValue: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.heading,
+    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+  },
+  receiptCopyIcon: {
+    marginLeft: 8,
+  },
+  receiptPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  receiptPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  statusBadge: {
+    backgroundColor: '#D1FAE5',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  statusBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#065F46',
+  },
+  dashboardButton: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    marginTop: 12,
+  },
+  dashboardButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.primary,
+    marginLeft: 8,
   },
 });

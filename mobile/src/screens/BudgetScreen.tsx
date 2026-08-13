@@ -1,7 +1,9 @@
 import { useCallback, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   ActivityIndicator,
   Button,
@@ -21,7 +23,18 @@ import * as budgetService from '../services/budgetService';
 import * as parentalService from '../services/parentalService';
 import type { MyPermissions } from '../services/parentalService';
 import { ApiError } from '../services/api';
+import { progressColorFor } from '../utils/progressColor';
 import type { StudentTabScreenProps } from '../navigation/types';
+
+// Dark-on-light pair matching this app's established badge palette (not colors.danger/accent,
+// which read as a different, brighter family) — keeps "remaining" visually consistent with the
+// rest of the app's status text rather than looking like an unrelated accent color.
+function remainingColorFor(remaining: number, total: number): string {
+  if (remaining <= 0) return '#991B1B';
+  const percentLeft = total > 0 ? (remaining / total) * 100 : 0;
+  if (percentLeft <= 20) return '#92400E';
+  return '#065F46';
+}
 
 // NOTE: this screen deliberately avoids react-native-paper's Card and ProgressBar.
 // Both use elevation/shadow-driven internals that were confirmed (via live screenshots)
@@ -29,6 +42,8 @@ import type { StudentTabScreenProps } from '../navigation/types';
 // button was collapsing out of its own card and stacking on top of each other below
 // the last card, so tapping "Edit" on any card opened whichever category rendered last.
 // Plain Views render correctly everywhere, so the whole card body is built from those.
+
+const SCREEN_BACKGROUND = '#F8FAFC';
 
 const CATEGORY_DESCRIPTIONS: Record<BudgetCategoryKey, string> = {
   tuition: 'University fees and academic expenses',
@@ -41,16 +56,6 @@ const CATEGORY_DESCRIPTIONS: Record<BudgetCategoryKey, string> = {
   personal_savings: 'Unspent funds automatically saved each month',
   general: 'Miscellaneous spending',
 };
-
-const WARNING_THRESHOLD = 70;
-const DANGER_THRESHOLD = 90;
-const WARNING_COLOR = '#F59E0B';
-
-function progressColor(percentUsed: number): string {
-  if (percentUsed > DANGER_THRESHOLD) return colors.danger;
-  if (percentUsed > WARNING_THRESHOLD) return WARNING_COLOR;
-  return colors.accent;
-}
 
 export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Budget'>>) {
   const { lockedFunds, refresh: refreshWallet } = useWallet();
@@ -142,6 +147,7 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
   const closeDialog = () => setDialogCategory(null);
 
   const dialogLockedAmount = dialogCategory ? lockedFundFor(dialogCategory).total : 0;
+  const currentDialogLimit = dialogCategory ? Number(budgetFor(dialogCategory)?.monthlyLimit ?? 0) : 0;
 
   const handleDialogAmountChange = (text: string) => {
     const cleaned = text.replace(/[^0-9.]/g, '');
@@ -152,22 +158,38 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
     setDialogAmount(cleaned);
   };
 
+  const canSaveDialog = dialogAmount.trim().length > 0 && !isSaving;
+
   const handleSaveBudget = async () => {
-    if (!dialogCategory) return;
-    const limit = Number(dialogAmount);
-    if (!(limit > 0)) return;
+    if (!dialogCategory || !canSaveDialog) return;
+    const limit = dialogAmount.trim() === '' ? 0 : Number(dialogAmount);
     if (dialogLockedAmount > 0 && limit > dialogLockedAmount) return;
+
+    const existingBudget = budgetFor(dialogCategory);
+    const hasExistingLimit = existingBudget ? Number(existingBudget.monthlyLimit) > 0 : false;
+
+    // 0 with nothing currently set has nothing to remove and nothing to set — just close.
+    if (limit === 0 && !hasExistingLimit) {
+      closeDialog();
+      return;
+    }
 
     setIsSaving(true);
     try {
       const month = new Date().toISOString().slice(0, 7);
-      await budgetService.setBudget(
-        dialogCategory.key.toUpperCase() as TransactionCategory,
-        limit,
-        month
-      );
+      if (limit === 0) {
+        await budgetService.deleteBudget(dialogCategory.key.toUpperCase() as TransactionCategory, month);
+      } else {
+        await budgetService.setBudget(
+          dialogCategory.key.toUpperCase() as TransactionCategory,
+          limit,
+          month
+        );
+      }
       closeDialog();
-      setSnackbarMessage(`${dialogCategory.label} budget updated.`);
+      setSnackbarMessage(
+        limit === 0 ? `${dialogCategory.label} budget removed.` : `${dialogCategory.label} budget updated.`
+      );
       await loadBudgets();
     } catch (err) {
       setSnackbarMessage(err instanceof ApiError ? err.message : 'Could not save that budget.');
@@ -179,9 +201,7 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.header}>
-        <Text variant="headlineSmall" style={styles.headerTitle}>
-          Budget
-        </Text>
+        <Text style={styles.headerTitle}>Budget</Text>
       </View>
 
       <ScrollView
@@ -189,6 +209,7 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={load} />}
       >
         <View style={styles.bannerCard}>
+          <Text style={styles.bannerIcon}>ℹ️</Text>
           <Text style={styles.bannerText}>
             Track your locked funds and set your own monthly spending goals for categories your
             parent has authorized.
@@ -209,10 +230,13 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
 
           if (isFullyEmpty && !authorized) {
             return (
-              <View key={category.key} style={[styles.categoryCard, styles.categoryCardDimmed]}>
+              <View
+                key={category.key}
+                style={[styles.categoryCard, styles.categoryCardDimmed, styles.categoryCardBorderGray]}
+              >
                 <View style={styles.categoryTitleRow}>
-                  <IconBadge icon={category.icon} color={colors.muted} size={40} />
-                  <Text variant="titleMedium" style={[styles.categoryLabel, styles.categoryLabelDimmed]}>
+                  <IconBadge icon={category.icon} color={colors.muted} size={44} />
+                  <Text style={[styles.categoryLabel, styles.categoryLabelDimmed]}>
                     {category.label}
                   </Text>
                 </View>
@@ -226,20 +250,20 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
           // with an all-time total/remaining pair.
           const lockedSpent = Math.max(lockedTotal - lockedRemaining, 0);
           const lockedPercent = hasLockedFunds ? Math.round((lockedSpent / lockedTotal) * 100) : 0;
-          const lockedColor = progressColor(lockedPercent);
+          const lockedColor = progressColorFor(lockedPercent);
 
           const budgetPercent = hasPersonalLimit ? Math.round((spent / monthlyLimit) * 100) : 0;
-          const budgetColor = progressColor(budgetPercent);
+          const budgetColor = progressColorFor(budgetPercent);
+          const budgetRemaining = Math.max(monthlyLimit - spent, 0);
 
           return (
-            <View key={category.key} style={styles.categoryCard}>
+            <View key={category.key} style={[styles.categoryCard, styles.categoryCardBorderGreen]}>
               <View style={styles.categoryTitleRow}>
-                <IconBadge icon={category.icon} color={category.color} size={40} />
-                <Text variant="titleMedium" style={styles.categoryLabel}>
-                  {category.label}
-                </Text>
+                <IconBadge icon={category.icon} color={category.color} size={44} />
+                <Text style={styles.categoryLabel}>{category.label}</Text>
               </View>
               <Text style={styles.categoryDescription}>{CATEGORY_DESCRIPTIONS[category.key]}</Text>
+              <View style={styles.divider} />
 
               {isFullyEmpty ? (
                 <View style={styles.placeholderRow}>
@@ -258,10 +282,11 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
                   {hasLockedFunds ? (
                     <View style={styles.sectionBlock}>
                       <View style={styles.sectionHeaderRow}>
-                        <Text style={styles.sectionTitle}>🔒 Locked Funds</Text>
-                        <Text style={[styles.sectionPercent, { color: lockedColor }]}>
-                          {lockedPercent}%
-                        </Text>
+                        <View style={styles.sectionHeaderLeft}>
+                          <MaterialCommunityIcons name="lock-outline" size={15} color={colors.primary} />
+                          <Text style={styles.sectionTitle}>Locked</Text>
+                        </View>
+                        <Text style={styles.sectionAmountBold}>${lockedTotal.toFixed(2)}</Text>
                       </View>
                       <View style={styles.progressTrack}>
                         <View
@@ -271,26 +296,25 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
                           ]}
                         />
                       </View>
-                      <View style={styles.sectionStatsRow}>
-                        <View style={styles.sectionStatColumn}>
-                          <Text style={styles.sectionStatLabel}>LOCKED</Text>
-                          <Text style={styles.sectionStatValue}>${lockedTotal.toFixed(0)}</Text>
-                        </View>
-                        <View style={styles.sectionStatColumn}>
-                          <Text style={styles.sectionStatLabel}>SPENT</Text>
-                          <Text style={styles.sectionStatValue}>${lockedSpent.toFixed(0)}</Text>
-                        </View>
-                        <View style={[styles.sectionStatColumn, styles.sectionStatColumnEnd]}>
-                          <Text style={styles.sectionStatLabel}>REMAINING</Text>
-                          <Text style={styles.sectionStatValue}>${lockedRemaining.toFixed(0)}</Text>
-                        </View>
-                      </View>
+                      <Text style={styles.sectionCaption}>
+                        ${lockedSpent.toFixed(2)} spent ·{' '}
+                        <Text style={{ color: remainingColorFor(lockedRemaining, lockedTotal) }}>
+                          ${lockedRemaining.toFixed(2)} remaining
+                        </Text>
+                      </Text>
                     </View>
                   ) : null}
 
                   <View style={styles.sectionBlock}>
                     <View style={styles.sectionHeaderRow}>
-                      <Text style={styles.sectionTitle}>Personal Budget</Text>
+                      <View style={styles.sectionHeaderLeft}>
+                        <MaterialCommunityIcons
+                          name="calendar-month-outline"
+                          size={15}
+                          color={colors.primary}
+                        />
+                        <Text style={styles.sectionTitle}>Monthly Budget</Text>
+                      </View>
                       {authorized ? (
                         <Button
                           mode="text"
@@ -308,9 +332,6 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
                       <Text style={styles.notAuthorizedText}>Not authorized by parent</Text>
                     ) : hasPersonalLimit ? (
                       <>
-                        <Text style={styles.sectionAmount}>
-                          ${spent.toFixed(0)} of ${monthlyLimit.toFixed(0)} used this month
-                        </Text>
                         <View style={styles.progressTrack}>
                           <View
                             style={[
@@ -319,6 +340,13 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
                             ]}
                           />
                         </View>
+                        <Text style={styles.sectionCaption}>
+                          ${spent.toFixed(2)} used ·{' '}
+                          <Text style={{ color: remainingColorFor(budgetRemaining, monthlyLimit) }}>
+                            ${budgetRemaining.toFixed(2)} remaining
+                          </Text>{' '}
+                          this month
+                        </Text>
                       </>
                     ) : (
                       <Text style={styles.placeholderText}>No budget set</Text>
@@ -332,31 +360,87 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
       </ScrollView>
 
       <Portal>
-        <Dialog visible={dialogCategory !== null} onDismiss={closeDialog}>
-          <Dialog.Title>{dialogCategory?.label} Budget</Dialog.Title>
+        <Dialog
+          visible={dialogCategory !== null}
+          onDismiss={closeDialog}
+          style={styles.dialogContainer}
+        >
+          <View style={styles.dialogTitleRow}>
+            {dialogCategory ? (
+              <View
+                style={[styles.dialogTitleIconCircle, { backgroundColor: `${dialogCategory.color}1F` }]}
+              >
+                <MaterialCommunityIcons
+                  name={dialogCategory.icon}
+                  size={18}
+                  color={dialogCategory.color}
+                />
+              </View>
+            ) : null}
+            <Text style={styles.dialogTitleText}>{dialogCategory?.label} Budget</Text>
+          </View>
           <Dialog.Content>
+            <Text style={styles.dialogFieldLabel}>Monthly Limit ($)</Text>
             <TextInput
               mode="outlined"
-              label="Monthly limit"
+              placeholder="0"
               value={dialogAmount}
               onChangeText={handleDialogAmountChange}
               keyboardType="decimal-pad"
+              left={<TextInput.Icon icon="currency-usd" />}
               outlineColor={colors.border}
               activeOutlineColor={colors.primary}
+              theme={{ roundness: 12 }}
+              style={styles.dialogInput}
             />
+            <Text style={styles.dialogHelperText}>Set to 0 to remove the budget limit</Text>
+            {currentDialogLimit > 0 ? (
+              <Text style={styles.dialogCurrentText}>Current: ${currentDialogLimit.toFixed(0)}/month</Text>
+            ) : null}
             {dialogLockedAmount > 0 ? (
               <Text style={styles.dialogHelperText}>
                 Capped at ${dialogLockedAmount.toFixed(0)} — your locked funds for this category.
               </Text>
             ) : null}
           </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={closeDialog} disabled={isSaving}>
+          <Dialog.Actions style={styles.dialogActions}>
+            <Button
+              mode="outlined"
+              textColor={colors.muted}
+              style={styles.dialogCancelButton}
+              disabled={isSaving}
+              onPress={closeDialog}
+            >
               Cancel
             </Button>
-            <Button onPress={handleSaveBudget} disabled={!(Number(dialogAmount) > 0) || isSaving}>
-              {isSaving ? <ActivityIndicator size={16} color={colors.primary} /> : 'Save'}
-            </Button>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              disabled={!canSaveDialog}
+              onPress={handleSaveBudget}
+              style={styles.dialogPrimaryButtonWrapper}
+            >
+              <LinearGradient
+                colors={
+                  canSaveDialog ? [colors.gradientStart, colors.gradientEnd] : [colors.border, colors.border]
+                }
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.dialogPrimaryButton}
+              >
+                {isSaving ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text
+                    style={[
+                      styles.dialogPrimaryButtonText,
+                      { color: canSaveDialog ? '#FFFFFF' : colors.muted },
+                    ]}
+                  >
+                    Save
+                  </Text>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
           </Dialog.Actions>
         </Dialog>
       </Portal>
@@ -375,7 +459,7 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: SCREEN_BACKGROUND,
   },
   header: {
     paddingHorizontal: 20,
@@ -383,6 +467,7 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   headerTitle: {
+    fontSize: 20,
     fontWeight: '700',
     color: colors.heading,
   },
@@ -391,14 +476,20 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
   },
   bannerCard: {
+    flexDirection: 'row',
     borderRadius: 14,
     marginBottom: 16,
-    backgroundColor: colors.surface,
-    padding: 16,
+    backgroundColor: `${colors.primary}14`,
+    padding: 14,
+  },
+  bannerIcon: {
+    fontSize: 15,
+    marginRight: 8,
   },
   bannerText: {
+    flex: 1,
     fontSize: 13,
-    color: colors.label,
+    color: colors.primaryDark,
     lineHeight: 19,
   },
   errorText: {
@@ -408,20 +499,31 @@ const styles = StyleSheet.create({
   },
   categoryCard: {
     borderRadius: 16,
-    marginBottom: 14,
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
+    marginBottom: 12,
+    backgroundColor: '#FFFFFF',
+    borderLeftWidth: 4,
     padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  categoryCardBorderGreen: {
+    borderLeftColor: colors.accent,
+  },
+  categoryCardBorderGray: {
+    borderLeftColor: colors.border,
   },
   categoryCardDimmed: {
-    opacity: 0.55,
+    opacity: 0.6,
   },
   categoryTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   categoryLabel: {
+    fontSize: 16,
     fontWeight: '700',
     color: colors.heading,
     marginLeft: 12,
@@ -433,13 +535,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.muted,
     marginTop: 6,
-    marginBottom: 4,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginTop: 12,
   },
   placeholderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 8,
+    marginTop: 12,
   },
   placeholderText: {
     fontSize: 12,
@@ -448,15 +554,12 @@ const styles = StyleSheet.create({
   notAuthorizedText: {
     fontSize: 12,
     fontWeight: '600',
-    color: colors.muted,
+    color: '#B91C1C',
     fontStyle: 'italic',
-    marginTop: 8,
+    marginTop: 12,
   },
   sectionBlock: {
     marginTop: 14,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -464,43 +567,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.heading,
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  sectionPercent: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  sectionAmount: {
-    fontSize: 12,
-    color: colors.muted,
-    marginBottom: 8,
-  },
-  sectionStatsRow: {
+  sectionHeaderLeft: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 10,
+    alignItems: 'center',
   },
-  sectionStatColumn: {
-    alignItems: 'flex-start',
-  },
-  sectionStatColumnEnd: {
-    alignItems: 'flex-end',
-  },
-  sectionStatLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: colors.muted,
-    marginBottom: 2,
-  },
-  sectionStatValue: {
+  sectionTitle: {
     fontSize: 13,
     fontWeight: '700',
     color: colors.heading,
+    marginLeft: 6,
+  },
+  sectionAmountBold: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.primary,
+  },
+  sectionCaption: {
+    fontSize: 11,
+    color: colors.muted,
+    marginTop: 6,
   },
   progressTrack: {
     height: 8,
@@ -519,5 +604,79 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.muted,
     marginTop: 8,
+  },
+  dialogCurrentText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+    marginTop: 6,
+  },
+  dialogContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  dialogTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 8,
+  },
+  dialogTitleIconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  dialogTitleText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.primary,
+    flexShrink: 1,
+  },
+  dialogFieldLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 6,
+  },
+  dialogInput: {
+    backgroundColor: '#FFFFFF',
+  },
+  dialogActions: {
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    paddingTop: 12,
+  },
+  dialogCancelButton: {
+    flex: 1,
+    marginRight: 10,
+    borderRadius: 12,
+    borderColor: colors.border,
+  },
+  dialogPrimaryButtonWrapper: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  dialogPrimaryButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 11,
+    borderRadius: 12,
+  },
+  dialogPrimaryButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
 });
