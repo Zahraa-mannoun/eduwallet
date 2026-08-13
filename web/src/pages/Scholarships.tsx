@@ -3,6 +3,7 @@ import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
+import { useSocketRefetch } from '../hooks/useSocketRefetch';
 import { categoryTone } from '../lib/badgeTones';
 import { formatDate, formatMoney } from '../lib/format';
 import type { TransactionRow } from '../types/admin';
@@ -109,6 +110,7 @@ export function Scholarships() {
   }, [load]);
 
   useVisibilityRefetch(load);
+  useSocketRefetch(load);
 
   return (
     <div className="space-y-4">

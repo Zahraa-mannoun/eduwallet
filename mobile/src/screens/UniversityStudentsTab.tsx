@@ -14,6 +14,7 @@ import type { UniversityStudentSummary } from '../types/api';
 import { colors } from '../theme/colors';
 import * as universityService from '../services/universityService';
 import { ApiError } from '../services/api';
+import { useNotificationRefetch } from '../hooks/useNotificationRefetch';
 
 const PARTIAL_COLOR = '#F59E0B';
 const WILL_BE_FUNDED_COLOR = '#EC4899';
@@ -100,6 +101,8 @@ export default function UniversityStudentsTab({
       void load();
     }, [load])
   );
+
+  useNotificationRefetch(load);
 
   const toggleStudent = (id: string) => {
     setSelectedIds((prev) => {

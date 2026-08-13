@@ -10,6 +10,7 @@ import type { BudgetCategoryDefinition, BudgetCategoryKey } from '../constants/b
 import { colors } from '../theme/colors';
 import * as universityService from '../services/universityService';
 import { ApiError } from '../services/api';
+import { useNotificationRefetch } from '../hooks/useNotificationRefetch';
 
 const ACADEMIC_CATEGORY_KEYS: ReadonlySet<BudgetCategoryKey> = new Set(['tuition', 'books', 'software']);
 const ACADEMIC_CATEGORIES = BUDGET_CATEGORIES.filter((category) =>
@@ -46,6 +47,8 @@ export default function IndividualFundingTab() {
       void load();
     }, [load])
   );
+
+  useNotificationRefetch(load);
 
   const searchResults = useMemo(() => {
     const trimmed = query.trim().toLowerCase();

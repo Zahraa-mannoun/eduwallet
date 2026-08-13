@@ -4,6 +4,7 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import type { ApiResponse, User } from '../types';
 import { api, getApiError, getErrorMessage, tokenStorage, unwrap } from '../lib/api';
+import { disconnectSocket } from '../lib/socket';
 
 type LoginResult = { user: User; accessToken: string; refreshToken: string };
 
@@ -47,6 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     tokenStorage.clear();
+    disconnectSocket();
     setAgent(null);
   }, []);
 
@@ -61,6 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const { message, code } = getApiError(error);
           if (code === 'ACCOUNT_SUSPENDED') {
             tokenStorage.clear();
+            disconnectSocket();
             setAgent(null);
             navigate('/login', {
               replace: true,

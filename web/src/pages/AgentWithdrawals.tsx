@@ -3,6 +3,7 @@ import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
+import { useSocketRefetch } from '../hooks/useSocketRefetch';
 import { receiptStatusTone, withdrawalStatusTone } from '../lib/badgeTones';
 import { formatDateTime, formatMoney } from '../lib/format';
 import { WITHDRAWAL_STATUS_LABELS } from '../lib/transactionStatus';
@@ -110,6 +111,7 @@ export function AgentWithdrawals() {
   }, [load]);
 
   useVisibilityRefetch(load);
+  useSocketRefetch(load);
 
   // Revokes the previous blob URL whenever the expanded row changes or the page unmounts —
   // otherwise every receipt preview leaks its object URL for the life of the tab.

@@ -12,6 +12,7 @@ import { RECEIPT_STATUS_META } from '../utils/receiptStatus';
 import type { ReceiptBadgeMeta } from '../utils/receiptStatus';
 import * as withdrawalService from '../services/withdrawalService';
 import { ApiError } from '../services/api';
+import { useNotificationRefetch } from '../hooks/useNotificationRefetch';
 import type { RootStackScreenProps } from '../navigation/types';
 
 const CATEGORY_META: Record<
@@ -89,6 +90,8 @@ export default function ParentStudentDetailScreen({
       void load();
     }, [load])
   );
+
+  useNotificationRefetch(load);
 
   const renderWithdrawalItem = (withdrawal: StudentWithdrawalForParent) => {
     const categoryMeta = CATEGORY_META[withdrawal.category];

@@ -7,6 +7,7 @@ import { Badge } from '../components/Badge';
 import { SuspendModal } from '../components/SuspendModal';
 import { UnsuspendModal } from '../components/UnsuspendModal';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
+import { useSocketRefetch } from '../hooks/useSocketRefetch';
 import { getKycDisplayStatus } from '../lib/kycDisplayStatus';
 import { formatDate } from '../lib/format';
 import type { AdminUser } from '../types/admin';
@@ -57,6 +58,7 @@ export function Students() {
   }, [loadUsers]);
 
   useVisibilityRefetch(loadUsers);
+  useSocketRefetch(loadUsers);
 
   const handleSearchSubmit = (event: FormEvent) => {
     event.preventDefault();

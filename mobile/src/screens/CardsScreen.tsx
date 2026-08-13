@@ -22,6 +22,7 @@ import { colors } from '../theme/colors';
 import * as cardService from '../services/cardService';
 import * as parentalService from '../services/parentalService';
 import { ApiError } from '../services/api';
+import { useNotificationRefetch } from '../hooks/useNotificationRefetch';
 import type { StudentTabScreenProps } from '../navigation/types';
 
 const SCREEN_BACKGROUND = '#F8FAFC';
@@ -117,6 +118,8 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
       refreshCards();
     }, [refreshCards])
   );
+
+  useNotificationRefetch(refreshCards);
 
   // The backend deletes an auto-renewed card outright on use (see cards.service.ts useCard()),
   // so used-and-unfrozen should never actually come back from the API — this filter is just a

@@ -14,6 +14,7 @@ import type { AgentStatsCardHandle } from '../components/AgentStatsCard';
 import { useAuth } from '../context/AuthContext';
 import { IconCash, IconCheckCircle, IconSearch, IconUserSearch, IconWallet } from '../components/icons';
 import { formatDateTime } from '../lib/format';
+import { useSocketRefetch } from '../hooks/useSocketRefetch';
 
 function formatMoney(amount: string): string {
   return `$${Number(amount).toFixed(2)}`;
@@ -202,6 +203,13 @@ export function ProcessWithdrawal() {
   useEffect(() => {
     void loadApprovedWithdrawals();
   }, [loadApprovedWithdrawals]);
+
+  useSocketRefetch(
+    useCallback(() => {
+      void loadApprovedWithdrawals();
+      statsRef.current?.refresh();
+    }, [loadApprovedWithdrawals])
+  );
 
   const handleSearch = async (event: FormEvent) => {
     event.preventDefault();

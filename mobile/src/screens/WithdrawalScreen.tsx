@@ -33,6 +33,7 @@ import { API_BASE_URL, ApiError, getAccessToken } from '../services/api';
 import { receiptBadgeFor } from '../utils/receiptStatus';
 import type { ReceiptBadgeMeta } from '../utils/receiptStatus';
 import { withdrawalStatusMeta } from '../utils/transactionDisplay';
+import { useNotificationRefetch } from '../hooks/useNotificationRefetch';
 import type { RootStackScreenProps } from '../navigation/types';
 
 const CATEGORY_META: Record<
@@ -122,6 +123,8 @@ export default function WithdrawalScreen({
       void load();
     }, [load])
   );
+
+  useNotificationRefetch(load);
 
   const openDetail = async (request: WithdrawalRequest) => {
     setDetailTarget(request);

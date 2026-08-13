@@ -6,6 +6,7 @@ import { Avatar, Card, IconButton, Text } from 'react-native-paper';
 import IconBadge from '../components/IconBadge';
 import { getNotificationMeta, useNotifications } from '../context/NotificationsContext';
 import { colors } from '../theme/colors';
+import { useNotificationRefetch } from '../hooks/useNotificationRefetch';
 import type { RootStackScreenProps } from '../navigation/types';
 
 const formatTimestamp = (isoDate: string) =>
@@ -26,6 +27,8 @@ export default function NotificationsScreen({ navigation }: RootStackScreenProps
       void refresh();
     }, [refresh])
   );
+
+  useNotificationRefetch(refresh);
 
   const canGoBack = navigation.canGoBack();
 

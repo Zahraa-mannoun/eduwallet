@@ -5,6 +5,7 @@ import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
+import { useSocketRefetch } from '../hooks/useSocketRefetch';
 import { severityTone } from '../lib/badgeTones';
 import { formatDateTime, formatMoney } from '../lib/format';
 import type { FraudAlertRow } from '../types/admin';
@@ -36,6 +37,7 @@ export function Fraud() {
   }, [load]);
 
   useVisibilityRefetch(load);
+  useSocketRefetch(load);
 
   return (
     <div className="space-y-4">

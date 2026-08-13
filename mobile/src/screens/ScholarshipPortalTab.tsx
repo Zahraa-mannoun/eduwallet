@@ -11,6 +11,7 @@ import { colors } from '../theme/colors';
 import { getInitials } from '../utils/getInitials';
 import * as universityService from '../services/universityService';
 import { ApiError } from '../services/api';
+import { useNotificationRefetch } from '../hooks/useNotificationRefetch';
 
 // Tab 2 only ever locks scholarship money to actual academic spending — same restriction
 // enforced server-side in university.schema.ts's academicCategoryEnum.
@@ -68,6 +69,8 @@ export default function ScholarshipPortalTab() {
       void load();
     }, [load])
   );
+
+  useNotificationRefetch(load);
 
   const canSend = students.length > 0 && Boolean(category) && !isSending;
 

@@ -31,6 +31,7 @@ import {
   transactionDisplayTitle,
   transactionStatusMeta,
 } from '../utils/transactionDisplay';
+import { useNotificationRefetch } from '../hooks/useNotificationRefetch';
 import type { RootStackScreenProps } from '../navigation/types';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -129,6 +130,7 @@ export default function TransactionHistoryScreen({
   }, []);
 
   useThrottledFocusEffect(load);
+  useNotificationRefetch(load);
 
   const changeFilter = (value: FilterValue) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);

@@ -19,6 +19,7 @@ import type { PersonalSavingsHistory } from '../types/api';
 import { colors } from '../theme/colors';
 import * as savingsService from '../services/savingsService';
 import { ApiError } from '../services/api';
+import { useNotificationRefetch } from '../hooks/useNotificationRefetch';
 import type { RootStackScreenProps } from '../navigation/types';
 
 const SCREEN_BACKGROUND = '#F8FAFC';
@@ -92,6 +93,8 @@ export default function PersonalSavingsScreen({
       void load();
     }, [load])
   );
+
+  useNotificationRefetch(load);
 
   const openDialog = () => {
     setAmount('');

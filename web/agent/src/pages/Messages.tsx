@@ -5,6 +5,7 @@ import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
 import { formatDateTime } from '../lib/format';
 import { IconInbox, IconMail } from '../components/icons';
+import { useSocketRefetch } from '../hooks/useSocketRefetch';
 
 export function Messages() {
   const [subject, setSubject] = useState('');
@@ -43,6 +44,8 @@ export function Messages() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useSocketRefetch(load);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();

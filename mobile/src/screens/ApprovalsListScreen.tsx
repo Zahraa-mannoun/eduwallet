@@ -14,6 +14,7 @@ import type { LinkedStudent } from '../services/parentalService';
 import * as savingsService from '../services/savingsService';
 import * as withdrawalService from '../services/withdrawalService';
 import { ApiError } from '../services/api';
+import { useNotificationRefetch } from '../hooks/useNotificationRefetch';
 import type { ParentTabScreenProps } from '../navigation/types';
 
 const categoryLookup = new Map(BUDGET_CATEGORIES.map((category) => [category.key, category]));
@@ -207,6 +208,8 @@ export default function ApprovalsListScreen({ navigation: _navigation }: ParentT
       void load();
     }, [load])
   );
+
+  useNotificationRefetch(load);
 
   const walletToStudentName = useMemo(() => {
     const map = new Map<string, string>();

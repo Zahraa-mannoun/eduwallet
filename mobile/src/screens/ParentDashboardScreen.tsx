@@ -19,6 +19,7 @@ import * as walletService from '../services/walletService';
 import * as withdrawalService from '../services/withdrawalService';
 import { ApiError } from '../services/api';
 import { progressColorFor } from '../utils/progressColor';
+import { useNotificationRefetch } from '../hooks/useNotificationRefetch';
 import type { ParentTabScreenProps } from '../navigation/types';
 
 const categoryLookup = new Map(BUDGET_CATEGORIES.map((category) => [category.key, category]));
@@ -130,6 +131,8 @@ export default function ParentDashboardScreen({
       refreshDashboard();
     }, [refreshDashboard])
   );
+
+  useNotificationRefetch(refreshDashboard);
 
   const openBreakdown = useCallback(async (linkedStudent: LinkedStudent) => {
     setSelectedStudent(linkedStudent);

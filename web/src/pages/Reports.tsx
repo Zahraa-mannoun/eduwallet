@@ -3,6 +3,7 @@ import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
+import { useSocketRefetch } from '../hooks/useSocketRefetch';
 import { formatDate } from '../lib/format';
 import { reportStatusTone } from '../lib/badgeTones';
 import { REPORT_PERIOD_LABELS } from '../types/admin';
@@ -53,6 +54,7 @@ export function Reports() {
   }, [load]);
 
   useVisibilityRefetch(load);
+  useSocketRefetch(load);
 
   // Revokes the previous blob URL whenever the preview changes or the page unmounts — same
   // leak concern as AgentWithdrawals.tsx's receipt preview.

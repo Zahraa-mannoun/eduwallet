@@ -3,6 +3,7 @@ import type { ApiResponse, TransactionCategory, TransactionStatus } from '@eduwa
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
+import { useSocketRefetch } from '../hooks/useSocketRefetch';
 import { categoryTone } from '../lib/badgeTones';
 import { formatDateTime, formatMoney } from '../lib/format';
 import { transactionStatusMeta, TRANSACTION_STATUS_LABELS } from '../lib/transactionStatus';
@@ -51,6 +52,7 @@ export function Transactions() {
   }, [load]);
 
   useVisibilityRefetch(load);
+  useSocketRefetch(load);
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
 

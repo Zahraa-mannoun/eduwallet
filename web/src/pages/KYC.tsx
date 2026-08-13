@@ -7,6 +7,7 @@ import { Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
 import { IconChevronRight } from '../components/icons';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
+import { useSocketRefetch } from '../hooks/useSocketRefetch';
 import { getKycDisplayStatus } from '../lib/kycDisplayStatus';
 import { formatDate } from '../lib/format';
 import type { PendingKYCRow } from '../types/admin';
@@ -145,6 +146,7 @@ export function KYC() {
   }, [load]);
 
   useVisibilityRefetch(load);
+  useSocketRefetch(load);
 
   const visibleRows = useMemo(() => rows.filter((row) => matchesFilter(row, filter)), [rows, filter]);
 

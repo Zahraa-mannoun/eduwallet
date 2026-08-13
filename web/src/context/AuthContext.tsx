@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useMemo, useState } from 'react
 import type { ReactNode } from 'react';
 import type { ApiResponse, User } from '@eduwallet/shared';
 import { api, getErrorMessage, tokenStorage, unwrap } from '../lib/api';
+import { disconnectSocket } from '../lib/socket';
 
 type LoginResult = { user: User; accessToken: string; refreshToken: string };
 
@@ -36,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     tokenStorage.clear();
+    disconnectSocket();
     setAdmin(null);
   }, []);
 

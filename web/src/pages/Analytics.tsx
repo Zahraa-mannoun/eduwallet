@@ -15,6 +15,7 @@ import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { StatCard } from '../components/StatCard';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
+import { useSocketRefetch } from '../hooks/useSocketRefetch';
 import { formatMoney } from '../lib/format';
 import type { AnalyticsResult } from '../types/admin';
 
@@ -74,6 +75,7 @@ export function Analytics() {
   }, [load]);
 
   useVisibilityRefetch(load);
+  useSocketRefetch(load);
 
   if (isLoading && !data) {
     return <p className="text-sm text-slate-500">Loading analytics…</p>;

@@ -14,6 +14,7 @@ import { StatCard } from '../components/StatCard';
 import { Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
+import { useSocketRefetch } from '../hooks/useSocketRefetch';
 import { severityTone } from '../lib/badgeTones';
 import { formatDate, formatMoney } from '../lib/format';
 import { transactionStatusMeta } from '../lib/transactionStatus';
@@ -175,6 +176,7 @@ export function Dashboard() {
   }, [load]);
 
   useVisibilityRefetch(load);
+  useSocketRefetch(load);
 
   if (isLoading && !stats) {
     return <p className="text-sm text-slate-500">Loading dashboard…</p>;

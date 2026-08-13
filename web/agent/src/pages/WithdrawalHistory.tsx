@@ -5,6 +5,7 @@ import { Badge } from '../components/Badge';
 import type { BadgeTone } from '../components/Badge';
 import { formatDateTime, formatMoney } from '../lib/format';
 import { IconInbox } from '../components/icons';
+import { useSocketRefetch } from '../hooks/useSocketRefetch';
 
 const STATUS_META: Record<WithdrawalStatus, { label: string; tone: BadgeTone }> = {
   PENDING: { label: 'Pending', tone: 'gray' },
@@ -44,6 +45,8 @@ export function WithdrawalHistory() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useSocketRefetch(load);
 
   const filtered = useMemo(
     () =>

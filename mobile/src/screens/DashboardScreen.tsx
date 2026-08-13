@@ -29,6 +29,7 @@ import {
   transactionDisplayTitle,
   transactionStatusMeta,
 } from '../utils/transactionDisplay';
+import { useNotificationRefetch } from '../hooks/useNotificationRefetch';
 import type { StudentTabScreenProps } from '../navigation/types';
 
 // This screen deliberately avoids react-native-paper's Card component for section containers
@@ -99,6 +100,8 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
       refreshDashboard();
     }, [refreshDashboard])
   );
+
+  useNotificationRefetch(refreshDashboard);
 
   const lockedCategoryRows = lockedFunds
     .filter(

@@ -24,6 +24,7 @@ import * as parentalService from '../services/parentalService';
 import type { MyPermissions } from '../services/parentalService';
 import { ApiError } from '../services/api';
 import { progressColorFor } from '../utils/progressColor';
+import { useNotificationRefetch } from '../hooks/useNotificationRefetch';
 import type { StudentTabScreenProps } from '../navigation/types';
 
 // Dark-on-light pair matching this app's established badge palette (not colors.danger/accent,
@@ -109,6 +110,8 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
       load();
     }, [load])
   );
+
+  useNotificationRefetch(load);
 
   const hasParent = permissions !== null;
   const allowedCategories = permissions?.allowedCategories ?? [];
