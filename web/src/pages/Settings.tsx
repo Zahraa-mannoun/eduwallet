@@ -6,7 +6,7 @@ import { api, getErrorMessage } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 
 const inputClass =
-  'w-full rounded-md border border-slate-300 px-3 py-2 pr-9 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary';
+  'w-full rounded-lg border border-slate-300 px-3 py-2 pr-9 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary';
 const labelClass = 'mb-1 block text-sm font-medium text-slate-700';
 
 function EyeIcon({ open }: { open: boolean }) {
@@ -107,7 +107,7 @@ function EmailSection() {
       <p className="mt-1 text-sm text-slate-500">Current email: {admin?.email}</p>
 
       {success ? (
-        <p className="mt-4 max-w-sm rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+        <p className="mt-4 max-w-sm rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
           Email updated. Signing you out so you can sign back in with your new email…
         </p>
       ) : (
@@ -135,7 +135,7 @@ function EmailSection() {
           </div>
 
           {error && (
-            <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
               {error}
             </p>
           )}
@@ -143,7 +143,7 @@ function EmailSection() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-600 disabled:opacity-60"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-600 disabled:opacity-60"
           >
             {isSubmitting ? 'Updating…' : 'Update Email'}
           </button>
@@ -196,7 +196,7 @@ function PasswordSection() {
       <p className="mt-1 text-sm text-slate-500">Choose a new password of at least 8 characters.</p>
 
       {success ? (
-        <p className="mt-4 max-w-sm rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+        <p className="mt-4 max-w-sm rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
           Password updated. Signing you out so you can sign back in with your new password…
         </p>
       ) : (
@@ -228,7 +228,7 @@ function PasswordSection() {
           />
 
           {error && (
-            <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
               {error}
             </p>
           )}
@@ -236,7 +236,7 @@ function PasswordSection() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-600 disabled:opacity-60"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-600 disabled:opacity-60"
           >
             {isSubmitting ? 'Updating…' : 'Update Password'}
           </button>

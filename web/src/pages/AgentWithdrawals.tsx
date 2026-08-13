@@ -6,6 +6,9 @@ import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { useSocketRefetch } from '../hooks/useSocketRefetch';
 import { receiptStatusTone, withdrawalStatusTone } from '../lib/badgeTones';
 import { formatDateTime, formatMoney } from '../lib/format';
+import { humanizeEnum } from '../lib/humanize';
+import { EmptyState } from '../components/EmptyState';
+import { SkeletonRows } from '../components/SkeletonRows';
 import { WITHDRAWAL_STATUS_LABELS } from '../lib/transactionStatus';
 import {
   RECEIPT_VERIFICATION_STATUSES,
@@ -68,7 +71,7 @@ function renderReceiptPreview(
       <img
         src={imageUrl}
         alt="Uploaded receipt"
-        className="max-h-64 rounded-md border border-slate-200 object-contain"
+        className="max-h-64 rounded-lg border border-slate-200 object-contain"
       />
     );
   }
@@ -188,7 +191,7 @@ export function AgentWithdrawals() {
         </p>
       </div>
 
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div>
           <label htmlFor="status-filter" className="mb-1 block text-xs font-medium text-slate-600">
             Status
@@ -197,12 +200,12 @@ export function AgentWithdrawals() {
             id="status-filter"
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value as WithdrawalStatus | 'ALL')}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           >
             <option value="ALL">All statuses</option>
             {WITHDRAWAL_STATUSES.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {WITHDRAWAL_STATUS_LABELS[s] ?? humanizeEnum(s)}
               </option>
             ))}
           </select>
@@ -216,7 +219,7 @@ export function AgentWithdrawals() {
             id="receipt-filter"
             value={receiptFilter}
             onChange={(event) => setReceiptFilter(event.target.value as ReceiptFilterValue | 'ALL')}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           >
             <option value="ALL">All receipt statuses</option>
             {RECEIPT_FILTER_VALUES.map((s) => (
@@ -236,7 +239,7 @@ export function AgentWithdrawals() {
             type="date"
             value={dateFrom}
             onChange={(event) => setDateFrom(event.target.value)}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </div>
 
@@ -249,7 +252,7 @@ export function AgentWithdrawals() {
             type="date"
             value={dateTo}
             onChange={(event) => setDateTo(event.target.value)}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </div>
 
@@ -264,11 +267,11 @@ export function AgentWithdrawals() {
         </label>
       </div>
 
-      {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3 text-left">Student</th>
               <th className="px-4 py-3 text-left">Agent</th>
@@ -281,17 +284,11 @@ export function AgentWithdrawals() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {isLoading && (
-              <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-slate-400">
-                  Loading…
-                </td>
-              </tr>
-            )}
+            {isLoading && <SkeletonRows columns={8} />}
             {!isLoading && filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-slate-400">
-                  No withdrawals match these filters
+                <td colSpan={8}>
+                  <EmptyState title="No withdrawals match these filters" message="Try adjusting the filters above." />
                 </td>
               </tr>
             )}
@@ -315,7 +312,7 @@ export function AgentWithdrawals() {
                       <td className="px-4 py-3 font-medium text-slate-900">
                         {formatMoney(row.amount, 'USD')}
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{row.category}</td>
+                      <td className="px-4 py-3 text-slate-600">{humanizeEnum(row.category)}</td>
                       <td className="px-4 py-3">
                         <Badge tone={withdrawalStatusTone[row.status] ?? 'gray'}>
                           {WITHDRAWAL_STATUS_LABELS[row.status] ?? row.status}
@@ -354,7 +351,7 @@ export function AgentWithdrawals() {
                                   </div>
                                   <div className="flex justify-between gap-4">
                                     <dt className="text-slate-400">Detected Category</dt>
-                                    <dd>{row.detectedCategory ?? '—'}</dd>
+                                    <dd>{row.detectedCategory ? humanizeEnum(row.detectedCategory) : '—'}</dd>
                                   </div>
                                   {row.receiptVerificationNote && (
                                     <div>
@@ -379,7 +376,7 @@ export function AgentWithdrawals() {
                                       rows={2}
                                       value={noteDraft}
                                       onChange={(event) => setNoteDraft(event.target.value)}
-                                      className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                                     />
 
                                     {actionError && (
@@ -394,7 +391,7 @@ export function AgentWithdrawals() {
                                             type="button"
                                             disabled={pendingDecision !== null}
                                             onClick={() => void handleDecision(row, decision)}
-                                            className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                                            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
                                           >
                                             {pendingDecision === decision
                                               ? 'Saving…'

@@ -47,7 +47,7 @@ export function AddFundsModal({
   return (
     <Modal title={`Add Funds to ${userName}`} onClose={onClose}>
       {success ? (
-        <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+        <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
           Funds added successfully.
         </p>
       ) : (
@@ -64,7 +64,7 @@ export function AddFundsModal({
               required
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </div>
 
@@ -76,7 +76,7 @@ export function AddFundsModal({
               id="currency"
               value={currency}
               onChange={(event) => setCurrency(event.target.value as Currency)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             >
               {CURRENCIES.map((c) => (
                 <option key={c} value={c}>
@@ -86,20 +86,20 @@ export function AddFundsModal({
             </select>
           </div>
 
-          {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
           <div className="flex justify-end gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-60"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-60"
             >
               {isSubmitting ? 'Adding…' : 'Confirm'}
             </button>

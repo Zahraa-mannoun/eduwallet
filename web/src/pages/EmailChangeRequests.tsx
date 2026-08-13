@@ -6,6 +6,9 @@ import { Modal } from '../components/Modal';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { roleTone } from '../lib/badgeTones';
 import { formatDateTime } from '../lib/format';
+import { humanizeEnum } from '../lib/humanize';
+import { EmptyState } from '../components/EmptyState';
+import { SkeletonRows } from '../components/SkeletonRows';
 import type { EmailChangeRequestRow } from '../types/admin';
 
 type Tab = 'pending' | 'accepted';
@@ -90,11 +93,11 @@ export function EmailChangeRequests() {
         </button>
       </div>
 
-      {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3 text-left">User</th>
               <th className="px-4 py-3 text-left">Role</th>
@@ -108,26 +111,20 @@ export function EmailChangeRequests() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {isLoading && (
-              <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-slate-400">
-                  Loading…
-                </td>
-              </tr>
-            )}
+            {isLoading && <SkeletonRows columns={8} />}
             {!isLoading && rows.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-slate-400">
-                  No {activeTab} email change requests
+                <td colSpan={8}>
+                  <EmptyState title={`No ${activeTab} email change requests`} />
                 </td>
               </tr>
             )}
             {!isLoading &&
               rows.map((row) => (
-                <tr key={row.id}>
+                <tr key={row.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-medium text-slate-900">{row.user.fullName}</td>
                   <td className="px-4 py-3">
-                    <Badge tone={roleTone[row.user.userType] ?? 'gray'}>{row.user.userType}</Badge>
+                    <Badge tone={roleTone[row.user.userType] ?? 'gray'}>{humanizeEnum(row.user.userType)}</Badge>
                   </td>
                   <td className="px-4 py-3 text-slate-600">{row.currentEmail}</td>
                   <td className="px-4 py-3 text-slate-600">{row.requestedEmail}</td>
@@ -136,7 +133,7 @@ export function EmailChangeRequests() {
                     <button
                       type="button"
                       onClick={() => void viewProof(row.id)}
-                      className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                      className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
                     >
                       View
                     </button>
@@ -153,14 +150,14 @@ export function EmailChangeRequests() {
                         <button
                           type="button"
                           onClick={() => setApproveTarget(row)}
-                          className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+                          className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
                         >
                           Approve
                         </button>
                         <button
                           type="button"
                           onClick={() => setRejectTarget(row)}
-                          className="rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
+                          className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
                         >
                           Reject
                         </button>
@@ -231,14 +228,14 @@ function ApproveModal({
         to log in again with the new email.
       </p>
 
-      {error && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="mt-4 flex justify-end gap-2">
         <button
           type="button"
           onClick={onClose}
           disabled={isSubmitting}
-          className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+          className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
         >
           Cancel
         </button>
@@ -246,7 +243,7 @@ function ApproveModal({
           type="button"
           onClick={() => void handleConfirm()}
           disabled={isSubmitting}
-          className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
         >
           {isSubmitting ? 'Approving…' : 'Confirm'}
         </button>
@@ -287,14 +284,14 @@ function RejectModal({
         to <span className="font-medium text-slate-900">{row.requestedEmail}</span>?
       </p>
 
-      {error && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="mt-4 flex justify-end gap-2">
         <button
           type="button"
           onClick={onClose}
           disabled={isSubmitting}
-          className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+          className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
         >
           Cancel
         </button>
@@ -302,7 +299,7 @@ function RejectModal({
           type="button"
           onClick={() => void handleConfirm()}
           disabled={isSubmitting}
-          className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+          className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
         >
           {isSubmitting ? 'Rejecting…' : 'Confirm'}
         </button>

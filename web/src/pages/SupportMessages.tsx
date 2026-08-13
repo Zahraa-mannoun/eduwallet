@@ -4,8 +4,11 @@ import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
 import { UnsuspendModal } from '../components/UnsuspendModal';
+import { EmptyState } from '../components/EmptyState';
+import { SkeletonRows } from '../components/SkeletonRows';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { formatDateTime } from '../lib/format';
+import { humanizeEnum } from '../lib/humanize';
 import type { SupportMessageRow } from '../types/admin';
 
 type Tab = 'appeals' | 'general';
@@ -97,12 +100,12 @@ export function SupportMessages() {
         </button>
       </div>
 
-      {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       {activeTab === 'general' && (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-4 py-3 text-left">User</th>
                 <th className="px-4 py-3 text-left">Role</th>
@@ -114,17 +117,11 @@ export function SupportMessages() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {isLoading && (
-                <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-slate-400">
-                    Loading…
-                  </td>
-                </tr>
-              )}
+              {isLoading && <SkeletonRows columns={7} />}
               {!isLoading && generalMessages.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-slate-400">
-                    No general support requests yet
+                  <td colSpan={7}>
+                    <EmptyState title="No general support requests yet" />
                   </td>
                 </tr>
               )}
@@ -136,14 +133,14 @@ export function SupportMessages() {
                       key={message.id}
                       ref={isHighlighted ? highlightedRowRef : undefined}
                       className={
-                        isHighlighted ? 'bg-amber-50 ring-1 ring-inset ring-amber-300' : undefined
+                        isHighlighted ? 'bg-amber-50 ring-1 ring-inset ring-amber-300' : 'hover:bg-slate-50'
                       }
                     >
                       <td className="px-4 py-3">
                         <div className="font-medium text-slate-900">{message.user.fullName}</div>
                         <div className="text-xs text-slate-500">{message.user.email}</div>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{message.user.userType}</td>
+                      <td className="px-4 py-3 text-slate-600">{humanizeEnum(message.user.userType)}</td>
                       <td className="px-4 py-3 max-w-xs font-medium text-slate-800">
                         {message.subject ?? '—'}
                       </td>
@@ -160,7 +157,7 @@ export function SupportMessages() {
                             type="button"
                             disabled={busyMessageId === message.id}
                             onClick={() => void markAsRead(message)}
-                            className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                            className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
                           >
                             Mark as Read
                           </button>
@@ -175,9 +172,9 @@ export function SupportMessages() {
       )}
 
       {activeTab === 'appeals' && (
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3 text-left">User</th>
               <th className="px-4 py-3 text-left">Role</th>
@@ -188,17 +185,11 @@ export function SupportMessages() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {isLoading && (
-              <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
-                  Loading…
-                </td>
-              </tr>
-            )}
+            {isLoading && <SkeletonRows columns={6} />}
             {!isLoading && appealMessages.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
-                  No support messages yet
+                <td colSpan={6}>
+                  <EmptyState title="No support messages yet" />
                 </td>
               </tr>
             )}
@@ -209,13 +200,13 @@ export function SupportMessages() {
                   <tr
                     key={message.id}
                     ref={isHighlighted ? highlightedRowRef : undefined}
-                    className={isHighlighted ? 'bg-amber-50 ring-1 ring-inset ring-amber-300' : undefined}
+                    className={isHighlighted ? 'bg-amber-50 ring-1 ring-inset ring-amber-300' : 'hover:bg-slate-50'}
                   >
                     <td className="px-4 py-3">
                       <div className="font-medium text-slate-900">{message.user.fullName}</div>
                       <div className="text-xs text-slate-500">{message.user.email}</div>
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{message.user.userType}</td>
+                    <td className="px-4 py-3 text-slate-600">{humanizeEnum(message.user.userType)}</td>
                     <td className="px-4 py-3 max-w-sm text-slate-700">{message.message}</td>
                     <td className="px-4 py-3 text-slate-500">{formatDateTime(message.createdAt)}</td>
                     <td className="px-4 py-3">
@@ -230,7 +221,7 @@ export function SupportMessages() {
                             type="button"
                             disabled={busyMessageId === message.id}
                             onClick={() => void markAsRead(message)}
-                            className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                            className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
                           >
                             Mark as Read
                           </button>
@@ -239,7 +230,7 @@ export function SupportMessages() {
                           <button
                             type="button"
                             onClick={() => setUnsuspendTarget(message)}
-                            className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-40"
+                            className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-40"
                           >
                             Unsuspend
                           </button>

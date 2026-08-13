@@ -1,3 +1,5 @@
+import defaultTheme from 'tailwindcss/defaultTheme';
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
@@ -17,6 +19,15 @@ export default {
           800: '#132644',
           900: '#0A1322',
         },
+        sidebar: {
+          DEFAULT: '#0F172A',
+          hover: '#1E293B',
+          muted: '#94A3B8',
+        },
+        surface: '#F1F5F9',
+      },
+      fontFamily: {
+        sans: ['Inter', ...defaultTheme.fontFamily.sans],
       },
     },
   },

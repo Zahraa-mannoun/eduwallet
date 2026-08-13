@@ -34,14 +34,14 @@ export function UnsuspendModal({
         restored immediately.
       </p>
 
-      {error && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="mt-4 flex justify-end gap-2">
         <button
           type="button"
           onClick={onClose}
           disabled={isSubmitting}
-          className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+          className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
         >
           Cancel
         </button>
@@ -49,7 +49,7 @@ export function UnsuspendModal({
           type="button"
           onClick={() => void handleConfirm()}
           disabled={isSubmitting}
-          className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
         >
           {isSubmitting ? 'Unsuspending…' : 'Confirm'}
         </button>

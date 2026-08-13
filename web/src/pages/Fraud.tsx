@@ -8,6 +8,9 @@ import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { useSocketRefetch } from '../hooks/useSocketRefetch';
 import { severityTone } from '../lib/badgeTones';
 import { formatDateTime, formatMoney } from '../lib/format';
+import { humanizeEnum } from '../lib/humanize';
+import { EmptyState } from '../components/EmptyState';
+import { SkeletonRows } from '../components/SkeletonRows';
 import type { FraudAlertRow } from '../types/admin';
 
 export function Fraud() {
@@ -41,11 +44,11 @@ export function Fraud() {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-1">
+      <div className="flex gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
         <button
           type="button"
           onClick={() => setShowAll(false)}
-          className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+          className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
             !showAll ? 'bg-primary text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
           }`}
         >
@@ -54,7 +57,7 @@ export function Fraud() {
         <button
           type="button"
           onClick={() => setShowAll(true)}
-          className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+          className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
             showAll ? 'bg-primary text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
           }`}
         >
@@ -62,11 +65,11 @@ export function Fraud() {
         </button>
       </div>
 
-      {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3 text-left">Type</th>
               <th className="px-4 py-3 text-left">Severity</th>
@@ -79,28 +82,22 @@ export function Fraud() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {isLoading && (
-              <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-slate-400">
-                  Loading…
-                </td>
-              </tr>
-            )}
+            {isLoading && <SkeletonRows columns={8} />}
             {!isLoading && alerts.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-slate-400">
-                  No fraud alerts found
+                <td colSpan={8}>
+                  <EmptyState title="No fraud alerts found" />
                 </td>
               </tr>
             )}
             {!isLoading &&
               alerts.map((alert) => (
-                <tr key={alert.id}>
+                <tr key={alert.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3">
-                    <Badge tone="gray">{alert.alertType}</Badge>
+                    <Badge tone="gray">{humanizeEnum(alert.alertType)}</Badge>
                   </td>
                   <td className="px-4 py-3">
-                    <Badge tone={severityTone[alert.severity] ?? 'gray'}>{alert.severity}</Badge>
+                    <Badge tone={severityTone[alert.severity] ?? 'gray'}>{humanizeEnum(alert.severity)}</Badge>
                   </td>
                   <td className="px-4 py-3 font-medium text-slate-900">
                     {formatMoney(alert.transaction.amount, alert.transaction.currency)}
@@ -124,7 +121,7 @@ export function Fraud() {
                       <button
                         type="button"
                         onClick={() => setResolveTarget(alert)}
-                        className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                        className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
                       >
                         Resolve
                       </button>
@@ -194,24 +191,24 @@ function ResolveModal({
             rows={3}
             value={note}
             onChange={(event) => setNote(event.target.value)}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </div>
 
-        {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
         <div className="flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={isSubmitting}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-60"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-60"
           >
             {isSubmitting ? 'Resolving…' : 'Resolve'}
           </button>

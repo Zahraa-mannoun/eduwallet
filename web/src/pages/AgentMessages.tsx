@@ -4,6 +4,8 @@ import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
+import { EmptyState } from '../components/EmptyState';
+import { SkeletonRows } from '../components/SkeletonRows';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { formatDateTime } from '../lib/format';
 import type { SupportMessageRow } from '../types/admin';
@@ -42,7 +44,7 @@ function ReplyModal({
   return (
     <Modal title={`Reply — ${message.user.fullName}`} onClose={onClose}>
       <form className="space-y-4" onSubmit={handleSubmit}>
-        <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
           <p className="font-medium text-slate-800">{message.subject ?? '—'}</p>
           <p className="mt-1">{message.message}</p>
         </div>
@@ -57,24 +59,24 @@ function ReplyModal({
             rows={3}
             value={reply}
             onChange={(event) => setReply(event.target.value)}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </div>
 
-        {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
         <div className="flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={isSubmitting}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-60"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-60"
           >
             {isSubmitting ? 'Sending…' : 'Send Reply'}
           </button>
@@ -130,11 +132,11 @@ export function AgentMessages() {
         <p className="mt-1 text-sm text-slate-500">Messages sent by agents from the agent portal.</p>
       </div>
 
-      {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3 text-left">Agent</th>
               <th className="px-4 py-3 text-left">Subject</th>
@@ -145,23 +147,17 @@ export function AgentMessages() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {isLoading && (
-              <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
-                  Loading…
-                </td>
-              </tr>
-            )}
+            {isLoading && <SkeletonRows columns={6} />}
             {!isLoading && messages.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
-                  No agent messages yet
+                <td colSpan={6}>
+                  <EmptyState title="No agent messages yet" />
                 </td>
               </tr>
             )}
             {!isLoading &&
               messages.map((message) => (
-                <tr key={message.id}>
+                <tr key={message.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3">
                     <div className="font-medium text-slate-900">{message.user.fullName}</div>
                     <div className="text-xs text-slate-500">{message.user.email}</div>
@@ -183,7 +179,7 @@ export function AgentMessages() {
                           type="button"
                           disabled={busyMessageId === message.id}
                           onClick={() => void markAsRead(message)}
-                          className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                          className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
                         >
                           Mark as Read
                         </button>
@@ -191,7 +187,7 @@ export function AgentMessages() {
                       <button
                         type="button"
                         onClick={() => setReplyTarget(message)}
-                        className="rounded-md border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary-100"
+                        className="rounded-lg border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary-100"
                       >
                         Reply
                       </button>

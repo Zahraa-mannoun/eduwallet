@@ -5,6 +5,8 @@ import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { AddFundsModal } from '../components/AddFundsModal';
 import { SuspendModal } from '../components/SuspendModal';
+import { EmptyState } from '../components/EmptyState';
+import { SkeletonRows } from '../components/SkeletonRows';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { formatDate } from '../lib/format';
 import type { AdminUser } from '../types/admin';
@@ -79,27 +81,30 @@ export function Institutions() {
 
   return (
     <div className="space-y-4">
-      <form onSubmit={handleSearchSubmit} className="flex max-w-xs gap-2">
+      <form
+        onSubmit={handleSearchSubmit}
+        className="flex max-w-xs gap-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+      >
         <input
           type="search"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search by name or email…"
-          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
         />
         <button
           type="submit"
-          className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
         >
           Search
         </button>
       </form>
 
-      {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3 text-left">Name</th>
               <th className="px-4 py-3 text-left">Email</th>
@@ -109,23 +114,17 @@ export function Institutions() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {isLoading && (
-              <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-slate-400">
-                  Loading…
-                </td>
-              </tr>
-            )}
+            {isLoading && <SkeletonRows columns={5} />}
             {!isLoading && users.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-slate-400">
-                  No institutions found
+                <td colSpan={5}>
+                  <EmptyState title="No institutions found" />
                 </td>
               </tr>
             )}
             {!isLoading &&
               users.map((user) => (
-                <tr key={user.id}>
+                <tr key={user.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-medium text-slate-900">
                     <div className="flex items-center gap-1.5">
                       <span>{user.fullName}</span>
@@ -134,7 +133,7 @@ export function Institutions() {
                           type="button"
                           title="View support message"
                           onClick={() => navigate(`/support?highlight=${user.id}`)}
-                          className="rounded-md p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                          className="rounded-lg p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                         >
                           💬
                         </button>
@@ -153,14 +152,14 @@ export function Institutions() {
                         type="button"
                         disabled={busyUserId === user.id}
                         onClick={() => void toggleSuspend(user)}
-                        className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                        className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                       >
                         {user.suspended ? 'Unsuspend' : 'Suspend'}
                       </button>
                       <button
                         type="button"
                         onClick={() => setFundsUser(user)}
-                        className="rounded-md border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary-100"
+                        className="rounded-lg border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary-100"
                       >
                         Add Funds
                       </button>
@@ -181,7 +180,7 @@ export function Institutions() {
             type="button"
             disabled={page <= 1}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
-            className="rounded-md border border-slate-200 px-3 py-1.5 disabled:opacity-40"
+            className="rounded-lg border border-slate-200 px-3 py-1.5 disabled:opacity-40"
           >
             Previous
           </button>
@@ -189,7 +188,7 @@ export function Institutions() {
             type="button"
             disabled={page >= totalPages}
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            className="rounded-md border border-slate-200 px-3 py-1.5 disabled:opacity-40"
+            className="rounded-lg border border-slate-200 px-3 py-1.5 disabled:opacity-40"
           >
             Next
           </button>

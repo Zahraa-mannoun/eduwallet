@@ -10,6 +10,8 @@ import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { useSocketRefetch } from '../hooks/useSocketRefetch';
 import { getKycDisplayStatus } from '../lib/kycDisplayStatus';
 import { formatDate } from '../lib/format';
+import { EmptyState } from '../components/EmptyState';
+import { SkeletonRows } from '../components/SkeletonRows';
 import type { PendingKYCRow } from '../types/admin';
 
 type KYCStudentRow = {
@@ -162,13 +164,13 @@ export function KYC() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-1">
+      <div className="flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
         {FILTER_TABS.map((tab) => (
           <button
             key={tab.value}
             type="button"
             onClick={() => setFilter(tab.value)}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
               filter === tab.value
                 ? 'bg-primary text-white'
                 : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
@@ -179,11 +181,11 @@ export function KYC() {
         ))}
       </div>
 
-      {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3 text-left">Student Name</th>
               <th className="px-4 py-3 text-left">Email</th>
@@ -194,23 +196,17 @@ export function KYC() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {isLoading && (
-              <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
-                  Loading…
-                </td>
-              </tr>
-            )}
+            {isLoading && <SkeletonRows columns={6} />}
             {!isLoading && visibleRows.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
-                  No students match this filter
+                <td colSpan={6}>
+                  <EmptyState title="No students match this filter" />
                 </td>
               </tr>
             )}
             {!isLoading &&
               visibleRows.map((row) => (
-                <tr key={row.userId}>
+                <tr key={row.userId} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-medium text-slate-900">
                     <div className="flex items-center gap-1.5">
                       {row.kycStatus === 'REJECTED' && !row.hasResubmitted ? (
@@ -236,7 +232,7 @@ export function KYC() {
                             type="button"
                             title="View in Resubmissions"
                             onClick={() => navigate(`/resubmissions?highlight=${row.userId}`)}
-                            className="rounded-md p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                            className="rounded-lg p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
                           >
                             <IconChevronRight className="h-3.5 w-3.5" />
                           </button>
@@ -258,7 +254,7 @@ export function KYC() {
                           <button
                             type="button"
                             onClick={() => void viewDocument(row.studentIdDoc!.id)}
-                            className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                            className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
                           >
                             View Student ID
                           </button>
@@ -269,7 +265,7 @@ export function KYC() {
                           <button
                             type="button"
                             onClick={() => void viewDocument(row.enrollmentDoc!.id)}
-                            className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                            className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
                           >
                             View Enrollment Certificate
                           </button>
@@ -295,7 +291,7 @@ export function KYC() {
                               disabled={actionState.approveDisabled}
                               onClick={() => setApproveTarget(row)}
                               title={actionState.approveTooltip}
-                              className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-emerald-50"
+                              className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-emerald-50"
                             >
                               Approve
                             </button>
@@ -304,7 +300,7 @@ export function KYC() {
                               disabled={actionState.rejectDisabled}
                               onClick={() => setRejectTarget(row)}
                               title={actionState.rejectTooltip}
-                              className="rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-red-50"
+                              className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-red-50"
                             >
                               Reject
                             </button>
@@ -353,7 +349,7 @@ export function KYC() {
             <button
               type="button"
               onClick={() => setReasonTarget(null)}
-              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
             >
               Close
             </button>
@@ -396,14 +392,14 @@ function ApproveModal({
         cannot be changed afterward.
       </p>
 
-      {error && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="mt-4 flex justify-end gap-2">
         <button
           type="button"
           onClick={onClose}
           disabled={isSubmitting}
-          className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+          className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
         >
           Cancel
         </button>
@@ -411,7 +407,7 @@ function ApproveModal({
           type="button"
           onClick={() => void handleConfirm()}
           disabled={isSubmitting}
-          className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
         >
           {isSubmitting ? 'Approving…' : 'Confirm'}
         </button>
@@ -464,24 +460,24 @@ function RejectModal({
             rows={3}
             value={reason}
             onChange={(event) => setReason(event.target.value)}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </div>
 
-        {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
         <div className="flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={isSubmitting}
-            className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
           >
             {isSubmitting ? 'Rejecting…' : 'Reject'}
           </button>

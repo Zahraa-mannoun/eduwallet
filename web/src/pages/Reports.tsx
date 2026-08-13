@@ -6,6 +6,8 @@ import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { useSocketRefetch } from '../hooks/useSocketRefetch';
 import { formatDate } from '../lib/format';
 import { reportStatusTone } from '../lib/badgeTones';
+import { EmptyState } from '../components/EmptyState';
+import { SkeletonRows } from '../components/SkeletonRows';
 import { REPORT_PERIOD_LABELS } from '../types/admin';
 import type { ReportRequestRow, ReportStatus } from '../types/admin';
 
@@ -126,11 +128,11 @@ export function Reports() {
         </p>
       </div>
 
-      {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3 text-left">Parent</th>
               <th className="px-4 py-3 text-left">Student</th>
@@ -142,23 +144,17 @@ export function Reports() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {isLoading && (
-              <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-slate-400">
-                  Loading…
-                </td>
-              </tr>
-            )}
+            {isLoading && <SkeletonRows columns={7} />}
             {!isLoading && reports.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-slate-400">
-                  No report requests yet
+                <td colSpan={7}>
+                  <EmptyState title="No report requests yet" />
                 </td>
               </tr>
             )}
             {!isLoading &&
               reports.map((report) => (
-                <tr key={report.id}>
+                <tr key={report.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3">
                     <div className="font-medium text-slate-900">{report.parent.fullName}</div>
                     <div className="text-xs text-slate-500">{report.parent.email}</div>
@@ -192,7 +188,7 @@ export function Reports() {
                         type="button"
                         disabled={busyId === report.id}
                         onClick={() => void handleGenerate(report)}
-                        className="rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-white hover:bg-primary-600 disabled:opacity-40"
+                        className="rounded-lg bg-primary px-2.5 py-1 text-xs font-semibold text-white hover:bg-primary-600 disabled:opacity-40"
                       >
                         {busyId === report.id ? 'Generating…' : 'Generate PDF'}
                       </button>
@@ -201,7 +197,7 @@ export function Reports() {
                       <button
                         type="button"
                         onClick={() => void openPreview(report)}
-                        className="rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-white hover:bg-primary-600"
+                        className="rounded-lg bg-primary px-2.5 py-1 text-xs font-semibold text-white hover:bg-primary-600"
                       >
                         Preview
                       </button>
@@ -210,7 +206,7 @@ export function Reports() {
                       <button
                         type="button"
                         onClick={() => void openPreview(report)}
-                        className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                        className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
                       >
                         View PDF
                       </button>
@@ -224,7 +220,7 @@ export function Reports() {
 
       {previewReport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="flex h-[90vh] w-[90vw] flex-col overflow-hidden rounded-lg bg-white shadow-xl">
+          <div className="flex h-[90vh] w-[90vw] flex-col overflow-hidden rounded-xl bg-white shadow-xl">
             <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">
@@ -246,13 +242,13 @@ export function Reports() {
             </div>
 
             {previewError && (
-              <p className="mx-5 mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+              <p className="mx-5 mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
                 {previewError}
               </p>
             )}
 
             <div className="min-h-0 flex-1 bg-slate-50 p-4">
-              <div className="h-full w-full overflow-hidden rounded-md border border-slate-200 bg-white">
+              <div className="h-full w-full overflow-hidden rounded-lg border border-slate-200 bg-white">
                 {isPreviewLoading && (
                   <p className="flex h-full items-center justify-center text-sm text-slate-400">
                     Loading preview…
@@ -274,7 +270,7 @@ export function Reports() {
                 type="button"
                 onClick={closePreview}
                 disabled={isSending}
-                className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
               >
                 Cancel
               </button>
@@ -283,7 +279,7 @@ export function Reports() {
                   type="button"
                   onClick={() => void handleSendToParent()}
                   disabled={isSending || !previewUrl}
-                  className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-40"
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-40"
                 >
                   {isSending ? 'Sending…' : 'Send to Parent'}
                 </button>

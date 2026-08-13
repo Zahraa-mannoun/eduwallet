@@ -4,6 +4,8 @@ import { api, getErrorMessage, unwrap } from '../lib/api';
 import { CreateAgentModal } from '../components/CreateAgentModal';
 import { DeactivateAgentModal } from '../components/DeactivateAgentModal';
 import { SendNotificationModal } from '../components/SendNotificationModal';
+import { EmptyState } from '../components/EmptyState';
+import { SkeletonRows } from '../components/SkeletonRows';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { formatDate } from '../lib/format';
 import type { AgentRow } from '../types/admin';
@@ -61,17 +63,17 @@ export function Agents() {
         <button
           type="button"
           onClick={() => setCreateModalOpen(true)}
-          className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600"
         >
           Create Agent
         </button>
       </div>
 
-      {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3 text-left">Name</th>
               <th className="px-4 py-3 text-left">Email</th>
@@ -82,23 +84,17 @@ export function Agents() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {isLoading && (
-              <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
-                  Loading…
-                </td>
-              </tr>
-            )}
+            {isLoading && <SkeletonRows columns={6} />}
             {!isLoading && agents.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
-                  No agents yet
+                <td colSpan={6}>
+                  <EmptyState title="No agents yet" message="Create an agent to start processing cash withdrawals." />
                 </td>
               </tr>
             )}
             {!isLoading &&
               agents.map((agent) => (
-                <tr key={agent.id}>
+                <tr key={agent.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-medium text-slate-900">{agent.fullName}</td>
                   <td className="px-4 py-3 text-slate-600">{agent.email}</td>
                   <td className="px-4 py-3 text-slate-500">{formatDate(agent.createdAt)}</td>
@@ -120,7 +116,7 @@ export function Agents() {
                       <button
                         type="button"
                         onClick={() => setNotifyTarget(agent)}
-                        className="rounded-md border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary-100"
+                        className="rounded-lg border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary-100"
                       >
                         Send Notification
                       </button>
@@ -129,7 +125,7 @@ export function Agents() {
                           type="button"
                           disabled={busyAgentId === agent.id}
                           onClick={() => void handleReactivate(agent)}
-                          className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                          className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
                         >
                           Reactivate
                         </button>
@@ -138,7 +134,7 @@ export function Agents() {
                           type="button"
                           disabled={busyAgentId === agent.id}
                           onClick={() => setDeactivateTarget(agent)}
-                          className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                          className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                         >
                           Deactivate
                         </button>

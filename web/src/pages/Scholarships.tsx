@@ -6,6 +6,9 @@ import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { useSocketRefetch } from '../hooks/useSocketRefetch';
 import { categoryTone } from '../lib/badgeTones';
 import { formatDate, formatMoney } from '../lib/format';
+import { humanizeEnum } from '../lib/humanize';
+import { EmptyState } from '../components/EmptyState';
+import { SkeletonRows } from '../components/SkeletonRows';
 import type { TransactionRow } from '../types/admin';
 
 type ScholarshipRow = {
@@ -114,11 +117,11 @@ export function Scholarships() {
 
   return (
     <div className="space-y-4">
-      {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3 text-left">Institution Name</th>
               <th className="px-4 py-3 text-left">Students Count</th>
@@ -128,17 +131,11 @@ export function Scholarships() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {isLoading && (
-              <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-slate-400">
-                  Loading…
-                </td>
-              </tr>
-            )}
+            {isLoading && <SkeletonRows columns={5} />}
             {!isLoading && rows.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-slate-400">
-                  No scholarship disbursements found
+                <td colSpan={5}>
+                  <EmptyState title="No scholarship disbursements found" />
                 </td>
               </tr>
             )}
@@ -170,7 +167,7 @@ export function Scholarships() {
                         {formatMoney(row.totalAmount, row.currency)}
                       </td>
                       <td className="px-4 py-3">
-                        <Badge tone={categoryTone[row.category] ?? 'gray'}>{row.category}</Badge>
+                        <Badge tone={categoryTone[row.category] ?? 'gray'}>{humanizeEnum(row.category)}</Badge>
                       </td>
                       <td className="px-4 py-3 text-slate-500">{formatDate(row.date)}</td>
                     </tr>

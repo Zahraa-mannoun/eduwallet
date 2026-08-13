@@ -6,6 +6,8 @@ import { Badge } from '../components/Badge';
 import type { BadgeTone } from '../components/Badge';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { formatDate } from '../lib/format';
+import { EmptyState } from '../components/EmptyState';
+import { SkeletonRows } from '../components/SkeletonRows';
 import type { ResubmissionRow } from '../types/admin';
 
 function latestDate(dates: string[]): string | null {
@@ -77,11 +79,11 @@ export function Resubmissions() {
         </p>
       </div>
 
-      {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="w-48 px-4 py-3 text-left whitespace-nowrap">Student</th>
               <th className="w-56 px-4 py-3 text-left whitespace-nowrap">Previous Rejection Reason</th>
@@ -92,17 +94,11 @@ export function Resubmissions() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {isLoading && (
-              <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
-                  Loading…
-                </td>
-              </tr>
-            )}
+            {isLoading && <SkeletonRows columns={6} />}
             {!isLoading && rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
-                  No resubmissions yet
+                <td colSpan={6}>
+                  <EmptyState title="No resubmissions yet" />
                 </td>
               </tr>
             )}
@@ -115,7 +111,7 @@ export function Resubmissions() {
                   <tr
                     key={row.id}
                     ref={isHighlighted ? highlightedRowRef : undefined}
-                    className={isHighlighted ? 'bg-amber-50 ring-1 ring-inset ring-amber-300' : undefined}
+                    className={isHighlighted ? 'bg-amber-50 ring-1 ring-inset ring-amber-300' : 'hover:bg-slate-50'}
                   >
                     <td className="w-48 px-4 py-3 align-top">
                       <div className="font-medium text-slate-900">{row.fullName}</div>
@@ -132,7 +128,7 @@ export function Resubmissions() {
                               key={doc.id}
                               type="button"
                               onClick={() => void viewDocument(doc.id)}
-                              className="whitespace-nowrap rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                              className="whitespace-nowrap rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
                             >
                               View {doc.documentType === 'STUDENT_ID' ? 'Student ID' : 'Enrollment Cert.'}
                             </button>
@@ -149,7 +145,7 @@ export function Resubmissions() {
                             key={doc.id}
                             type="button"
                             onClick={() => void viewDocument(doc.id)}
-                            className="whitespace-nowrap rounded-md border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary-100"
+                            className="whitespace-nowrap rounded-lg border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary-100"
                           >
                             View {doc.documentType === 'STUDENT_ID' ? 'Student ID' : 'Enrollment Cert.'}
                           </button>
