@@ -140,12 +140,17 @@ export const TRANSACTION_CATEGORIES: TransactionCategory[] = [
   'GENERAL',
 ];
 
-export const TRANSACTION_STATUSES: TransactionStatus[] = [
+// PENDING_PARENT_APPROVAL and COMPLETED have no TransactionStatus equivalent — they only ever
+// match a synthesized cash-withdrawal row the admin transactions list merges in (see
+// admin.service.ts's getAllTransactions), never a real Transaction record.
+export const TRANSACTION_STATUSES: (TransactionStatus | 'PENDING_PARENT_APPROVAL' | 'COMPLETED')[] = [
   'PENDING',
   'AUTO_APPROVED',
   'APPROVED',
   'REJECTED',
   'EMERGENCY',
+  'PENDING_PARENT_APPROVAL',
+  'COMPLETED',
 ];
 
 export const FRAUD_TYPES: FraudAlertType[] = ['CIRCULAR', 'VELOCITY', 'DUPLICATE', 'UNUSUAL_AMOUNT'];

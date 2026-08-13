@@ -128,13 +128,14 @@ export async function getAllWithdrawalsForAdmin(): Promise<WithdrawalRequestForA
   }));
 }
 
-// Student-facing history — completed withdrawals only. A GENERAL-over-threshold request
-// still awaiting (or rejected by) the parent isn't "cash the student has received" yet, so
-// it doesn't belong in this list; the parent-approval screens are where that state is visible.
+// Student-facing history — every withdrawal request regardless of status. A GENERAL-over-
+// threshold request still awaiting (or rejected by) the parent isn't "cash the student has
+// received" yet, but the student should still be able to see where it stands (the mobile UI
+// renders a dedicated approval/completion status badge per row for exactly this).
 export async function getWithdrawalsForStudent(studentUserId: string): Promise<WithdrawalRequest[]> {
   const wallet = await getPrimaryWallet(studentUserId);
   return prisma.withdrawalRequest.findMany({
-    where: { walletId: wallet.id, status: 'COMPLETED' },
+    where: { walletId: wallet.id },
     orderBy: { createdAt: 'desc' },
   });
 }
@@ -341,6 +342,12 @@ async function disburse(
 
     // Feeds fraud monitoring the same way card payments and transfers do — cash leaving the
     // wallet with no toWalletId, mirroring a merchant card payment (cards.service.ts useCard()).
+    // status distinguishes how this withdrawal got here: AUTO_APPROVED only for an immediate
+    // agent dispense with no parent involved; APPROVED when it followed the PENDING_PARENT_
+    // APPROVAL -> APPROVED flow. Both display as "Completed" to the student (see
+    // transactionDisplay.ts on the client), but the underlying status must stay accurate for
+    // anything downstream that filters/counts by it (reports, admin transaction lists) —
+    // otherwise a parent-approved withdrawal would misreport as system-auto-approved.
     const createdTransaction = await tx.transaction.create({
       data: {
         fromWalletId: wallet.id,
@@ -348,7 +355,7 @@ async function disburse(
         amount,
         currency: wallet.currency,
         category,
-        status: 'AUTO_APPROVED',
+        status: existingRequestId ? 'APPROVED' : 'AUTO_APPROVED',
         note: 'Cash withdrawal',
         receiverName: 'Cash Withdrawal',
       },

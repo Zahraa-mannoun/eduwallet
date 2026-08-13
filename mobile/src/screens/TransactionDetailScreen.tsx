@@ -7,11 +7,11 @@ import type { Transaction } from '../types/api';
 import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryKey } from '../constants/budgetCategories';
-import { TRANSACTION_STATUS_META } from '../constants/mockTransactions';
 import { useWallet } from '../context/WalletContext';
 import { colors } from '../theme/colors';
 import * as walletService from '../services/walletService';
 import { ApiError } from '../services/api';
+import { classifyTransaction, transactionStatusMeta } from '../utils/transactionDisplay';
 import type { RootStackScreenProps } from '../navigation/types';
 
 const categoryLookup = new Map(BUDGET_CATEGORIES.map((category) => [category.key, category]));
@@ -81,8 +81,9 @@ export default function TransactionDetailScreen({
   }
 
   const category = categoryLookup.get(transaction.category.toLowerCase() as BudgetCategoryKey);
-  const statusMeta = TRANSACTION_STATUS_META[transaction.status];
   const isReceived = wallet !== null && transaction.toWalletId === wallet.id;
+  const type = classifyTransaction(transaction, isReceived);
+  const statusMeta = transactionStatusMeta(transaction, type);
   const amount = Number(transaction.amount);
   const dateLabel = new Date(transaction.createdAt).toLocaleString([], {
     weekday: 'short',
@@ -121,8 +122,8 @@ export default function TransactionDetailScreen({
           <Text style={styles.counterparty}>{transactionTitle(transaction)}</Text>
           <Chip
             compact
-            style={[styles.statusChip, { backgroundColor: `${statusMeta.color}1F` }]}
-            textStyle={{ color: statusMeta.color, fontWeight: '700' }}
+            style={[styles.statusChip, { backgroundColor: statusMeta.bg }]}
+            textStyle={{ color: statusMeta.fg, fontWeight: '700' }}
           >
             {statusMeta.label}
           </Chip>

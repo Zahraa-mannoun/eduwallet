@@ -3,7 +3,17 @@ import { colors } from '../theme/colors';
 
 export type TransactionType = 'SENT' | 'RECEIVED';
 
-export type TransactionStatus = 'PENDING' | 'AUTO_APPROVED' | 'APPROVED' | 'REJECTED' | 'EMERGENCY';
+export type TransactionStatus =
+  | 'PENDING'
+  | 'AUTO_APPROVED'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'EMERGENCY'
+  // Withdrawal-only status with no TransactionStatus equivalent — see types/api.ts's
+  // Transaction.status. Included here only so screens that still index this map by a bare
+  // transaction.status don't hit a type error; TransactionHistoryScreen/DashboardScreen use
+  // utils/transactionDisplay.ts's transactionStatusMeta() instead, which handles it properly.
+  | 'PENDING_PARENT_APPROVAL';
 
 export type MockTransaction = {
   id: string;
@@ -22,6 +32,7 @@ export const TRANSACTION_STATUS_META: Record<TransactionStatus, { label: string;
   APPROVED: { label: 'Approved', color: colors.accent },
   REJECTED: { label: 'Rejected', color: colors.danger },
   EMERGENCY: { label: 'Emergency', color: '#F97316' },
+  PENDING_PARENT_APPROVAL: { label: 'Pending Approval', color: '#F59E0B' },
 };
 
 export const MOCK_TRANSACTIONS: MockTransaction[] = [

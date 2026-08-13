@@ -254,7 +254,6 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
 
           const budgetPercent = hasPersonalLimit ? Math.round((spent / monthlyLimit) * 100) : 0;
           const budgetColor = progressColorFor(budgetPercent);
-          const budgetRemaining = Math.max(monthlyLimit - spent, 0);
 
           return (
             <View key={category.key} style={[styles.categoryCard, styles.categoryCardBorderGreen]}>
@@ -341,11 +340,7 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
                           />
                         </View>
                         <Text style={styles.sectionCaption}>
-                          ${spent.toFixed(2)} used ·{' '}
-                          <Text style={{ color: remainingColorFor(budgetRemaining, monthlyLimit) }}>
-                            ${budgetRemaining.toFixed(2)} remaining
-                          </Text>{' '}
-                          this month
+                          ${spent.toFixed(2)} used of ${monthlyLimit.toFixed(2)} monthly budget
                         </Text>
                       </>
                     ) : (

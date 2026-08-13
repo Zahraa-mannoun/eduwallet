@@ -3,8 +3,9 @@ import type { ApiResponse, TransactionCategory, TransactionStatus } from '@eduwa
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
-import { categoryTone, transactionStatusTone } from '../lib/badgeTones';
+import { categoryTone } from '../lib/badgeTones';
 import { formatDateTime, formatMoney } from '../lib/format';
+import { transactionStatusMeta, TRANSACTION_STATUS_LABELS } from '../lib/transactionStatus';
 import { TRANSACTION_CATEGORIES, TRANSACTION_STATUSES } from '../types/admin';
 import type { TransactionRow } from '../types/admin';
 
@@ -12,7 +13,7 @@ export function Transactions() {
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [status, setStatus] = useState<TransactionStatus | 'ALL'>('ALL');
+  const [status, setStatus] = useState<TransactionStatus | 'PENDING_PARENT_APPROVAL' | 'ALL'>('ALL');
   const [category, setCategory] = useState<TransactionCategory | 'ALL'>('ALL');
   const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,15 +60,15 @@ export function Transactions() {
         <select
           value={status}
           onChange={(event) => {
-            setStatus(event.target.value as TransactionStatus | 'ALL');
+            setStatus(event.target.value as TransactionStatus | 'PENDING_PARENT_APPROVAL' | 'ALL');
             setPage(1);
           }}
           className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
         >
           <option value="ALL">All statuses</option>
-          {TRANSACTION_STATUSES.filter((s) => s !== 'EMERGENCY').map((s) => (
+          {TRANSACTION_STATUSES.filter((s) => s !== 'EMERGENCY' && s !== 'PENDING').map((s) => (
             <option key={s} value={s}>
-              {s}
+              {TRANSACTION_STATUS_LABELS[s] ?? s}
             </option>
           ))}
         </select>
@@ -133,39 +134,42 @@ export function Transactions() {
               </tr>
             )}
             {!isLoading &&
-              transactions.map((tx) => (
-                <tr key={tx.id}>
-                  <td className="px-4 py-3 text-slate-700">
-                    {tx.fromWallet ? (
-                      tx.fromWallet.user.fullName
-                    ) : tx.note === 'Admin added funds' ? (
-                      <Badge tone="purple">Admin</Badge>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-slate-700">
-                    {tx.toWallet?.user.fullName ?? tx.receiverName ?? '—'}
-                  </td>
-                  <td className="px-4 py-3 font-medium text-slate-900">
-                    {formatMoney(tx.amount, tx.currency)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge tone={categoryTone[tx.category] ?? 'gray'}>{tx.category}</Badge>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge tone={transactionStatusTone[tx.status] ?? 'gray'}>{tx.status}</Badge>
-                  </td>
-                  <td className="px-4 py-3 text-slate-500">{formatDateTime(tx.createdAt)}</td>
-                  <td className="px-4 py-3">
-                    {tx.fraudAlerts.length > 0 ? (
-                      <Badge tone="red">Flagged</Badge>
-                    ) : (
-                      <span className="text-slate-300">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              transactions.map((tx) => {
+                const statusMeta = transactionStatusMeta(tx);
+                return (
+                  <tr key={tx.id}>
+                    <td className="px-4 py-3 text-slate-700">
+                      {tx.fromWallet ? (
+                        tx.fromWallet.user.fullName
+                      ) : tx.note === 'Admin added funds' ? (
+                        <Badge tone="purple">Admin</Badge>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-slate-700">
+                      {tx.toWallet?.user.fullName ?? tx.receiverName ?? '—'}
+                    </td>
+                    <td className="px-4 py-3 font-medium text-slate-900">
+                      {formatMoney(tx.amount, tx.currency)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge tone={categoryTone[tx.category] ?? 'gray'}>{tx.category}</Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge tone={statusMeta.tone}>{statusMeta.label}</Badge>
+                    </td>
+                    <td className="px-4 py-3 text-slate-500">{formatDateTime(tx.createdAt)}</td>
+                    <td className="px-4 py-3">
+                      {tx.fraudAlerts.length > 0 ? (
+                        <Badge tone="red">Flagged</Badge>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
           </tbody>
         </table>
       </div>

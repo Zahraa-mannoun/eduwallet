@@ -8,6 +8,8 @@ import type { StudentWithdrawalForParent, TransactionCategory } from '../types/a
 import IconBadge from '../components/IconBadge';
 import { categoryColors, colors } from '../theme/colors';
 import { getInitials } from '../utils/getInitials';
+import { RECEIPT_STATUS_META } from '../utils/receiptStatus';
+import type { ReceiptBadgeMeta } from '../utils/receiptStatus';
 import * as withdrawalService from '../services/withdrawalService';
 import { ApiError } from '../services/api';
 import type { RootStackScreenProps } from '../navigation/types';
@@ -25,23 +27,6 @@ const CATEGORY_META: Record<
   RENT: { icon: 'home-outline', color: categoryColors.rent },
   PERSONAL_SAVINGS: { icon: 'piggy-bank-outline', color: categoryColors.personalSavings },
   GENERAL: { icon: 'wallet-outline', color: categoryColors.general },
-};
-
-type ReceiptBadgeMeta = {
-  label: string;
-  icon: keyof typeof MaterialCommunityIcons.glyphMap;
-  bg: string;
-  fg: string;
-};
-
-const RECEIPT_STATUS_META: Record<StudentWithdrawalForParent['receiptStatus'], ReceiptBadgeMeta> = {
-  AUTO_VERIFIED: { label: 'Auto-verified', icon: 'check-circle', bg: '#D1FAE5', fg: '#065F46' },
-  MANUALLY_VERIFIED: { label: 'Verified', icon: 'check-circle', bg: '#D1FAE5', fg: '#065F46' },
-  PENDING: { label: 'Pending review', icon: 'clock-outline', bg: '#FEF3C7', fg: '#92400E' },
-  FLAGGED: { label: 'Flagged', icon: 'alert', bg: '#FEE2E2', fg: '#991B1B' },
-  REJECTED: { label: 'Rejected', icon: 'close-circle', bg: '#FCA5A5', fg: '#7F1D1D' },
-  NOT_UPLOADED: { label: 'Not uploaded', icon: 'file-outline', bg: '#F3F4F6', fg: '#6B7280' },
-  PROCESSING: { label: 'Processing', icon: 'sync', bg: '#DBEAFE', fg: '#1E40AF' },
 };
 
 // Only statuses that need the parent's attention or an explanation get a note banner — a

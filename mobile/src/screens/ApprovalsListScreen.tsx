@@ -8,13 +8,13 @@ import type { PersonalSavingsHistory, Transaction, WithdrawalRequestWithStudent 
 import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryKey } from '../constants/budgetCategories';
-import { TRANSACTION_STATUS_META } from '../constants/mockTransactions';
 import { colors } from '../theme/colors';
 import * as parentalService from '../services/parentalService';
 import type { LinkedStudent } from '../services/parentalService';
 import * as savingsService from '../services/savingsService';
 import * as withdrawalService from '../services/withdrawalService';
 import { ApiError } from '../services/api';
+import { classifyTransaction, transactionStatusMeta } from '../utils/transactionDisplay';
 import type { ParentTabScreenProps } from '../navigation/types';
 
 const categoryLookup = new Map(BUDGET_CATEGORIES.map((category) => [category.key, category]));
@@ -235,7 +235,8 @@ export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps
               const category = categoryLookup.get(
                 transaction.category.toLowerCase() as BudgetCategoryKey
               );
-              const statusMeta = TRANSACTION_STATUS_META[transaction.status];
+              const type = classifyTransaction(transaction, false);
+              const statusMeta = transactionStatusMeta(transaction, type);
               const studentName = transaction.fromWalletId
                 ? (walletToStudentName.get(transaction.fromWalletId) ?? 'Student')
                 : 'Student';
@@ -264,10 +265,10 @@ export default function ApprovalsListScreen({ navigation }: ParentTabScreenProps
                   </View>
                   <Chip
                     compact
-                    style={[styles.approvalChip, { backgroundColor: `${statusMeta.color}1F` }]}
-                    textStyle={{ color: statusMeta.color, fontSize: 11, fontWeight: '700' }}
+                    style={[styles.approvalChip, { backgroundColor: statusMeta.bg }]}
+                    textStyle={{ color: statusMeta.fg, fontSize: 11, fontWeight: '700' }}
                   >
-                    Review
+                    {statusMeta.label}
                   </Chip>
                 </TouchableOpacity>
               );

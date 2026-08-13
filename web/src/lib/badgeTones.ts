@@ -13,14 +13,6 @@ export const kycTone: Record<string, BadgeTone> = {
   REJECTED: 'red',
 };
 
-export const transactionStatusTone: Record<string, BadgeTone> = {
-  AUTO_APPROVED: 'green',
-  PENDING: 'yellow',
-  REJECTED: 'red',
-  APPROVED: 'blue',
-  EMERGENCY: 'orange',
-};
-
 export const severityTone: Record<string, BadgeTone> = {
   HIGH: 'red',
   MEDIUM: 'orange',

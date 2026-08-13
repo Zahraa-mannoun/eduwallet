@@ -8,7 +8,7 @@ import { IconInbox } from '../components/icons';
 
 const STATUS_META: Record<WithdrawalStatus, { label: string; tone: BadgeTone }> = {
   PENDING: { label: 'Pending', tone: 'gray' },
-  PENDING_PARENT_APPROVAL: { label: 'Awaiting Parent', tone: 'yellow' },
+  PENDING_PARENT_APPROVAL: { label: 'Awaiting Parent Approval', tone: 'yellow' },
   APPROVED: { label: 'Approved — Awaiting Dispense', tone: 'blue' },
   REJECTED: { label: 'Rejected', tone: 'red' },
   COMPLETED: { label: 'Completed', tone: 'green' },
@@ -17,7 +17,7 @@ const STATUS_META: Record<WithdrawalStatus, { label: string; tone: BadgeTone }> 
 const STATUS_FILTERS: Array<{ key: WithdrawalStatus | 'ALL'; label: string }> = [
   { key: 'ALL', label: 'All' },
   { key: 'COMPLETED', label: 'Completed' },
-  { key: 'PENDING_PARENT_APPROVAL', label: 'Awaiting Parent' },
+  { key: 'PENDING_PARENT_APPROVAL', label: 'Awaiting Parent Approval' },
   { key: 'APPROVED', label: 'Approved' },
   { key: 'REJECTED', label: 'Rejected' },
 ];

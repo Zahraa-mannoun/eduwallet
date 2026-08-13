@@ -41,6 +41,22 @@ function titleCaseEnum(value: string): string {
     .join(' ');
 }
 
+// TransactionStatus labels specifically — titleCaseEnum() alone would print "Auto Approved"
+// (space) instead of the hyphenated "Auto-Approved" used everywhere else in the app, and
+// PENDING here is a system queue state ("Processing"), not the parent-approval wording used
+// for WithdrawalStatus's PENDING_PARENT_APPROVAL.
+const TRANSACTION_STATUS_LABELS: Record<string, string> = {
+  PENDING: 'Processing',
+  AUTO_APPROVED: 'Auto-Approved',
+  APPROVED: 'Approved',
+  REJECTED: 'Rejected',
+  EMERGENCY: 'Emergency',
+};
+
+function transactionStatusLabel(status: string): string {
+  return TRANSACTION_STATUS_LABELS[status] ?? titleCaseEnum(status);
+}
+
 export type ReportData = {
   studentName: string;
   parentName: string;
@@ -190,7 +206,7 @@ export function renderReportPdf(doc: PDFKit.PDFDocument, data: ReportData): void
         tx.toWallet?.user.fullName ?? '—',
         titleCaseEnum(tx.category),
         formatMoney(tx.amount),
-        titleCaseEnum(tx.status),
+        transactionStatusLabel(tx.status),
       ]),
       y
     );
@@ -254,7 +270,7 @@ export function renderReportPdf(doc: PDFKit.PDFDocument, data: ReportData): void
         formatDate(tx.createdAt),
         formatMoney(tx.amount),
         titleCaseEnum(tx.category),
-        titleCaseEnum(tx.status),
+        transactionStatusLabel(tx.status),
       ]),
       y
     );

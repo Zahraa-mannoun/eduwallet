@@ -27,7 +27,19 @@ export type GetUsersInput = z.infer<typeof getUsersSchema>;
 export const getAllTransactionsSchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
-  status: z.enum(['PENDING', 'AUTO_APPROVED', 'APPROVED', 'REJECTED', 'EMERGENCY']).optional(),
+  // PENDING_PARENT_APPROVAL and COMPLETED have no TransactionStatus equivalent — see
+  // getAllTransactions in admin.service.ts for how each is actually resolved.
+  status: z
+    .enum([
+      'PENDING',
+      'AUTO_APPROVED',
+      'APPROVED',
+      'REJECTED',
+      'EMERGENCY',
+      'PENDING_PARENT_APPROVAL',
+      'COMPLETED',
+    ])
+    .optional(),
   category: z
     .enum(['TUITION', 'BOOKS', 'FOOD', 'TRANSPORT', 'SOFTWARE', 'RENT', 'LIFESTYLE', 'PERSONAL_SAVINGS', 'GENERAL'])
     .optional(),

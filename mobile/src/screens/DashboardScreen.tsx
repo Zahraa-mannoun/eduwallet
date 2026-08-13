@@ -10,7 +10,6 @@ import type { Transaction, TransactionCategory } from '../types/api';
 import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES, VISIBLE_BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryDefinition, BudgetCategoryKey } from '../constants/budgetCategories';
-import { TRANSACTION_STATUS_META } from '../constants/mockTransactions';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationsContext';
 import { useWallet } from '../context/WalletContext';
@@ -23,11 +22,12 @@ import { getInitials } from '../utils/getInitials';
 import { progressColorFor } from '../utils/progressColor';
 import {
   classifyTransaction,
+  isCompletedWithdrawal,
   RECEIVED_AMOUNT_COLOR,
   SENT_AMOUNT_COLOR,
-  STATUS_BADGE_COLORS,
   TX_TYPE_META,
   transactionDisplayTitle,
+  transactionStatusMeta,
 } from '../utils/transactionDisplay';
 import type { StudentTabScreenProps } from '../navigation/types';
 
@@ -386,14 +386,19 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
               const isReceived = wallet !== null && transaction.toWalletId === wallet.id;
               const type = classifyTransaction(transaction, isReceived);
               const typeMeta = TX_TYPE_META[type];
-              const statusMeta = TRANSACTION_STATUS_META[transaction.status];
-              const statusBadgeColors = STATUS_BADGE_COLORS[transaction.status];
+              const badge = transactionStatusMeta(transaction, type);
+              // A withdrawal awaiting parent/agent action has no real Transaction row yet —
+              // there's nothing for TransactionDetail to look up, so route to the Withdrawal
+              // screen instead, where it's already listed with full detail.
+              const isPendingWithdrawal = type === 'WITHDRAWAL' && !isCompletedWithdrawal(transaction);
               return (
                 <TouchableOpacity
                   key={transaction.id}
                   style={styles.transactionRow}
                   onPress={() =>
-                    navigation.navigate('TransactionDetail', { transactionId: transaction.id })
+                    isPendingWithdrawal
+                      ? navigation.navigate('Withdrawal')
+                      : navigation.navigate('TransactionDetail', { transactionId: transaction.id })
                   }
                 >
                   <View style={[styles.transactionIconCircle, { backgroundColor: `${typeMeta.color}1F` }]}>
@@ -418,15 +423,15 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
                     </Text>
                     <Chip
                       compact
-                      style={[styles.statusChip, { backgroundColor: statusBadgeColors.bg }]}
+                      style={[styles.statusChip, { backgroundColor: badge.bg }]}
                       textStyle={{
-                        color: statusBadgeColors.fg,
+                        color: badge.fg,
                         fontSize: 10,
                         fontWeight: '700',
                         textAlign: 'center',
                       }}
                     >
-                      {statusMeta.label}
+                      {badge.label}
                     </Chip>
                   </View>
                 </TouchableOpacity>

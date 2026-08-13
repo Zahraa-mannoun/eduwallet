@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import type { Transaction, TransactionStatus } from '../types/api';
+import type { Transaction, WithdrawalStatus } from '../types/api';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryKey } from '../constants/budgetCategories';
 
@@ -11,18 +11,12 @@ const categoryLookup = new Map(BUDGET_CATEGORIES.map((category) => [category.key
 export const RECEIVED_AMOUNT_COLOR = '#065F46';
 export const SENT_AMOUNT_COLOR = '#991B1B';
 
-export const STATUS_BADGE_COLORS: Record<TransactionStatus, { bg: string; fg: string }> = {
-  AUTO_APPROVED: { bg: '#D1FAE5', fg: '#065F46' },
-  APPROVED: { bg: '#D1FAE5', fg: '#065F46' },
-  PENDING: { bg: '#FEF3C7', fg: '#92400E' },
-  REJECTED: { bg: '#FEE2E2', fg: '#991B1B' },
-  EMERGENCY: { bg: '#FFEDD5', fg: '#9A3412' },
-};
-
-// What kind of money movement a transaction represents, used to pick its left-side icon
-// circle. Cash withdrawals are tracked entirely through the separate WithdrawalRequest model,
-// never as a wallet Transaction row, so WITHDRAWAL is defined for completeness but the wallet
-// transactions endpoint every screen here reads from can never actually produce one.
+// What kind of money movement a transaction represents, used to pick its left-side icon circle.
+// Cash withdrawals are tracked in the separate WithdrawalRequest model, not as their own row in
+// the Transaction table — GET /wallet/transactions merges both in, real Transaction rows for a
+// completed dispense and synthetic rows for one still awaiting parent/agent action, always
+// tagged receiverName: 'Cash Withdrawal' either way (see wallet.service.ts), which is what
+// classifyTransaction below actually keys off.
 export type TxDisplayType = 'ADMIN_TOPUP' | 'SENT' | 'RECEIVED' | 'CARD_PAYMENT' | 'WITHDRAWAL';
 
 export const TX_TYPE_META: Record<
@@ -39,11 +33,76 @@ export const TX_TYPE_META: Record<
 export function classifyTransaction(transaction: Transaction, isReceived: boolean): TxDisplayType {
   if (!transaction.fromWalletId) return 'ADMIN_TOPUP';
   if (isReceived) return 'RECEIVED';
+  if (transaction.receiverName === 'Cash Withdrawal') return 'WITHDRAWAL';
   // Per the backend schema: receiverName is set for BOTH card/merchant payments and named P2P
   // transfers, but only a P2P transfer has a real toWalletId (a merchant isn't a EduWallet
   // user) — that's the reliable signal, not receiverName's presence.
   if (!transaction.toWalletId) return 'CARD_PAYMENT';
   return 'SENT';
+}
+
+// A withdrawal-derived row still awaiting parent approval or agent dispense is synthesized by
+// wallet.service.ts from WithdrawalRequest, not a real Transaction row — it never got a `note`.
+// Once an agent actually dispenses the cash, disburse() creates a real Transaction row and
+// stamps note: 'Cash withdrawal'. Distinguishing these matters because both can carry
+// status: 'APPROVED' but mean very different things (still waiting vs already in hand).
+export function isCompletedWithdrawal(transaction: Transaction): boolean {
+  return transaction.receiverName === 'Cash Withdrawal' && transaction.note === 'Cash withdrawal';
+}
+
+export type StatusBadgeMeta = { emoji: string; label: string; bg: string; fg: string };
+
+const GREEN: Omit<StatusBadgeMeta, 'emoji' | 'label'> = { bg: '#D1FAE5', fg: '#065F46' };
+const AMBER: Omit<StatusBadgeMeta, 'emoji' | 'label'> = { bg: '#FEF3C7', fg: '#92400E' };
+const BLUE: Omit<StatusBadgeMeta, 'emoji' | 'label'> = { bg: '#DBEAFE', fg: '#1E40AF' };
+const RED: Omit<StatusBadgeMeta, 'emoji' | 'label'> = { bg: '#FEE2E2', fg: '#991B1B' };
+const ORANGE: Omit<StatusBadgeMeta, 'emoji' | 'label'> = { bg: '#FFEDD5', fg: '#9A3412' };
+const GRAY: Omit<StatusBadgeMeta, 'emoji' | 'label'> = { bg: '#F3F4F6', fg: '#6B7280' };
+
+// The single source of truth for a transaction/withdrawal row's status badge — label, emoji,
+// and color all follow from *why* a status was reached, not the raw status string alone:
+// - "Auto-Approved" only ever means the system cleared it with no parent involved (under
+//   threshold P2P, any card payment, any admin top-up, or an immediate agent cash dispense).
+// - "Approved" only ever means a parent manually approved it.
+// - A completed cash withdrawal reads "Completed", never "Auto-Approved"/"Approved", even
+//   though its underlying TransactionStatus is one of those two (see disburse() in
+//   withdrawals.service.ts) — the approval path stopped mattering once cash is in hand.
+export function transactionStatusMeta(transaction: Transaction, type: TxDisplayType): StatusBadgeMeta {
+  if (type === 'CARD_PAYMENT' || type === 'ADMIN_TOPUP') {
+    return { emoji: '✅', label: 'Auto-Approved', ...GREEN };
+  }
+
+  if (type === 'WITHDRAWAL') {
+    if (transaction.status === 'PENDING_PARENT_APPROVAL') {
+      return { emoji: '⏳', label: 'Awaiting Parent Approval', ...AMBER };
+    }
+    if (transaction.status === 'REJECTED') {
+      return { emoji: '❌', label: 'Rejected', ...RED };
+    }
+    if (isCompletedWithdrawal(transaction)) {
+      return { emoji: '✅', label: 'Completed', ...GREEN };
+    }
+    // status === 'APPROVED' but not yet dispensed by an agent.
+    return { emoji: '🔵', label: 'Approved', ...BLUE };
+  }
+
+  // P2P transfer (SENT/RECEIVED). PENDING only ever fires when a transfer is over the parent's
+  // threshold and waiting on them — same meaning and treatment as the withdrawal branch's
+  // PENDING_PARENT_APPROVAL above, not a generic "system processing" state.
+  switch (transaction.status) {
+    case 'AUTO_APPROVED':
+      return { emoji: '✅', label: 'Auto-Approved', ...GREEN };
+    case 'PENDING':
+      return { emoji: '⏳', label: 'Awaiting Parent Approval', ...AMBER };
+    case 'APPROVED':
+      return { emoji: '🔵', label: 'Approved', ...BLUE };
+    case 'REJECTED':
+      return { emoji: '❌', label: 'Rejected', ...RED };
+    case 'EMERGENCY':
+      return { emoji: '🚨', label: 'Emergency', ...ORANGE };
+    default:
+      return { emoji: '⏳', label: 'Awaiting Parent Approval', ...AMBER };
+  }
 }
 
 export function transactionDisplayTitle(transaction: Transaction, type: TxDisplayType): string {
@@ -62,5 +121,24 @@ export function transactionDisplayTitle(transaction: Transaction, type: TxDispla
     }
     case 'WITHDRAWAL':
       return 'Cash Withdrawal';
+  }
+}
+
+// Badge for a raw WithdrawalRequest's own status — distinct from transactionStatusMeta() above,
+// which only ever sees a withdrawal once it's been merged into the transaction-history feed
+// (real or synthetic Transaction shape). Screens working directly with WithdrawalRequest rows
+// (WithdrawalScreen, ParentStudentDetailScreen) use this instead.
+export function withdrawalStatusMeta(status: WithdrawalStatus): StatusBadgeMeta {
+  switch (status) {
+    case 'PENDING_PARENT_APPROVAL':
+      return { emoji: '⏳', label: 'Awaiting Parent Approval', ...AMBER };
+    case 'APPROVED':
+      return { emoji: '🔵', label: 'Approved', ...BLUE };
+    case 'REJECTED':
+      return { emoji: '❌', label: 'Rejected', ...RED };
+    case 'COMPLETED':
+      return { emoji: '✅', label: 'Completed', ...GREEN };
+    default:
+      return { emoji: '⏳', label: 'Processing', ...GRAY };
   }
 }

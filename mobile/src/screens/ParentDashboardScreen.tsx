@@ -20,7 +20,6 @@ import type { Transaction } from '../types/api';
 import IconBadge from '../components/IconBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryKey } from '../constants/budgetCategories';
-import { TRANSACTION_STATUS_META } from '../constants/mockTransactions';
 import { useNotifications } from '../context/NotificationsContext';
 import { useWallet } from '../context/WalletContext';
 import { colors } from '../theme/colors';
@@ -28,6 +27,7 @@ import { getInitials } from '../utils/getInitials';
 import * as parentalService from '../services/parentalService';
 import type { LinkedStudent, StudentSpendingBreakdown } from '../services/parentalService';
 import { ApiError } from '../services/api';
+import { classifyTransaction, transactionStatusMeta } from '../utils/transactionDisplay';
 import { progressColorFor } from '../utils/progressColor';
 import type { ParentTabScreenProps } from '../navigation/types';
 
@@ -247,7 +247,8 @@ export default function ParentDashboardScreen({
               const category = categoryLookup.get(
                 transaction.category.toLowerCase() as BudgetCategoryKey
               );
-              const statusMeta = TRANSACTION_STATUS_META[transaction.status];
+              const type = classifyTransaction(transaction, false);
+              const statusMeta = transactionStatusMeta(transaction, type);
               const studentName = transaction.fromWalletId
                 ? (walletToStudentName.get(transaction.fromWalletId) ?? 'Student')
                 : 'Student';
@@ -272,10 +273,10 @@ export default function ParentDashboardScreen({
                   </View>
                   <Chip
                     compact
-                    style={[styles.approvalChip, { backgroundColor: `${statusMeta.color}1F` }]}
-                    textStyle={{ color: statusMeta.color, fontSize: 11, fontWeight: '700' }}
+                    style={[styles.approvalChip, { backgroundColor: statusMeta.bg }]}
+                    textStyle={{ color: statusMeta.fg, fontSize: 11, fontWeight: '700' }}
                   >
-                    Review
+                    {statusMeta.label}
                   </Chip>
                 </TouchableOpacity>
               );

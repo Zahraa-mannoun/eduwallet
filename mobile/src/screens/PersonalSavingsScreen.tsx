@@ -29,9 +29,12 @@ const SAVINGS_GRADIENT_END = '#065F46';
 const WITHDRAWAL_AMOUNT_COLOR = '#9A3412';
 const SAVINGS_AMOUNT_COLOR = '#065F46';
 
+// A savings withdrawal always needs the parent's sign-off — PENDING means waiting on them, and
+// APPROVED means they said yes, so it reads blue (parent-approved) not green (system-cleared),
+// matching the same "Approved" treatment used for transaction/withdrawal statuses elsewhere.
 const STATUS_META: Record<PersonalSavingsHistory['status'], { label: string; color: string }> = {
-  PENDING: { label: 'Pending', color: '#F59E0B' },
-  APPROVED: { label: 'Approved', color: colors.accent },
+  PENDING: { label: 'Awaiting Parent Approval', color: '#F59E0B' },
+  APPROVED: { label: 'Approved', color: '#1E40AF' },
   REJECTED: { label: 'Rejected', color: colors.danger },
 };
 

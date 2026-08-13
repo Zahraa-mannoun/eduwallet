@@ -16,6 +16,18 @@ export type TransactionWithParties = Transaction & {
   receiverName: string | null;
 };
 
+// A cash withdrawal only produces a real Transaction row once an agent actually dispenses it
+// (disburse() in withdrawals.service.ts) — before that, while it's parked awaiting parent
+// approval, there is nothing in the Transaction table to show. This is the wire shape for that
+// in-flight window: same fields as TransactionWithParties, but `status` also allows the one
+// WithdrawalStatus value with no TransactionStatus equivalent. Every synthesized row here is
+// marked with receiverName 'Cash Withdrawal' — the same marker disburse() stamps on the real
+// completed-withdrawal Transaction row, so the client can recognize "this is a cash withdrawal"
+// uniformly regardless of which table it actually came from.
+export type TransactionHistoryEntry = Omit<TransactionWithParties, 'status'> & {
+  status: TransactionWithParties['status'] | 'PENDING_PARENT_APPROVAL';
+};
+
 function titleCaseCategory(category: string): string {
   return category.charAt(0) + category.slice(1).toLowerCase();
 }
@@ -267,9 +279,10 @@ export async function transfer(
 export async function getTransactions(
   userId: string,
   filters: GetTransactionsInput
-): Promise<{ transactions: TransactionWithParties[]; total: number; page: number; limit: number }> {
-  const wallets = await prisma.wallet.findMany({ where: { userId }, select: { id: true } });
+): Promise<{ transactions: TransactionHistoryEntry[]; total: number; page: number; limit: number }> {
+  const wallets = await prisma.wallet.findMany({ where: { userId }, select: { id: true, currency: true } });
   const walletIds = wallets.map((wallet) => wallet.id);
+  const currencyByWalletId = new Map(wallets.map((wallet) => [wallet.id, wallet.currency]));
 
   const where = {
     OR: [{ fromWalletId: { in: walletIds } }, { toWalletId: { in: walletIds } }],
@@ -277,7 +290,12 @@ export async function getTransactions(
     ...(filters.status ? { status: filters.status } : {}),
   };
 
-  const [rawTransactions, total] = await Promise.all([
+  // In-flight withdrawal requests (awaiting parent approval or agent dispense, or rejected
+  // outright) never gained a real Transaction row — see TransactionHistoryEntry above. Callers
+  // here always request a single page big enough to hold everything (mobile asks for limit:100,
+  // page 1), so this only bothers fetching them on page 1 rather than building full cross-table
+  // pagination for a handful of rows that realistically never exceeds single digits.
+  const [rawTransactions, total, inFlightWithdrawals] = await Promise.all([
     prisma.transaction.findMany({
       where,
       orderBy: { createdAt: 'desc' },
@@ -285,11 +303,41 @@ export async function getTransactions(
       take: filters.limit,
     }),
     prisma.transaction.count({ where }),
+    filters.page === 1 && !filters.status
+      ? prisma.withdrawalRequest.findMany({
+          where: {
+            walletId: { in: walletIds },
+            status: { in: ['PENDING_PARENT_APPROVAL', 'APPROVED', 'REJECTED'] },
+            ...(filters.category ? { category: filters.category } : {}),
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        })
+      : Promise.resolve([]),
   ]);
 
   const transactions = await attachPartyNames(rawTransactions);
 
-  return { transactions, total, page: filters.page, limit: filters.limit };
+  const withdrawalEntries: TransactionHistoryEntry[] = inFlightWithdrawals.map((request) => ({
+    id: request.id,
+    fromWalletId: request.walletId,
+    toWalletId: null,
+    amount: request.amount,
+    currency: currencyByWalletId.get(request.walletId) ?? 'USD',
+    category: request.category,
+    // Narrowed by the `where` filter above to PENDING_PARENT_APPROVAL | APPROVED | REJECTED.
+    status: request.status as TransactionHistoryEntry['status'],
+    note: null,
+    receiverName: 'Cash Withdrawal',
+    senderName: null,
+    createdAt: request.createdAt,
+  }));
+
+  const merged = [...transactions, ...withdrawalEntries].sort(
+    (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+  );
+
+  return { transactions: merged, total: total + withdrawalEntries.length, page: filters.page, limit: filters.limit };
 }
 
 export async function getTransactionById(

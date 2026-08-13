@@ -33,6 +33,26 @@ export type TransactionWithParties = Transaction & {
   toWallet: (Wallet & { user: { id: string; fullName: string; email: string; userType: string } }) | null;
 };
 
+// A cash withdrawal only produces a real Transaction row once an agent actually dispenses it
+// (disburse() in withdrawals.service.ts) — before that, while parked awaiting parent approval
+// or agent action, there's nothing in the Transaction table for the admin view to show. This is
+// the wire shape for that in-flight window: same fields as TransactionWithParties, but `status`
+// also allows the one WithdrawalStatus value with no TransactionStatus equivalent. Every
+// synthesized row is marked with receiverName 'Cash Withdrawal' — the same marker disburse()
+// stamps on the real completed-withdrawal Transaction row, so the client can recognize "this is
+// a cash withdrawal" uniformly regardless of which table it actually came from.
+export type AdminTransactionRow = Omit<TransactionWithParties, 'status'> & {
+  status: TransactionWithParties['status'] | 'PENDING_PARENT_APPROVAL';
+  fraudAlerts: FraudAlert[];
+};
+
+// Withdrawal statuses that never gain a real Transaction row and so must be synthesized: still
+// awaiting parent approval, approved but not yet dispensed by an agent, or rejected outright.
+// Plain 'PENDING' (the schema default) is excluded — this codebase never actually leaves a
+// withdrawal request in that state (see processWithdrawal/disburse in withdrawals.service.ts),
+// it goes straight from "doesn't exist" to either COMPLETED or PENDING_PARENT_APPROVAL.
+const IN_FLIGHT_WITHDRAWAL_STATUSES = ['PENDING_PARENT_APPROVAL', 'APPROVED', 'REJECTED'] as const;
+
 async function logAdminAction(
   adminId: string,
   action: string,
@@ -237,31 +257,97 @@ export async function unsuspendUser(adminId: string, userId: string): Promise<Sa
 }
 
 export async function getAllTransactions(filters: GetAllTransactionsInput): Promise<{
-  transactions: (TransactionWithParties & { fraudAlerts: FraudAlert[] })[];
+  transactions: AdminTransactionRow[];
   total: number;
   page: number;
   limit: number;
 }> {
+  // PENDING_PARENT_APPROVAL can never match a real Transaction row — skip that query entirely
+  // rather than asking Prisma to filter TransactionStatus by a value it doesn't have.
+  const skipRealTransactions = filters.status === 'PENDING_PARENT_APPROVAL';
+  // COMPLETED has no TransactionStatus equivalent either — a completed cash withdrawal's real
+  // Transaction row carries AUTO_APPROVED or APPROVED (see disburse()), identified as
+  // "completed" only by receiverName + note. Filtering by literal status: 'COMPLETED' would
+  // never match anything, so this asks for that marker combination instead.
+  const isCompletedFilter = filters.status === 'COMPLETED';
+  const realStatus =
+    filters.status !== 'PENDING_PARENT_APPROVAL' && filters.status !== 'COMPLETED' ? filters.status : undefined;
+
   const where: Prisma.TransactionWhereInput = {
-    ...(filters.status ? { status: filters.status } : {}),
+    ...(realStatus ? { status: realStatus } : {}),
+    ...(isCompletedFilter ? { receiverName: 'Cash Withdrawal', note: 'Cash withdrawal' } : {}),
     ...(filters.category ? { category: filters.category } : {}),
     ...(filters.flagged !== undefined
       ? { fraudAlerts: filters.flagged ? { some: {} } : { none: {} } }
       : {}),
   };
 
-  const [transactions, total] = await Promise.all([
-    prisma.transaction.findMany({
-      where,
-      include: { ...transactionPartyInclude, fraudAlerts: true },
-      orderBy: { createdAt: 'desc' },
-      skip: (filters.page - 1) * filters.limit,
-      take: filters.limit,
-    }),
-    prisma.transaction.count({ where }),
+  // A flagged-only view can never include a withdrawal-derived row (they never go through
+  // fraud.service, so they can never have a fraud alert to flag). A completed-only view never
+  // includes one either — completed withdrawals are covered by the real Transaction row above.
+  const withdrawalStatuses: readonly string[] = skipRealTransactions
+    ? ['PENDING_PARENT_APPROVAL']
+    : isCompletedFilter
+      ? []
+      : filters.status
+        ? IN_FLIGHT_WITHDRAWAL_STATUSES.includes(filters.status as (typeof IN_FLIGHT_WITHDRAWAL_STATUSES)[number])
+          ? [filters.status]
+          : []
+        : IN_FLIGHT_WITHDRAWAL_STATUSES;
+  const includeWithdrawals =
+    filters.page === 1 && filters.flagged !== true && withdrawalStatuses.length > 0;
+
+  const [transactions, total, inFlightWithdrawals] = await Promise.all([
+    skipRealTransactions
+      ? Promise.resolve([])
+      : prisma.transaction.findMany({
+          where,
+          include: { ...transactionPartyInclude, fraudAlerts: true },
+          orderBy: { createdAt: 'desc' },
+          skip: (filters.page - 1) * filters.limit,
+          take: filters.limit,
+        }),
+    skipRealTransactions ? Promise.resolve(0) : prisma.transaction.count({ where }),
+    includeWithdrawals
+      ? prisma.withdrawalRequest.findMany({
+          where: {
+            status: { in: withdrawalStatuses as Prisma.EnumWithdrawalStatusFilter['in'] },
+            ...(filters.category ? { category: filters.category } : {}),
+          },
+          include: { wallet: { include: { user: { select: { id: true, fullName: true, email: true, userType: true } } } } },
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+        })
+      : [],
   ]);
 
-  return { transactions, total, page: filters.page, limit: filters.limit };
+  const withdrawalEntries: AdminTransactionRow[] = inFlightWithdrawals.map((request) => ({
+    id: request.id,
+    fromWalletId: request.walletId,
+    toWalletId: null,
+    amount: request.amount,
+    currency: request.wallet.currency,
+    category: request.category,
+    // Narrowed by the `where` filter above to PENDING_PARENT_APPROVAL | APPROVED | REJECTED.
+    status: request.status as AdminTransactionRow['status'],
+    note: null,
+    receiverName: 'Cash Withdrawal',
+    createdAt: request.createdAt,
+    fromWallet: request.wallet,
+    toWallet: null,
+    fraudAlerts: [],
+  }));
+
+  const merged = [...transactions, ...withdrawalEntries].sort(
+    (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+  );
+
+  return {
+    transactions: merged,
+    total: total + withdrawalEntries.length,
+    page: filters.page,
+    limit: filters.limit,
+  };
 }
 
 export async function getFraudAlerts(

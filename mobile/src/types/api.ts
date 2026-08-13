@@ -124,7 +124,12 @@ export type Transaction = {
   amount: string;
   currency: Currency;
   category: TransactionCategory;
-  status: TransactionStatus;
+  // GET /wallet/transactions merges in-flight cash withdrawal requests (awaiting parent
+  // approval or agent dispense, or rejected outright) alongside real transactions — those rows
+  // are the only ones that can carry 'PENDING_PARENT_APPROVAL', a WithdrawalStatus value with
+  // no TransactionStatus equivalent. Recognize a withdrawal-derived row via
+  // receiverName === 'Cash Withdrawal', not this field alone.
+  status: TransactionStatus | 'PENDING_PARENT_APPROVAL';
   note: string | null;
   receiverName: string | null;
   // Only populated by GET /wallet/transactions and /wallet/transactions/:id — other endpoints

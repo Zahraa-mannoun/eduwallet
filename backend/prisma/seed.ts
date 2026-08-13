@@ -48,10 +48,10 @@ async function seedUserWithWallet(
 async function seedMerchants(): Promise<void> {
   const merchants: Array<{
     name: string;
-    category: 'FOOD' | 'LIFESTYLE' | 'SOFTWARE' | 'BOOKS';
+    category: 'FOOD' | 'LIFESTYLE' | 'SOFTWARE' | 'BOOKS' | 'TRANSPORT';
     city: string;
     country: string;
-    type: 'RESTAURANT' | 'SHOPPING_CENTER' | 'SOFTWARE_STORE' | 'BOOKSTORE';
+    type: 'RESTAURANT' | 'SHOPPING_CENTER' | 'SOFTWARE_STORE' | 'BOOKSTORE' | 'TRANSPORT';
   }> = [
     { name: 'Le Burger Montréal', category: 'FOOD', city: 'Montreal', country: 'Canada', type: 'RESTAURANT' },
     { name: 'Café Vienne', category: 'FOOD', city: 'Montreal', country: 'Canada', type: 'RESTAURANT' },
@@ -64,8 +64,13 @@ async function seedMerchants(): Promise<void> {
     { name: 'Digital Hub', category: 'SOFTWARE', city: 'Montreal', country: 'Canada', type: 'SOFTWARE_STORE' },
     { name: 'Librairie Renaud-Bray', category: 'BOOKS', city: 'Montreal', country: 'Canada', type: 'BOOKSTORE' },
     { name: 'Paragraphe Bookstore', category: 'BOOKS', city: 'Montreal', country: 'Canada', type: 'BOOKSTORE' },
+    { name: 'STM Montreal', category: 'TRANSPORT', city: 'Montreal', country: 'Canada', type: 'TRANSPORT' },
+    { name: 'Via Rail Canada', category: 'TRANSPORT', city: 'Montreal', country: 'Canada', type: 'TRANSPORT' },
   ];
 
+  // Merchant.name has no DB-level unique constraint, so this upserts by name in application
+  // code (find-then-create) rather than a real Prisma .upsert() — matches the pattern already
+  // used for every merchant above, and avoids a schema migration just for seeding idempotency.
   for (const merchant of merchants) {
     const existing = await prisma.merchant.findFirst({ where: { name: merchant.name } });
     if (!existing) {

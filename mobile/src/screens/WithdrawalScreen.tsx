@@ -28,6 +28,9 @@ import IconBadge from '../components/IconBadge';
 import { categoryColors, colors } from '../theme/colors';
 import * as withdrawalService from '../services/withdrawalService';
 import { ApiError } from '../services/api';
+import { receiptBadgeFor } from '../utils/receiptStatus';
+import type { ReceiptBadgeMeta } from '../utils/receiptStatus';
+import { withdrawalStatusMeta } from '../utils/transactionDisplay';
 import type { RootStackScreenProps } from '../navigation/types';
 
 const CATEGORY_META: Record<
@@ -44,40 +47,6 @@ const CATEGORY_META: Record<
   PERSONAL_SAVINGS: { icon: 'piggy-bank-outline', color: categoryColors.personalSavings },
   GENERAL: { icon: 'wallet-outline', color: categoryColors.general },
 };
-
-type ReceiptBadgeMeta = {
-  label: string;
-  icon: keyof typeof MaterialCommunityIcons.glyphMap;
-  bg: string;
-  fg: string;
-};
-
-const RECEIPT_STATUS_META: Record<
-  NonNullable<WithdrawalRequest['receiptVerificationStatus']>,
-  ReceiptBadgeMeta
-> = {
-  AUTO_VERIFIED: { label: 'Verified', icon: 'check-circle', bg: '#D1FAE5', fg: '#065F46' },
-  MANUALLY_VERIFIED: { label: 'Verified', icon: 'check-circle', bg: '#D1FAE5', fg: '#065F46' },
-  FLAGGED: { label: 'Flagged for Review', icon: 'alert', bg: '#FEE2E2', fg: '#991B1B' },
-  PENDING: { label: 'Pending Review', icon: 'clock-outline', bg: '#FEF3C7', fg: '#92400E' },
-  PROCESSING: { label: 'Verifying...', icon: 'sync', bg: '#DBEAFE', fg: '#1E40AF' },
-  REJECTED: { label: 'Rejected', icon: 'close-circle', bg: '#FCA5A5', fg: '#7F1D1D' },
-};
-
-const NO_RECEIPT_META: ReceiptBadgeMeta = {
-  label: 'No Receipt',
-  icon: 'file-outline',
-  bg: '#F3F4F6',
-  fg: '#6B7280',
-};
-
-// A receipt row only becomes "PROCESSING" once uploadReceipt has written a file — before that,
-// receiptVerificationStatus is still whatever default the row was created with, so receiptPath
-// is what actually distinguishes "nothing uploaded" from "something uploaded, being checked".
-function receiptBadgeFor(request: WithdrawalRequest): ReceiptBadgeMeta {
-  if (!request.receiptPath || !request.receiptVerificationStatus) return NO_RECEIPT_META;
-  return RECEIPT_STATUS_META[request.receiptVerificationStatus];
-}
 
 function formatDateTime(isoDate: string): string {
   const date = new Date(isoDate);
@@ -191,8 +160,9 @@ export default function WithdrawalScreen({
 
   const renderWithdrawalItem = (request: WithdrawalRequest) => {
     const categoryMeta = CATEGORY_META[request.category];
-    const receiptMeta = receiptBadgeFor(request);
+    const receiptMeta = receiptBadgeFor(request.receiptPath, request.receiptVerificationStatus);
     const isProcessing = Boolean(request.receiptPath) && request.receiptVerificationStatus === 'PROCESSING';
+    const statusMeta = withdrawalStatusMeta(request.status);
     const showUploadButton =
       request.status === 'COMPLETED' && !request.receiptPath && request.category !== 'GENERAL';
 
@@ -211,7 +181,14 @@ export default function WithdrawalScreen({
               </Text>
             </View>
           </View>
-          <ReceiptBadge meta={receiptMeta} isProcessing={isProcessing} />
+          <View style={styles.cardBadgeColumn}>
+            <View style={[styles.withdrawalStatusBadge, { backgroundColor: statusMeta.bg }]}>
+              <Text style={[styles.withdrawalStatusBadgeText, { color: statusMeta.fg }]} numberOfLines={1}>
+                {statusMeta.label}
+              </Text>
+            </View>
+            <ReceiptBadge meta={receiptMeta} isProcessing={isProcessing} />
+          </View>
         </View>
 
         {showUploadButton ? (
@@ -496,6 +473,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.muted,
     marginTop: 4,
+  },
+  cardBadgeColumn: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
+  withdrawalStatusBadge: {
+    borderRadius: 999,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    maxWidth: 190,
+  },
+  withdrawalStatusBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   receiptBadge: {
     flexDirection: 'row',

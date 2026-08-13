@@ -18,11 +18,14 @@ const PERIOD_LABELS: Record<ReportPeriod, string> = {
   LAST_2_YEARS: 'Last 2 Years',
 };
 
-// GENERATED is an admin-only preview state — from the parent's perspective it's no different
-// from PENDING, since the report isn't downloadable until the admin explicitly sends it.
+// GENERATED is an admin-only preview state — from the parent's perspective it's not
+// downloadable yet either way, so it shares PENDING's amber "not ready" color, not the distinct
+// "Generated (Not Sent)" wording shown on the admin side. The label text still differs from
+// PENDING's, though: "Requested" (admin hasn't acted) vs "Generating" (admin has started
+// producing the PDF) are both accurate for their own state, just not interchangeable.
 const STATUS_META: Record<ReportStatus, { label: string; color: string }> = {
-  PENDING: { label: 'Pending', color: '#F59E0B' },
-  GENERATED: { label: 'Pending', color: '#F59E0B' },
+  PENDING: { label: 'Requested', color: '#F59E0B' },
+  GENERATED: { label: 'Generating', color: '#F59E0B' },
   SENT: { label: 'Ready', color: colors.accent },
 };
 

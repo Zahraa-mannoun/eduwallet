@@ -13,10 +13,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Chip, IconButton, Text } from 'react-native-paper';
-import type { Transaction, TransactionStatus } from '../types/api';
+import type { Transaction } from '../types/api';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryKey } from '../constants/budgetCategories';
-import { TRANSACTION_STATUS_META } from '../constants/mockTransactions';
 import { useAuth } from '../context/AuthContext';
 import { useWallet } from '../context/WalletContext';
 import { useThrottledFocusEffect } from '../hooks/useThrottledFocusEffect';
@@ -25,11 +24,12 @@ import * as walletService from '../services/walletService';
 import { ApiError } from '../services/api';
 import {
   classifyTransaction,
+  isCompletedWithdrawal,
   RECEIVED_AMOUNT_COLOR,
   SENT_AMOUNT_COLOR,
-  STATUS_BADGE_COLORS,
   TX_TYPE_META,
   transactionDisplayTitle,
+  transactionStatusMeta,
 } from '../utils/transactionDisplay';
 import type { RootStackScreenProps } from '../navigation/types';
 
@@ -53,9 +53,11 @@ const FILTERS: { value: FilterValue; label: string }[] = [
 // AUTO_APPROVED, so "Pending" is a dead filter for both and only clutters their history tab.
 const PENDING_TAB_ROLES: ReadonlyArray<string> = ['STUDENT'];
 
-// Parent-facing history reframes statuses around approval, not the raw state machine —
-// a parent cares whether money moved or is waiting on them, not "auto" vs "manual" approval.
-const PARENT_STATUS_LABELS: Partial<Record<TransactionStatus, string>> = {
+// Parent-facing history reframes statuses around approval, not the raw state machine — a
+// parent cares whether money moved or is waiting on them, not "auto" vs "manual" approval.
+// Cash withdrawals never appear in a parent's own transaction history (only a student ever
+// withdraws cash from their own wallet), so this only needs to cover P2P/card statuses.
+const PARENT_STATUS_LABELS: Partial<Record<Transaction['status'], string>> = {
   AUTO_APPROVED: 'Completed',
   APPROVED: 'Completed',
   PENDING: 'Pending Approval',
@@ -138,7 +140,9 @@ export default function TransactionHistoryScreen({
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
     if (filter === 'ALL') return sorted;
-    if (filter === 'PENDING') return sorted.filter((tx) => tx.status === 'PENDING');
+    if (filter === 'PENDING') {
+      return sorted.filter((tx) => tx.status === 'PENDING' || tx.status === 'PENDING_PARENT_APPROVAL');
+    }
     if (filter === 'RECEIVED') {
       return sorted.filter((tx) => wallet !== null && tx.toWalletId === wallet.id);
     }
@@ -147,21 +151,24 @@ export default function TransactionHistoryScreen({
 
   const renderRow = (transaction: Transaction) => {
     const category = categoryLookup.get(transaction.category.toLowerCase() as BudgetCategoryKey);
-    const statusMeta = TRANSACTION_STATUS_META[transaction.status];
-    const statusBadgeColors = STATUS_BADGE_COLORS[transaction.status];
-    const statusLabel = isParent
-      ? (PARENT_STATUS_LABELS[transaction.status] ?? statusMeta.label)
-      : statusMeta.label;
     const isReceived = wallet !== null && transaction.toWalletId === wallet.id;
     const type = classifyTransaction(transaction, isReceived);
     const typeMeta = TX_TYPE_META[type];
+    const badge = transactionStatusMeta(transaction, type);
+    const statusLabel = isParent ? (PARENT_STATUS_LABELS[transaction.status] ?? badge.label) : badge.label;
+    // A withdrawal awaiting parent/agent action has no real Transaction row yet — there's
+    // nothing for TransactionDetail to look up. Route to the Withdrawal screen instead, where
+    // it's already listed with full detail.
+    const isPendingWithdrawal = type === 'WITHDRAWAL' && !isCompletedWithdrawal(transaction);
 
     return (
       <TouchableOpacity
         key={transaction.id}
         style={styles.card}
         onPress={() =>
-          navigation.navigate('TransactionDetail', { transactionId: transaction.id })
+          isPendingWithdrawal
+            ? navigation.navigate('Withdrawal')
+            : navigation.navigate('TransactionDetail', { transactionId: transaction.id })
         }
       >
         <View style={[styles.typeIconCircle, { backgroundColor: `${typeMeta.color}1F` }]}>
@@ -181,8 +188,8 @@ export default function TransactionHistoryScreen({
           </Text>
           <Chip
             compact
-            style={[styles.statusChip, { backgroundColor: statusBadgeColors.bg }]}
-            textStyle={{ color: statusBadgeColors.fg, fontSize: 11, fontWeight: '700', textAlign: 'center' }}
+            style={[styles.statusChip, { backgroundColor: badge.bg }]}
+            textStyle={{ color: badge.fg, fontSize: 11, fontWeight: '700', textAlign: 'center' }}
           >
             {statusLabel}
           </Chip>

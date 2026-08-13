@@ -9,6 +9,7 @@ import {
   parseLockedCategoryFromError,
 } from '../lib/format';
 import { CATEGORY_META } from '../lib/ocr';
+import { transactionStatusLabel } from '../lib/transactionStatus';
 
 type PaymentStatus = 'idle' | 'processing' | 'success' | 'failed';
 
@@ -98,7 +99,7 @@ export function OcrPaymentPanel({
             </div>
             <div className="flex justify-between">
               <dt className="text-emerald-600">Status</dt>
-              <dd className="font-medium">{transaction.status}</dd>
+              <dd className="font-medium">{transactionStatusLabel(transaction.status)}</dd>
             </div>
           </dl>
         ) : (

@@ -3,6 +3,7 @@ import type { Category, UseCardResponseData } from '../types';
 import { payWithCard } from '../services/cards';
 import { getErrorMessage } from '../services/api';
 import { formatCardNumberInput, formatCvvInput, formatExpiryInput, categoryLabel } from '../lib/format';
+import { transactionStatusLabel } from '../lib/transactionStatus';
 
 type PaymentStatus = 'idle' | 'processing' | 'success' | 'failed';
 
@@ -78,7 +79,7 @@ export function CategoryPaymentPanel({
             </div>
             <div className="flex justify-between">
               <dt className="text-emerald-600">Status</dt>
-              <dd className="font-medium">{transaction.status}</dd>
+              <dd className="font-medium">{transactionStatusLabel(transaction.status)}</dd>
             </div>
           </dl>
         ) : (

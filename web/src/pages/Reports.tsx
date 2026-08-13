@@ -9,7 +9,7 @@ import { REPORT_PERIOD_LABELS } from '../types/admin';
 import type { ReportRequestRow, ReportStatus } from '../types/admin';
 
 const REPORT_STATUS_LABEL: Record<ReportStatus, string> = {
-  PENDING: 'Pending',
+  PENDING: 'Requested',
   GENERATED: 'Generated (Not Sent)',
   SENT: 'Sent',
 };

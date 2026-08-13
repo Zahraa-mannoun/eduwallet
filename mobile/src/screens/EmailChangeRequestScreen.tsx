@@ -16,8 +16,8 @@ import type { RootStackScreenProps } from '../navigation/types';
 const SCREEN_BACKGROUND = '#F9FAFB';
 
 const STATUS_META: Record<EmailChangeRequest['status'], { label: string; color: string }> = {
-  PENDING: { label: 'Pending Review', color: '#F59E0B' },
-  ACCEPTED: { label: 'Approved', color: colors.accent },
+  PENDING: { label: 'Pending', color: '#F59E0B' },
+  ACCEPTED: { label: 'Accepted', color: colors.accent },
   REJECTED: { label: 'Rejected', color: colors.danger },
 };
 

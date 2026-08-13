@@ -5,6 +5,7 @@ import { Badge } from '../components/Badge';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { receiptStatusTone, withdrawalStatusTone } from '../lib/badgeTones';
 import { formatDateTime, formatMoney } from '../lib/format';
+import { WITHDRAWAL_STATUS_LABELS } from '../lib/transactionStatus';
 import {
   RECEIPT_VERIFICATION_STATUSES,
   WITHDRAWAL_STATUSES,
@@ -314,7 +315,9 @@ export function AgentWithdrawals() {
                       </td>
                       <td className="px-4 py-3 text-slate-600">{row.category}</td>
                       <td className="px-4 py-3">
-                        <Badge tone={withdrawalStatusTone[row.status] ?? 'gray'}>{row.status}</Badge>
+                        <Badge tone={withdrawalStatusTone[row.status] ?? 'gray'}>
+                          {WITHDRAWAL_STATUS_LABELS[row.status] ?? row.status}
+                        </Badge>
                       </td>
                       <td className="px-4 py-3">
                         <Badge tone={receiptStatusTone[receiptStatus] ?? 'gray'}>

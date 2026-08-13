@@ -14,8 +14,9 @@ import { StatCard } from '../components/StatCard';
 import { Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
-import { transactionStatusTone, severityTone } from '../lib/badgeTones';
+import { severityTone } from '../lib/badgeTones';
 import { formatDate, formatMoney } from '../lib/format';
+import { transactionStatusMeta } from '../lib/transactionStatus';
 import type { FraudAlertRow, SystemStats, TransactionRow } from '../types/admin';
 
 type RolloverResult = {
@@ -283,15 +284,18 @@ export function Dashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {transactions.map((tx) => (
-                  <tr key={tx.id}>
-                    <td className="px-4 py-2">{formatMoney(tx.amount, tx.currency)}</td>
-                    <td className="px-4 py-2">
-                      <Badge tone={transactionStatusTone[tx.status] ?? 'gray'}>{tx.status}</Badge>
-                    </td>
-                    <td className="px-4 py-2 text-slate-500">{formatDate(tx.createdAt)}</td>
-                  </tr>
-                ))}
+                {transactions.map((tx) => {
+                  const statusMeta = transactionStatusMeta(tx);
+                  return (
+                    <tr key={tx.id}>
+                      <td className="px-4 py-2">{formatMoney(tx.amount, tx.currency)}</td>
+                      <td className="px-4 py-2">
+                        <Badge tone={statusMeta.tone}>{statusMeta.label}</Badge>
+                      </td>
+                      <td className="px-4 py-2 text-slate-500">{formatDate(tx.createdAt)}</td>
+                    </tr>
+                  );
+                })}
                 {transactions.length === 0 && (
                   <tr>
                     <td colSpan={3} className="px-4 py-6 text-center text-slate-400">
