@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
+import { Banknote, CheckCircle2, Search, ShieldCheck, UserSearch, Wallet } from 'lucide-react';
 import type {
   ApiResponse,
   ProcessWithdrawalResult,
@@ -9,11 +10,13 @@ import type {
 } from '../types';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Modal } from '../components/Modal';
+import { PageHeader } from '../components/PageHeader';
+import { EmptyState } from '../components/EmptyState';
 import { AgentStatsCard } from '../components/AgentStatsCard';
 import type { AgentStatsCardHandle } from '../components/AgentStatsCard';
 import { useAuth } from '../context/AuthContext';
-import { IconCash, IconCheckCircle, IconSearch, IconUserSearch, IconWallet } from '../components/icons';
 import { formatDateTime } from '../lib/format';
+import { humanizeEnum } from '../lib/humanize';
 import { useSocketRefetch } from '../hooks/useSocketRefetch';
 
 function formatMoney(amount: string): string {
@@ -46,31 +49,31 @@ function ReadyToDispenseSection({
   };
 
   return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
       <div className="mb-3 flex items-center gap-2">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
-          <IconCash className="h-4 w-4" />
+          <Banknote className="h-4 w-4" />
         </div>
-        <h2 className="text-sm font-semibold text-slate-900">Ready to Dispense</h2>
+        <h2 className="text-sm font-bold text-slate-900">Ready to Dispense</h2>
         <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white">
           {withdrawals.length}
         </span>
       </div>
 
       {error && (
-        <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+        <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       )}
 
       <div className="space-y-2">
         {withdrawals.map((request) => (
           <div
             key={request.id}
-            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-white px-4 py-3"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-white px-4 py-3"
           >
             <div>
               <p className="text-sm font-semibold text-slate-900">{request.wallet.user.fullName}</p>
               <p className="text-xs text-slate-500">
-                {formatMoney(request.amount)} · {request.category}
+                {formatMoney(request.amount)} · {humanizeEnum(request.category)}
                 {request.approvedAt ? ` · Approved ${formatDateTime(request.approvedAt)}` : ''}
               </p>
             </div>
@@ -78,7 +81,7 @@ function ReadyToDispenseSection({
               type="button"
               disabled={dispensingId === request.id}
               onClick={() => void handleDispense(request)}
-              className="rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-60"
+              className="rounded-full bg-primary px-3.5 py-1.5 text-sm font-semibold text-white transition-all duration-200 hover:scale-[1.03] hover:bg-primary-600 disabled:opacity-60 disabled:hover:scale-100"
             >
               {dispensingId === request.id ? 'Dispensing…' : 'Dispense Cash'}
             </button>
@@ -123,13 +126,19 @@ function ConfirmDispenseModal({
   };
 
   return (
-    <Modal title="Confirm Cash Withdrawal" onClose={onClose}>
+    <Modal
+      title="Confirm Cash Withdrawal"
+      subtitle="Verify the student's identity before dispensing"
+      icon={<ShieldCheck className="h-6 w-6 text-white" />}
+      tone="primary"
+      onClose={onClose}
+    >
       <div className="space-y-4">
         <p className="text-sm text-slate-600">
           Confirm the student&apos;s identity before dispensing cash.
         </p>
 
-        <div className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
           <div className="flex justify-between py-1">
             <span className="text-slate-500">Student</span>
             <span className="font-medium text-slate-900">{student.user.fullName}</span>
@@ -144,26 +153,26 @@ function ConfirmDispenseModal({
           </div>
           <div className="flex justify-between py-1">
             <span className="text-slate-500">Category</span>
-            <span className="font-medium text-slate-900">{category}</span>
+            <span className="font-medium text-slate-900">{humanizeEnum(category)}</span>
           </div>
         </div>
 
-        {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
         <div className="flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+            className="rounded-xl border-2 border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition-all duration-200 hover:bg-slate-50 disabled:opacity-60"
           >
             Cancel
           </button>
           <button
             type="button"
-            onClick={handleConfirm}
+            onClick={() => void handleConfirm()}
             disabled={isSubmitting}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-60"
+            className="rounded-xl bg-gradient-to-r from-primary to-[#4a7fd4] px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:scale-[1.02] disabled:opacity-60 disabled:hover:scale-100"
           >
             {isSubmitting ? 'Dispensing…' : 'Dispense Cash'}
           </button>
@@ -282,18 +291,10 @@ export function ProcessWithdrawal() {
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-xl bg-gradient-to-br from-primary to-primary-700 px-6 py-6 text-white shadow-sm">
-        <p className="text-sm font-medium text-primary-100">Welcome back</p>
-        <div className="mt-1 flex items-center gap-3">
-          <h1 className="text-xl font-semibold">{agent?.fullName ?? 'Agent'}</h1>
-          <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide">
-            Agent
-          </span>
-        </div>
-        <p className="mt-1 text-sm text-primary-100">
-          Search for a student to dispense a cash withdrawal from their wallet.
-        </p>
-      </div>
+      <PageHeader
+        title="Process Withdrawal"
+        subtitle={`Welcome back, ${agent?.fullName ?? 'Agent'} — search for a student to dispense a cash withdrawal.`}
+      />
 
       <ReadyToDispenseSection
         withdrawals={approvedWithdrawals}
@@ -307,60 +308,61 @@ export function ProcessWithdrawal() {
 
       {resultMessage && (
         <div
-          className={`flex items-start gap-2 rounded-md px-3 py-2.5 text-sm ${
+          className={`flex items-start gap-2 rounded-xl px-4 py-3 text-sm ${
             resultMessage.tone === 'success'
               ? 'bg-emerald-50 text-emerald-700'
               : 'bg-amber-50 text-amber-700'
           }`}
         >
-          <IconCheckCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{resultMessage.text}</span>
         </div>
       )}
 
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="mb-4 flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-50 text-primary">
-            <IconSearch className="h-4 w-4" />
+            <Search className="h-4 w-4" />
           </div>
-          <h2 className="text-sm font-semibold text-slate-900">Find a Student</h2>
+          <h2 className="text-sm font-bold text-slate-900">Find a Student</h2>
         </div>
         <form onSubmit={handleSearch} className="flex gap-2">
-          <input
-            type="text"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Student email or student number"
-            className="w-full max-w-md rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          />
+          <div className="relative w-full max-w-md">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Student email or student number"
+              className="w-full rounded-full border-2 border-slate-200 py-2.5 pl-10 pr-4 text-sm transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-100"
+            />
+          </div>
           <button
             type="submit"
             disabled={isSearching || !query.trim()}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-60"
+            className="rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-primary-600 disabled:opacity-60 disabled:hover:scale-100"
           >
             {isSearching ? 'Searching…' : 'Search'}
           </button>
         </form>
 
         {searchError && (
-          <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{searchError}</p>
+          <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{searchError}</p>
         )}
       </div>
 
       {!hasSearched && !student && (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white py-14 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-50 text-primary">
-            <IconUserSearch className="h-6 w-6" />
-          </div>
-          <p className="mt-3 text-sm font-medium text-slate-700">No student selected yet</p>
-          <p className="mt-1 max-w-xs text-sm text-slate-400">
-            Search by email or student number above to get started.
-          </p>
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-white">
+          <EmptyState
+            icon={<UserSearch className="h-8 w-8" />}
+            title="No student selected yet"
+            message="Search by email or student number above to get started."
+          />
         </div>
       )}
 
       {student && (
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-100 pb-4">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary-100 text-sm font-semibold text-primary">
@@ -373,16 +375,16 @@ export function ProcessWithdrawal() {
                   .toUpperCase()}
               </div>
               <div>
-                <p className="text-base font-semibold text-slate-900">{student.user.fullName}</p>
+                <p className="text-base font-bold text-slate-900">{student.user.fullName}</p>
                 <p className="text-sm text-slate-500">{student.user.email}</p>
               </div>
             </div>
             <div className="text-right">
               <div className="flex items-center justify-end gap-1 text-xs text-slate-500">
-                <IconWallet className="h-3.5 w-3.5" />
+                <Wallet className="h-3.5 w-3.5" />
                 Wallet Balance
               </div>
-              <p className="text-lg font-semibold text-slate-900">{formatMoney(student.wallet.balance)}</p>
+              <p className="text-lg font-bold text-slate-900">{formatMoney(student.wallet.balance)}</p>
               <p className="mt-1 text-xs text-slate-500">Free (unlocked)</p>
               <p className="text-sm font-medium text-slate-700">{formatMoney(student.freeBalance)}</p>
             </div>
@@ -399,19 +401,19 @@ export function ProcessWithdrawal() {
                     setCategory(option.category);
                     setAmount('');
                   }}
-                  className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+                  className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
                     category === option.category
                       ? 'bg-primary text-white'
                       : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                   }`}
                 >
-                  {option.category} · ${option.available.toFixed(2)}
+                  {humanizeEnum(option.category)} · ${option.available.toFixed(2)}
                 </button>
               ))}
             </div>
             {categoryOptions.length === 1 && (
               <p className="mt-2 text-xs text-slate-400">
-                No locked funds in any category — only GENERAL is available.
+                No locked funds in any category — only General is available.
               </p>
             )}
           </div>
@@ -421,15 +423,18 @@ export function ProcessWithdrawal() {
               <label htmlFor="amount" className="mb-1 block text-sm font-medium text-slate-700">
                 Amount (available: ${availableForCategory(category).toFixed(2)})
               </label>
-              <input
-                id="amount"
-                type="text"
-                inputMode="decimal"
-                value={amount}
-                onChange={(event) => setAmount(event.target.value.replace(/[^0-9.]/g, ''))}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                placeholder="0.00"
-              />
+              <div className="flex items-center rounded-xl border-2 border-slate-200 bg-white px-3.5 py-2.5 transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-primary-100">
+                <span className="text-lg font-bold text-slate-900">$</span>
+                <input
+                  id="amount"
+                  type="text"
+                  inputMode="decimal"
+                  value={amount}
+                  onChange={(event) => setAmount(event.target.value.replace(/[^0-9.]/g, ''))}
+                  className="w-full border-0 p-0 text-lg font-bold text-slate-900 focus:outline-none focus:ring-0"
+                  placeholder="0.00"
+                />
+              </div>
               {parsedAmount > availableForCategory(category) && (
                 <p className="mt-1 text-xs text-red-600">Amount exceeds available balance.</p>
               )}
@@ -450,7 +455,7 @@ export function ProcessWithdrawal() {
               type="button"
               disabled={!canDispense}
               onClick={() => setConfirmVisible(true)}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-60"
+              className="rounded-xl bg-gradient-to-r from-primary to-[#4a7fd4] px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:scale-[1.02] disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:hover:scale-100"
             >
               Dispense Cash
             </button>

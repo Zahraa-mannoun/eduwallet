@@ -108,6 +108,8 @@ export type ResubmissionRow = User & {
 
 export type SupportMessageRow = SupportMessage & {
   user: { id: string; fullName: string; email: string; userType: UserType; suspended: boolean };
+  replyMessage: string | null;
+  repliedAt: string | null;
 };
 
 export type RelationshipRow = {

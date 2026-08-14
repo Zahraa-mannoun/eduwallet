@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Inbox } from 'lucide-react';
 import type { ApiResponse, WithdrawalRequest, WithdrawalStatus } from '../types';
 import { api, getErrorMessage, unwrap } from '../lib/api';
-import { Badge } from '../components/Badge';
+import { DotBadge } from '../components/DotBadge';
+import { EmptyState } from '../components/EmptyState';
+import { FilterTabs } from '../components/FilterTabs';
+import { PageHeader } from '../components/PageHeader';
+import { PersonCell } from '../components/PersonCell';
+import { TableCard, TABLE_HEAD_ROW_CLASS, TABLE_TD_CLASS, TABLE_TH_CLASS, tableRowClass } from '../components/TableCard';
 import type { BadgeTone } from '../components/Badge';
 import { formatDateTime, formatMoney } from '../lib/format';
-import { IconInbox } from '../components/icons';
+import { humanizeEnum } from '../lib/humanize';
+import { receiptStatusTone, withdrawalStatusTone } from '../lib/badgeTones';
 import { useSocketRefetch } from '../hooks/useSocketRefetch';
 
 const STATUS_META: Record<WithdrawalStatus, { label: string; tone: BadgeTone }> = {
@@ -58,85 +65,79 @@ export function WithdrawalHistory() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-lg font-semibold text-slate-900">Withdrawal History</h1>
-        <p className="mt-1 text-sm text-slate-500">All cash withdrawals dispensed to students.</p>
-      </div>
+      <PageHeader title="Withdrawal History" subtitle="All cash withdrawals dispensed to students" />
 
-      {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="flex flex-wrap gap-2">
-        {STATUS_FILTERS.map((filter) => (
-          <button
-            key={filter.key}
-            type="button"
-            onClick={() => setStatusFilter(filter.key)}
-            className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
-              statusFilter === filter.key
-                ? 'bg-primary text-white'
-                : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            {filter.label}
-          </button>
-        ))}
-      </div>
-
-      {!isLoading && filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white py-14 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-50 text-primary">
-            <IconInbox className="h-6 w-6" />
-          </div>
-          <p className="mt-3 text-sm font-medium text-slate-700">No withdrawals in this status</p>
-          <p className="mt-1 max-w-xs text-sm text-slate-400">
-            Withdrawals you dispense will show up here.
-          </p>
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+      <TableCard
+        title="Withdrawals"
+        subtitle={`${filtered.length} shown`}
+        actions={
+          <FilterTabs tabs={STATUS_FILTERS.map((f) => ({ value: f.key, label: f.label }))} value={statusFilter} onChange={setStatusFilter} />
+        }
+      >
+        <table className="min-w-full divide-y divide-slate-100 text-sm">
+          <thead className={TABLE_HEAD_ROW_CLASS}>
+            <tr>
+              <th className={TABLE_TH_CLASS}>Student</th>
+              <th className={TABLE_TH_CLASS}>Amount</th>
+              <th className={TABLE_TH_CLASS}>Category</th>
+              <th className={TABLE_TH_CLASS}>Date</th>
+              <th className={TABLE_TH_CLASS}>Status</th>
+              <th className={TABLE_TH_CLASS}>Receipt</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {!isLoading && filtered.length === 0 && (
               <tr>
-                <th className="px-4 py-2 text-left">Student</th>
-                <th className="px-4 py-2 text-left">Amount</th>
-                <th className="px-4 py-2 text-left">Category</th>
-                <th className="px-4 py-2 text-left">Date</th>
-                <th className="px-4 py-2 text-left">Status</th>
-                <th className="px-4 py-2 text-left">Receipt</th>
+                <td colSpan={6}>
+                  <EmptyState
+                    icon={<Inbox className="h-8 w-8" />}
+                    title="No withdrawals in this status"
+                    message="Withdrawals you dispense will show up here."
+                  />
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filtered.map((request) => {
+            )}
+            {!isLoading &&
+              filtered.map((request, index) => {
                 const statusMeta = STATUS_META[request.status];
+                const receiptTone = request.receiptPath
+                  ? receiptStatusTone[request.receiptVerificationStatus] ?? 'gray'
+                  : 'gray';
                 return (
-                  <tr key={request.id}>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-slate-900">{request.wallet.user.fullName}</div>
-                      <div className="text-xs text-slate-500">{request.wallet.user.email}</div>
+                  <tr key={request.id} className={tableRowClass(index)}>
+                    <td className={TABLE_TD_CLASS}>
+                      <PersonCell name={request.wallet.user.fullName} email={request.wallet.user.email} />
                     </td>
-                    <td className="px-4 py-3 font-medium text-slate-900">
+                    <td className={`${TABLE_TD_CLASS} font-semibold text-slate-900`}>
                       {formatMoney(request.amount)}
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{request.category}</td>
-                    <td className="px-4 py-3 text-slate-500">
+                    <td className={`${TABLE_TD_CLASS} text-slate-600`}>{humanizeEnum(request.category)}</td>
+                    <td className={`${TABLE_TD_CLASS} text-slate-500`}>
                       {formatDateTime(request.completedAt ?? request.createdAt)}
                     </td>
-                    <td className="px-4 py-3">
-                      <Badge tone={statusMeta.tone}>{statusMeta.label}</Badge>
+                    <td className={TABLE_TD_CLASS}>
+                      <DotBadge tone={withdrawalStatusTone[request.status] ?? 'gray'}>
+                        {statusMeta.label}
+                      </DotBadge>
                     </td>
-                    <td className="px-4 py-3 text-slate-500">
-                      {request.receiptPath ? request.receiptVerificationStatus : '—'}
+                    <td className={TABLE_TD_CLASS}>
+                      {request.receiptPath ? (
+                        <DotBadge tone={receiptTone}>{humanizeEnum(request.receiptVerificationStatus)}</DotBadge>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
                     </td>
                   </tr>
                 );
               })}
-            </tbody>
-          </table>
-          {isLoading && withdrawals.length === 0 && (
-            <p className="px-4 py-6 text-center text-sm text-slate-500">Loading withdrawal history…</p>
-          )}
-        </div>
-      )}
+          </tbody>
+        </table>
+        {isLoading && withdrawals.length === 0 && (
+          <p className="px-6 py-8 text-center text-sm text-slate-500">Loading withdrawal history…</p>
+        )}
+      </TableCard>
     </div>
   );
 }

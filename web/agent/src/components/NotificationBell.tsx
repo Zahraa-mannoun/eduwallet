@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Bell, Loader2 } from 'lucide-react';
 import type { ApiResponse, Notification } from '../types';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { formatDateTime } from '../lib/format';
-import { IconBell } from './icons';
 
 const POLL_INTERVAL_MS = 30_000;
 
@@ -78,10 +78,10 @@ export function NotificationBell() {
       <button
         type="button"
         onClick={() => setIsOpen((open) => !open)}
-        className="relative rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+        className="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
         aria-label="Notifications"
       >
-        <IconBell className="h-5 w-5" />
+        <Bell className="h-5 w-5" />
         {unreadCount > 0 && (
           <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white">
             {unreadCount > 99 ? '99+' : unreadCount}
@@ -90,17 +90,14 @@ export function NotificationBell() {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 z-50 mt-2 w-80 rounded-lg border border-slate-200 bg-white shadow-lg">
-          <div className="border-b border-slate-200 px-4 py-3">
-            <h3 className="text-sm font-semibold text-slate-900">Notifications</h3>
+        <div className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+          <div className="border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3">
+            <h3 className="text-sm font-bold text-slate-900">Notifications</h3>
           </div>
           <div className="max-h-96 overflow-y-auto">
             {isLoading && (
               <div className="flex items-center justify-center px-4 py-6">
-                <svg className="h-5 w-5 animate-spin text-slate-400" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-                </svg>
+                <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
               </div>
             )}
             {!isLoading && error && <p className="px-4 py-3 text-sm text-red-600">{error}</p>}

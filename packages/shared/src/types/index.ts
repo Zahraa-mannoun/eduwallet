@@ -127,6 +127,9 @@ export type Notification = {
   title: string;
   message: string;
   type: string;
+  // Optional back-reference to the record this notification is about (e.g. the SupportMessage
+  // a SUPPORT_MESSAGE_REPLY is replying to) — null for notification types with nothing to link.
+  relatedId: string | null;
   read: boolean;
   createdAt: string;
 };

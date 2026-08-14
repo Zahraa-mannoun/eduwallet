@@ -1,97 +1,107 @@
 import type { ReactNode } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Clock, LayoutDashboard, LogOut, MessageSquare, Search, ShieldCheck, User } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { NotificationBell } from './NotificationBell';
-import { IconBriefcase, IconHistory, IconLogout, IconMessage, IconSearch, IconUser } from './icons';
-import type { IconComponent } from './icons';
+import { Avatar } from './Avatar';
 
-const navItems: Array<{ to: string; label: string; icon: IconComponent }> = [
-  { to: '/process', label: 'Process Withdrawal', icon: IconSearch },
-  { to: '/history', label: 'Withdrawal History', icon: IconHistory },
-  { to: '/messages', label: 'Messages', icon: IconMessage },
-  { to: '/profile', label: 'Profile', icon: IconUser },
+const navItems: Array<{ to: string; label: string; icon: LucideIcon }> = [
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/process', label: 'Process Withdrawal', icon: Search },
+  { to: '/history', label: 'Withdrawal History', icon: Clock },
+  { to: '/messages', label: 'Messages', icon: MessageSquare },
+  { to: '/profile', label: 'Profile', icon: User },
 ];
 
-const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-  `flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-    isActive ? 'bg-primary text-white shadow-sm' : 'text-slate-600 hover:bg-primary-50 hover:text-primary'
-  }`;
+const PAGE_META: Record<string, { title: string; subtitle: string }> = {
+  '/dashboard': { title: 'Dashboard', subtitle: 'Your activity overview' },
+  '/process': { title: 'Process Withdrawal', subtitle: 'Dispense cash withdrawals to students' },
+  '/history': { title: 'Withdrawal History', subtitle: 'Every cash withdrawal you have dispensed' },
+  '/messages': { title: 'Messages', subtitle: 'Send a message to the EduWallet admin team' },
+  '/profile': { title: 'Profile', subtitle: 'Your agent account details and credentials' },
+};
 
-function getInitials(name: string): string {
-  return name
-    .trim()
-    .split(/\s+/)
-    .map((part) => part[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
-}
+const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+  `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150 ${
+    isActive ? 'bg-primary text-white shadow-sm' : 'text-sidebar-muted hover:bg-sidebar-hover hover:text-white'
+  }`;
 
 export function Layout({ children }: { children: ReactNode }) {
   const { agent, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleLogout = () => {
     logout();
     navigate('/login', { replace: true });
   };
 
+  const pageMeta = PAGE_META[location.pathname] ?? { title: 'EduWallet Agent Portal', subtitle: '' };
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white shadow-sm">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-sm font-bold text-white">
-                E
-              </div>
-              <span className="text-base font-semibold text-slate-900">EduWallet Agent Portal</span>
-            </div>
-            <nav className="hidden items-center gap-1 md:flex">
-              {navItems.map(({ to, label, icon: Icon }) => (
-                <NavLink key={to} to={to} className={navLinkClass}>
-                  <Icon className="h-4 w-4" />
-                  {label}
-                </NavLink>
-              ))}
-            </nav>
+    <div className="flex min-h-screen bg-surface font-sans">
+      <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col bg-sidebar">
+        <div className="flex items-center gap-2.5 px-5 py-5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-sm font-bold text-white">
+            EW
           </div>
-          <div className="flex items-center gap-4">
-            <NotificationBell />
-            <div className="flex items-center gap-2.5 border-l border-slate-200 pl-4">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-xs font-semibold text-primary">
-                {agent ? getInitials(agent.fullName) : ''}
-              </div>
-              <div className="hidden text-left sm:block">
-                <p className="text-sm font-medium leading-tight text-slate-800">{agent?.fullName}</p>
-                <span className="inline-flex items-center gap-1 rounded-full bg-primary-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
-                  <IconBriefcase className="h-3 w-3" />
-                  Agent
-                </span>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
-            >
-              <IconLogout className="h-4 w-4" />
-              <span className="hidden sm:inline">Logout</span>
-            </button>
+          <div>
+            <p className="text-sm font-bold leading-tight text-white">EduWallet</p>
+            <p className="text-xs leading-tight text-sidebar-muted">Agent Portal</p>
           </div>
         </div>
-        <nav className="flex items-center gap-1 overflow-x-auto border-t border-slate-100 px-4 py-2 md:hidden">
+
+        <nav className="sidebar-scroll flex-1 space-y-1 overflow-y-auto px-3 pb-4">
           {navItems.map(({ to, label, icon: Icon }) => (
             <NavLink key={to} to={to} className={navLinkClass}>
-              <Icon className="h-4 w-4" />
+              <Icon className="h-[18px] w-[18px] shrink-0" />
               {label}
             </NavLink>
           ))}
         </nav>
-      </header>
 
-      <main className="mx-auto max-w-6xl p-6">{children}</main>
+        <div className="border-t border-white/10 bg-black/10 px-4 py-4">
+          <div className="flex items-center gap-2.5">
+            <Avatar name={agent?.fullName ?? 'Agent'} size="sm" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-white">{agent?.fullName ?? 'Agent'}</p>
+              <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-primary-900/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary-200">
+                <ShieldCheck className="h-3 w-3" />
+                Agent
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleLogout}
+              title="Logout"
+              aria-label="Logout"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sidebar-muted transition-colors hover:bg-sidebar-hover hover:text-white"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <div className="flex flex-1 flex-col">
+        <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6">
+          <div>
+            <h1 className="text-base font-bold text-slate-900">{pageMeta.title}</h1>
+            {pageMeta.subtitle && <p className="text-xs text-slate-400">{pageMeta.subtitle}</p>}
+          </div>
+          <div className="flex items-center gap-4">
+            <NotificationBell />
+            <div className="h-8 w-px bg-slate-200" />
+            <div className="flex items-center gap-2.5">
+              <Avatar name={agent?.fullName ?? 'Agent'} size="sm" />
+              <span className="text-sm font-medium text-slate-700">{agent?.fullName}</span>
+            </div>
+          </div>
+        </header>
+
+        <main className="flex-1 overflow-x-hidden p-6">{children}</main>
+      </div>
     </div>
   );
 }

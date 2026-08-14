@@ -58,10 +58,11 @@ export async function createNotification(
   userId: string,
   title: string,
   message: string,
-  type: string
+  type: string,
+  relatedId?: string
 ): Promise<Notification> {
   const notification = await prisma.notification.create({
-    data: { userId, title, message, type },
+    data: { userId, title, message, type, relatedId },
   });
   emitNotification(notification);
   return notification;

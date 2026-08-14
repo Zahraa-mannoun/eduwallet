@@ -11,7 +11,7 @@ import { PersonCell } from '../components/PersonCell';
 import { SkeletonRows } from '../components/SkeletonRows';
 import { TableCard, TABLE_HEAD_ROW_CLASS, TABLE_TD_CLASS, TABLE_TH_CLASS, tableRowClass } from '../components/TableCard';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
-import { formatDate, formatRelativeTime } from '../lib/format';
+import { formatDate, formatDateTime, formatRelativeTime } from '../lib/format';
 import type { SupportMessageRow } from '../types/admin';
 
 function ReplyModal({
@@ -90,12 +90,59 @@ function ReplyModal({
   );
 }
 
+// Once a message has been replied to, that's final — no textarea, no way to reply again, just
+// the original message and the reply it already got, both as quoted blocks.
+function ViewReplyModal({
+  message,
+  onClose,
+}: {
+  message: SupportMessageRow;
+  onClose: () => void;
+}) {
+  return (
+    <Modal title={`Reply — ${message.user.fullName}`} onClose={onClose}>
+      <div className="space-y-4">
+        <div>
+          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Original Message
+          </p>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+            {message.subject && <p className="font-medium text-slate-800">{message.subject}</p>}
+            <p className="mt-1">{message.message}</p>
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-primary">Admin Reply</p>
+          <div className="rounded-xl border-l-4 border-l-primary bg-primary-50/60 p-3 text-sm text-slate-700">
+            {message.replyMessage}
+          </div>
+          {message.repliedAt && (
+            <p className="mt-1.5 text-xs text-slate-400">{formatDateTime(message.repliedAt)}</p>
+          )}
+        </div>
+
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border-2 border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition-all duration-200 hover:bg-slate-50"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export function AgentMessages() {
   const [messages, setMessages] = useState<SupportMessageRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [busyMessageId, setBusyMessageId] = useState<string | null>(null);
   const [replyTarget, setReplyTarget] = useState<SupportMessageRow | null>(null);
+  const [viewReplyTarget, setViewReplyTarget] = useState<SupportMessageRow | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -188,13 +235,23 @@ export function AgentMessages() {
                           Mark as Read
                         </button>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => setReplyTarget(message)}
-                        className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-white transition-all duration-200 hover:scale-[1.03] hover:bg-primary-600"
-                      >
-                        Reply
-                      </button>
+                      {message.replyMessage !== null ? (
+                        <button
+                          type="button"
+                          onClick={() => setViewReplyTarget(message)}
+                          className="rounded-full border-2 border-primary-200 px-3 py-1 text-xs font-semibold text-primary transition-all duration-200 hover:scale-[1.03] hover:bg-primary-50"
+                        >
+                          View Reply
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setReplyTarget(message)}
+                          className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-white transition-all duration-200 hover:scale-[1.03] hover:bg-primary-600"
+                        >
+                          Reply
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -212,6 +269,10 @@ export function AgentMessages() {
             void load();
           }}
         />
+      )}
+
+      {viewReplyTarget && (
+        <ViewReplyModal message={viewReplyTarget} onClose={() => setViewReplyTarget(null)} />
       )}
     </div>
   );

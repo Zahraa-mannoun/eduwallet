@@ -360,6 +360,11 @@ model Notification {
   title     String
   message   String
   type      String
+  // Optional back-reference to whatever record this notification is about (e.g. the
+  // SupportMessage a SUPPORT_MESSAGE_REPLY is replying to) — lets a UI thread a reply under
+  // its original message instead of just listing notifications flat. Null for every
+  // notification type that has nothing specific to link back to.
+  relatedId String?
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
 

@@ -4,6 +4,7 @@ import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/Layout';
 import { Login } from './pages/Login';
+import { Dashboard } from './pages/Dashboard';
 import { ProcessWithdrawal } from './pages/ProcessWithdrawal';
 import { WithdrawalHistory } from './pages/WithdrawalHistory';
 import { Profile } from './pages/Profile';
@@ -22,6 +23,14 @@ export function App() {
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedPage>
+              <Dashboard />
+            </ProtectedPage>
+          }
+        />
         <Route
           path="/process"
           element={
@@ -54,8 +63,8 @@ export function App() {
             </ProtectedPage>
           }
         />
-        <Route path="/" element={<Navigate to="/process" replace />} />
-        <Route path="*" element={<Navigate to="/process" replace />} />
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </AuthProvider>
   );

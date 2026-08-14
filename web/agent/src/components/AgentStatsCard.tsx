@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { useState } from 'react';
+import { Banknote, CalendarCheck, CalendarRange, TrendingUp } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { AgentStats, ApiResponse } from '../types';
 import { api, getErrorMessage, unwrap } from '../lib/api';
-import { IconCalendarCheck, IconCalendarRange, IconCash, IconTrendingUp } from './icons';
-import type { IconComponent } from './icons';
 
 export type AgentStatsCardHandle = {
   refresh: () => void;
@@ -12,31 +12,36 @@ export type AgentStatsCardHandle = {
 const TILES: Array<{
   key: keyof AgentStats;
   label: string;
-  icon: IconComponent;
+  icon: LucideIcon;
+  accent: string;
   format: (value: string) => string;
 }> = [
   {
     key: 'withdrawalsToday',
     label: 'Withdrawals Today',
-    icon: IconCalendarCheck,
+    icon: CalendarCheck,
+    accent: 'border-l-blue-400',
     format: (value) => value,
   },
   {
     key: 'withdrawalsThisMonth',
     label: 'Withdrawals This Month',
-    icon: IconCalendarRange,
+    icon: CalendarRange,
+    accent: 'border-l-indigo-400',
     format: (value) => value,
   },
   {
     key: 'totalDispensedToday',
     label: 'Dispensed Today',
-    icon: IconCash,
+    icon: Banknote,
+    accent: 'border-l-teal-400',
     format: (value) => `$${value}`,
   },
   {
     key: 'totalDispensedThisMonth',
     label: 'Dispensed This Month',
-    icon: IconTrendingUp,
+    icon: TrendingUp,
+    accent: 'border-l-green-400',
     format: (value) => `$${value}`,
   },
 ];
@@ -45,13 +50,15 @@ function StatTile({
   label,
   value,
   icon: Icon,
+  accent,
 }: {
   label: string;
   value: string;
-  icon: IconComponent;
+  icon: LucideIcon;
+  accent: string;
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
+    <div className={`rounded-xl border border-l-4 border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md ${accent}`}>
       <div className="flex items-center gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary">
           <Icon className="h-5 w-5" />
@@ -109,7 +116,7 @@ export const AgentStatsCard = forwardRef<AgentStatsCardHandle>(function AgentSta
       <h2 className="mb-3 text-sm font-semibold text-slate-900">My Stats</h2>
 
       {error && (
-        <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+        <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -122,6 +129,7 @@ export const AgentStatsCard = forwardRef<AgentStatsCardHandle>(function AgentSta
                 label={tile.label}
                 value={tile.format(String(stats[tile.key]))}
                 icon={tile.icon}
+                accent={tile.accent}
               />
             ))}
       </div>

@@ -14,6 +14,11 @@ const supportMessageUserSelect = {
 
 export type SupportMessageRow = SupportMessage & {
   user: { id: string; fullName: string; email: string; userType: string; suspended: boolean };
+  // Reply text/date is never stored on the SupportMessage row itself (see replySupportMessage
+  // below) — looked up from the SUPPORT_MESSAGE_REPLY notification it created, keyed by
+  // relatedId, so the admin's own message list can show whether (and what) it already replied.
+  replyMessage: string | null;
+  repliedAt: string | null;
 };
 
 export async function sendSupportMessage(input: SendSupportMessageInput): Promise<SupportMessage> {
@@ -78,9 +83,34 @@ export async function sendGeneralSupportMessage(
 }
 
 export async function getSupportMessages(): Promise<SupportMessageRow[]> {
-  return prisma.supportMessage.findMany({
+  const messages = await prisma.supportMessage.findMany({
     include: { user: supportMessageUserSelect },
     orderBy: { createdAt: 'desc' },
+  });
+
+  const replies = await prisma.notification.findMany({
+    where: {
+      type: 'SUPPORT_MESSAGE_REPLY',
+      relatedId: { in: messages.map((message) => message.id) },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  // A message could in principle pick up more than one reply row — keep only the most recent.
+  // replies is already newest-first, so the first one seen per relatedId wins.
+  const replyByMessageId = new Map<string, (typeof replies)[number]>();
+  for (const reply of replies) {
+    if (reply.relatedId && !replyByMessageId.has(reply.relatedId)) {
+      replyByMessageId.set(reply.relatedId, reply);
+    }
+  }
+
+  return messages.map((message) => {
+    const reply = replyByMessageId.get(message.id);
+    return {
+      ...message,
+      replyMessage: reply?.message ?? null,
+      repliedAt: reply ? reply.createdAt.toISOString() : null,
+    };
   });
 }
 
@@ -98,7 +128,8 @@ export async function markSupportMessageRead(messageId: string): Promise<Support
 
 // Replying doesn't persist a reply on the SupportMessage row itself (there's no thread/reply
 // field on the model) — it notifies the sender directly, same as every other "admin responds
-// to a user" flow in the app (suspend reason, receipt review note, etc).
+// to a user" flow in the app (suspend reason, receipt review note, etc). The notification's
+// relatedId is set to the original message's id so a UI can thread the reply back under it.
 export async function replySupportMessage(
   messageId: string,
   input: ReplySupportMessageInput
@@ -108,5 +139,11 @@ export async function replySupportMessage(
     throw new AppError(404, 'SUPPORT_MESSAGE_NOT_FOUND', 'Support message not found');
   }
 
-  await createNotification(message.userId, 'Reply from Admin', input.message, 'SUPPORT_MESSAGE_REPLY');
+  await createNotification(
+    message.userId,
+    'Reply from Admin',
+    input.message,
+    'SUPPORT_MESSAGE_REPLY',
+    messageId
+  );
 }
