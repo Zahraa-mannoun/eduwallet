@@ -345,49 +345,68 @@ export default function ParentDashboardScreen({
                   <Text style={[styles.breakdownSectionLabel, styles.breakdownSectionSpacing]}>
                     Locked Funds
                   </Text>
-                  {breakdown.categories.length > 0 ? (
-                    breakdown.categories.map((entry) => {
-                      const category = categoryLookup.get(
-                        entry.category.toLowerCase() as BudgetCategoryKey
-                      );
-                      const total = entry.locked + entry.spent;
-                      const progress = total > 0 ? Math.min(entry.spent / total, 1) : 0;
-                      return (
-                        <View key={entry.category} style={styles.lockedCard}>
-                          <View style={styles.breakdownCategoryHeader}>
-                            <IconBadge
-                              icon={category?.icon ?? 'wallet-outline'}
-                              color={category?.color ?? colors.primary}
-                              size={36}
-                              iconSize={18}
-                            />
-                            <Text style={styles.breakdownCategoryLabel}>
-                              {category?.label ?? entry.category}
-                            </Text>
-                            <Text style={styles.breakdownCategoryAmount}>
-                              ${entry.locked.toFixed(2)}
+                  {(() => {
+                    // Read straight off the student's own live LockedFund rows (already fetched
+                    // via getLinkedStudents(), no separate call needed) — NOT breakdown.categories'
+                    // ledger-based spent, and NOT BudgetCategory.spent. totalLocked/amount both
+                    // reset to 0 together at rollover (see runRollover() in savings.service.ts),
+                    // so totalLocked - amount is an exact, drift-free "spent this cycle" figure
+                    // the same way the student's own Dashboard/Budget screens compute it —
+                    // guarded against totalLocked === 0 rather than trusting 0/0 falls out safely.
+                    const lockedFundRows = (selectedStudent?.wallets[0]?.lockedFunds ?? [])
+                      .filter((fund) => fund.category !== 'GENERAL' && fund.category !== 'PERSONAL_SAVINGS')
+                      .map((fund) => {
+                        const totalLocked = Number(fund.totalLocked);
+                        const remaining = Number(fund.amount);
+                        const spent = Math.max(totalLocked - remaining, 0);
+                        const progress =
+                          totalLocked > 0 ? Math.min(Math.max(spent / totalLocked, 0), 1) : 0;
+                        return { category: fund.category, totalLocked, remaining, spent, progress };
+                      })
+                      .filter((row) => row.totalLocked > 0);
+
+                    return lockedFundRows.length > 0 ? (
+                      lockedFundRows.map((row) => {
+                        const category = categoryLookup.get(
+                          row.category.toLowerCase() as BudgetCategoryKey
+                        );
+                        return (
+                          <View key={row.category} style={styles.lockedCard}>
+                            <View style={styles.breakdownCategoryHeader}>
+                              <IconBadge
+                                icon={category?.icon ?? 'wallet-outline'}
+                                color={category?.color ?? colors.primary}
+                                size={36}
+                                iconSize={18}
+                              />
+                              <Text style={styles.breakdownCategoryLabel}>
+                                {category?.label ?? row.category}
+                              </Text>
+                              <Text style={styles.breakdownCategoryAmount}>
+                                ${row.remaining.toFixed(2)}
+                              </Text>
+                            </View>
+                            <View style={styles.progressTrack}>
+                              <View
+                                style={[
+                                  styles.progressFill,
+                                  {
+                                    width: `${Math.round(row.progress * 100)}%`,
+                                    backgroundColor: progressColorFor(row.progress * 100),
+                                  },
+                                ]}
+                              />
+                            </View>
+                            <Text style={styles.breakdownCategorySpent}>
+                              ${row.spent.toFixed(2)} spent of ${row.totalLocked.toFixed(2)}
                             </Text>
                           </View>
-                          <View style={styles.progressTrack}>
-                            <View
-                              style={[
-                                styles.progressFill,
-                                {
-                                  width: `${Math.round(progress * 100)}%`,
-                                  backgroundColor: progressColorFor(progress * 100),
-                                },
-                              ]}
-                            />
-                          </View>
-                          <Text style={styles.breakdownCategorySpent}>
-                            ${entry.spent.toFixed(2)} spent of ${total.toFixed(2)}
-                          </Text>
-                        </View>
-                      );
-                    })
-                  ) : (
-                    <Text style={styles.emptySubtitle}>No locked funds yet.</Text>
-                  )}
+                        );
+                      })
+                    ) : (
+                      <Text style={styles.emptySubtitle}>No locked funds yet.</Text>
+                    );
+                  })()}
                 </>
               ) : null}
             </ScrollView>

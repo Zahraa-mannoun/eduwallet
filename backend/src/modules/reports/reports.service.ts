@@ -1,9 +1,10 @@
 import { randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
-import type { FraudAlert, Prisma, ReportRequest, UserType } from '@prisma/client';
+import type { FraudAlert, Prisma, ReportRequest, TransactionCategory, UserType } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
+import { getCurrentMonth } from '../budget/budget.service';
 import { createNotification } from '../notifications/notifications.service';
 import type { TransactionWithParties } from '../admin/admin.service';
 import type { CreateReportRequestInput } from './reports.schema';
@@ -159,36 +160,70 @@ function sumAmounts(amounts: Array<number | string | { toString(): string }>): n
   return amounts.reduce<number>((sum, value) => sum + Number(value.toString()), 0);
 }
 
-// Aggregated across every wallet the student holds — mirrors how the rest of this function
-// treats walletIds as "the student", never a single wallet in isolation.
-async function getLockedFundsBreakdown(walletIds: string[]): Promise<LockedFundBreakdownRow[]> {
-  const lockedFunds = await prisma.lockedFund.findMany({ where: { walletId: { in: walletIds } } });
+// Same "YYYY-MM" format as BudgetCategory.month / getCurrentMonth() in budget.service.ts.
+function monthKeyFor(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
 
-  const byCategory = new Map<string, { totalReceived: number; remaining: number }>();
+// Aggregated across every wallet the student holds, and across every month from periodStart
+// through today — mirrors how the rest of this function treats walletIds as "the student",
+// never a single wallet in isolation. Every month before the current one is read from
+// LockedFundHistory (the snapshot runRollover() archives in savings.service.ts right before it
+// zeroes LockedFund for the next cycle); the current month is read straight off the live
+// LockedFund row, since totalLocked/amount now reset every rollover (see schema.prisma's
+// LockedFund comment) and so already represent "this cycle only" — `totalLocked - amount` is an
+// exact, drift-free "spent this cycle" figure the same way the Budget screen's is. Neither of
+// those live fields exists yet for a past month once its rollover has archived and zeroed
+// them, which is exactly why LockedFundHistory has to cover that part of the range instead.
+async function getLockedFundsBreakdown(
+  walletIds: string[],
+  periodStart: Date
+): Promise<LockedFundBreakdownRow[]> {
+  const currentMonth = getCurrentMonth();
+  const periodStartMonth = monthKeyFor(periodStart);
+
+  const [history, lockedFunds] = await Promise.all([
+    periodStartMonth < currentMonth
+      ? prisma.lockedFundHistory.findMany({
+          where: { walletId: { in: walletIds }, month: { gte: periodStartMonth, lt: currentMonth } },
+        })
+      : Promise.resolve([]),
+    prisma.lockedFund.findMany({ where: { walletId: { in: walletIds } } }),
+  ]);
+
+  const byCategory = new Map<TransactionCategory, { totalReceived: number; totalSpent: number; remaining: number }>();
+  const totalsFor = (category: TransactionCategory) => {
+    const existing = byCategory.get(category) ?? { totalReceived: 0, totalSpent: 0, remaining: 0 };
+    byCategory.set(category, existing);
+    return existing;
+  };
+
+  for (const entry of history) {
+    const totals = totalsFor(entry.category);
+    totals.totalReceived += Number(entry.totalLocked);
+    totals.totalSpent += Number(entry.totalSpent);
+  }
+
   for (const fund of lockedFunds) {
-    const existing = byCategory.get(fund.category) ?? { totalReceived: 0, remaining: 0 };
-    existing.totalReceived += Number(fund.totalLocked);
-    existing.remaining += Number(fund.amount);
-    byCategory.set(fund.category, existing);
+    const totalLocked = Number(fund.totalLocked);
+    if (totalLocked <= 0) continue;
+    const totals = totalsFor(fund.category);
+    const remaining = Number(fund.amount);
+    totals.totalReceived += totalLocked;
+    totals.totalSpent += Math.max(0, totalLocked - remaining);
+    totals.remaining += remaining;
   }
 
   return [...byCategory.entries()]
     .filter(([, totals]) => totals.totalReceived > 0)
     .map(([category, totals]) => {
-      const totalSpent = Math.max(0, totals.totalReceived - totals.remaining);
       const status =
         totals.remaining <= 0
           ? 'FULLY_USED'
           : totals.remaining < totals.totalReceived
             ? 'PARTIALLY_USED'
             : 'UNUSED';
-      return {
-        category,
-        totalReceived: totals.totalReceived,
-        totalSpent,
-        remaining: totals.remaining,
-        status,
-      };
+      return { category, ...totals, status };
     });
 }
 
@@ -261,7 +296,7 @@ export async function generateReport(reportId: string): Promise<ReportRequest> {
           orderBy: { createdAt: 'desc' },
         })
       : Promise.resolve(null),
-    getLockedFundsBreakdown(walletIds),
+    getLockedFundsBreakdown(walletIds, start),
   ]);
 
   const byCategoryMap = new Map<string, number>();

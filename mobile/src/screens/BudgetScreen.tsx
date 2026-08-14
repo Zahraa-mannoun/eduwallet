@@ -121,9 +121,10 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
 
   type LockedFundInfo = { total: number; remaining: number };
 
-  // `amount` is the current remaining balance (decremented on spend); `totalLocked` is the
-  // all-time total the parent has ever sent into this category (never decremented) — the
-  // Locked Funds section needs both, not just the remaining balance.
+  // `amount` is the current remaining balance (decremented on spend); `totalLocked` is what's
+  // been locked into this category since the last rollover — it resets to 0 alongside `amount`
+  // at every rollover (see runRollover() in savings.service.ts), so `total - remaining` below is
+  // always an exact "spent this cycle" figure with no drift.
   const lockedFundFor = (category: BudgetCategoryDefinition): LockedFundInfo => {
     const fund = lockedFunds.find((entry) => entry.category === category.key.toUpperCase());
     return {
@@ -253,9 +254,6 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
             );
           }
 
-          // Spent from the locked pool = total ever locked minus what's still remaining —
-          // deliberately not budget.spent, which is this month only and wouldn't reconcile
-          // with an all-time total/remaining pair.
           const lockedSpent = Math.max(lockedTotal - lockedRemaining, 0);
           const lockedPercent = hasLockedFunds ? Math.round((lockedSpent / lockedTotal) * 100) : 0;
           const lockedColor = progressColorFor(lockedPercent);

@@ -215,6 +215,7 @@ model Wallet {
 
   cardHistory            CardHistory[]
   monthlyBudgetHistory   MonthlyBudgetHistory[]
+  lockedFundHistory      LockedFundHistory[]
   personalSavings        PersonalSavings?
   personalSavingsHistory PersonalSavingsHistory[]
   withdrawalRequests     WithdrawalRequest[]
@@ -236,9 +237,11 @@ model LockedFund {
   // directly as the source of truth for unspent locked money — a spend path that forgets to
   // decrement it will silently overstate what rolls into savings.
   amount      Decimal             @default(0) @db.Decimal(12, 2)
-  // Cumulative total ever locked into this category by a parent — only ever incremented,
-  // never decremented on spend. `amount` is the current remaining balance; this is the
-  // original total the "Locked Funds" progress bar is measured against.
+  // Total locked into this category since the last rollover — incremented on every new lock,
+  // never decremented on spend, but reset to 0 alongside `amount` at rollover (see
+  // runRollover() in savings.service.ts) so it doesn't accumulate across rollover cycles.
+  // `amount` is the current remaining balance; this is the total that cycle's "Locked Funds"
+  // progress bar is measured against.
   totalLocked Decimal             @default(0) @db.Decimal(12, 2)
   createdAt   DateTime            @default(now())
 
@@ -435,6 +438,27 @@ model MonthlyBudgetHistory {
 
   @@index([walletId])
   @@map("monthly_budget_history")
+}
+
+// Per-category snapshot of a LockedFund's month, archived by runRollover() (savings.service.ts)
+// right before it zeroes LockedFund.amount/totalLocked for the next cycle — the LockedFund
+// equivalent of MonthlyBudgetHistory above. Without this, "how much was locked/spent in Books
+// last month" is unanswerable once that month's rollover has run, since LockedFund itself only
+// ever reflects the current cycle.
+model LockedFundHistory {
+  id          String              @id @default(uuid())
+  walletId    String
+  category    TransactionCategory
+  totalLocked Decimal             @db.Decimal(12, 2)
+  totalSpent  Decimal             @db.Decimal(12, 2)
+  rolledOver  Decimal             @db.Decimal(12, 2)
+  month       String
+  archivedAt  DateTime            @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id])
+
+  @@index([walletId])
+  @@map("locked_fund_history")
 }
 
 model PersonalSavings {

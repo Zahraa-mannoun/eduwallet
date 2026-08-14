@@ -9,9 +9,10 @@ import type {
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
 import { isUniqueConstraintError } from '../../utils/prismaErrors';
-import { updateSpent } from '../budget/budget.service';
+import { getCurrentMonth, updateSpent } from '../budget/budget.service';
 import { createNotification } from '../notifications/notifications.service';
 import { runAllChecks } from '../wallet/fraud.service';
+import { getSpentByCategory } from '../wallet/wallet.service';
 import type { LinkStudentInput, UpdateSettingsInput } from './parental.schema';
 
 function formatCategoriesList(categories: TransactionCategory[]): string {
@@ -305,9 +306,11 @@ export type StudentCategoryBreakdown = {
   spent: number;
 };
 
-// Spent = the student's own completed spending in that category, all-time. Combined with
-// the category's currently-locked balance, this gives parents a sense of how far a category's
-// locked funds have been drawn down, without needing a separate "total ever locked" column.
+// Spent = the student's own completed spending in that category, THIS MONTH only — same
+// current-month scoping the student's own Budget screen uses (BudgetCategory.spent), so a
+// rollover zeroing out a category's spend is reflected here too instead of the parent
+// continuing to see stale, pre-rollover totals. Combined with the category's currently-locked
+// balance, this gives parents a sense of how far this cycle's locked funds have been drawn down.
 export async function getStudentSpendingBreakdown(
   parentUserId: string,
   studentUserId: string
@@ -323,18 +326,7 @@ export async function getStudentSpendingBreakdown(
     throw new AppError(404, 'WALLET_NOT_FOUND', 'This student has no wallet');
   }
 
-  const spentByCategory = await prisma.transaction.groupBy({
-    by: ['category'],
-    where: {
-      fromWalletId: wallet.id,
-      category: { not: 'GENERAL' },
-      status: { in: ['AUTO_APPROVED', 'APPROVED'] },
-    },
-    _sum: { amount: true },
-  });
-  const spentLookup = new Map(
-    spentByCategory.map((entry) => [entry.category, Number(entry._sum.amount ?? 0)])
-  );
+  const spentLookup = await getSpentByCategory(wallet.id, getCurrentMonth());
 
   const categoryKeys = new Set<TransactionCategory>([
     ...link.categories,

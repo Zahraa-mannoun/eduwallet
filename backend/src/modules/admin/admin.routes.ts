@@ -10,6 +10,7 @@ import {
   getAnalyticsHandler,
   getAuditLogHandler,
   getFraudAlertsHandler,
+  getLockedFundHistoryHandler,
   getPendingKYCHandler,
   getRelationshipsHandler,
   getRolloverHistoryHandler,
@@ -40,6 +41,7 @@ export default async function adminRoutes(fastify: FastifyInstance): Promise<voi
   fastify.get('/kyc/pending', getPendingKYCHandler);
   fastify.get('/relationships', getRelationshipsHandler);
   fastify.get('/rollover-history', getRolloverHistoryHandler);
+  fastify.get('/locked-fund-history', getLockedFundHistoryHandler);
 
   // Not in the original route list, but admin.service.ts's getAuditLog() has no
   // other way to be reached — "all admin actions should be logged" implies a way to read them back.

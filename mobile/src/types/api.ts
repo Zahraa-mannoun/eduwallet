@@ -102,8 +102,10 @@ export type LockedFund = {
   walletId: string;
   category: TransactionCategory;
   amount: string;
-  // All-time total ever locked into this category, never decremented on spend — use this
-  // (not `amount`) to show the original amount the parent sent.
+  // Total locked into this category since the last rollover — reset to 0 alongside `amount` at
+  // rollover (see runRollover() in savings.service.ts), so `totalLocked - amount` is always an
+  // exact "spent this cycle" figure with no drift, and use this (not `amount`) as the "of $X"
+  // denominator.
   totalLocked: string;
   createdAt: string;
 };

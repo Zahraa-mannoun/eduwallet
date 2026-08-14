@@ -286,6 +286,10 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
             </View>
 
             {lockedCategoryRows.map(({ category, amount, totalLocked: categoryTotal }) => {
+              // totalLocked resets to 0 alongside amount at every rollover (see runRollover()
+              // in savings.service.ts), so this subtraction is an exact "spent this cycle"
+              // figure with no drift — every lock increments both fields equally, only a spend
+              // decrements `amount`, and rollover resets both together.
               const spent = Math.max(categoryTotal - amount, 0);
               const percent = categoryTotal > 0 ? Math.min(Math.round((spent / categoryTotal) * 100), 100) : 0;
               return (

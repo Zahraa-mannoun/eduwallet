@@ -1,4 +1,4 @@
-import type { Currency, LockedFund, Transaction, UserType, Wallet } from '@prisma/client';
+import type { Currency, LockedFund, Transaction, TransactionCategory, UserType, Wallet } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
 import { updateSpent } from '../budget/budget.service';
@@ -57,6 +57,55 @@ async function attachPartyNames(transactions: Transaction[]): Promise<Transactio
   }));
 }
 
+// Same "YYYY-MM" format as BudgetCategory.month (see budget.service.ts's getCurrentMonth) —
+// converts it to the [start of month, start of next month) range a createdAt filter needs.
+function monthToDateRange(month: string): { start: Date; end: Date } {
+  const [year, monthNum] = month.split('-').map(Number);
+  const start = new Date(year, (monthNum ?? 1) - 1, 1);
+  const end = new Date(year, monthNum ?? 1, 1);
+  return { start, end };
+}
+
+// Ledger-based per-category spend — sums real Transaction rows the wallet(s) sent. Deliberately
+// NOT LockedFund.totalLocked - amount: that subtraction only reflects spend since the wallet's
+// last rollover (totalLocked resets to 0 there, same as amount — see schema.prisma's LockedFund
+// comment), so it can't answer "how much was spent in a specific month" once a rollover has
+// happened mid-window, and it can't answer "how much has ever been spent" across many months at
+// all. Accepts one wallet or several (a student can hold more than one currency wallet) so
+// callers never need their own near-duplicate of this query.
+//
+// `month` (optional, "YYYY-MM") scopes the sum to that calendar month only. Both current callers
+// pass it: parental.service.ts's getStudentSpendingBreakdown (the current month, so a parent
+// sees the same "this cycle" figure the student's own Budget screen shows) and
+// savings.service.ts's runRollover (the cycle that's ending, to snapshot into
+// LockedFundHistory before LockedFund gets zeroed). Omitting `month` still works and sums
+// all-time — kept optional for any future caller that needs a figure spanning many months —
+// but nothing currently calls it that way.
+export async function getSpentByCategory(
+  walletId: string | string[],
+  month?: string
+): Promise<Map<TransactionCategory, number>> {
+  const walletIds = Array.isArray(walletId) ? walletId : [walletId];
+  const dateRange = month ? monthToDateRange(month) : null;
+  const spentByCategory = await prisma.transaction.groupBy({
+    by: ['category'],
+    where: {
+      fromWalletId: { in: walletIds },
+      category: { not: 'GENERAL' },
+      status: { in: ['AUTO_APPROVED', 'APPROVED'] },
+      ...(dateRange ? { createdAt: { gte: dateRange.start, lt: dateRange.end } } : {}),
+    },
+    _sum: { amount: true },
+  });
+  return new Map(spentByCategory.map((entry) => [entry.category, Number(entry._sum.amount ?? 0)]));
+}
+
+// Not enriched with getSpentByCategory()'s all-time ledger spend: runRollover() now resets
+// totalLocked to 0 alongside amount at every rollover (see schema.prisma's LockedFund comment),
+// which makes `totalLocked - amount` an exact, drift-free "spent since the last rollover" figure
+// on its own — every lock increments both fields equally, only a spend decrements `amount`, and
+// rollover resets both together. Pairing that now-cycle-scoped totalLocked with an all-time spend
+// figure instead would show nonsense like "spent > total" once enough cycles have passed.
 export async function getWallet(userId: string): Promise<Wallet & { lockedFunds: LockedFund[] }> {
   const wallet = await prisma.wallet.findFirst({
     where: { userId },

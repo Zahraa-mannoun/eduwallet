@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Banknote, CheckCircle2, Search, ShieldCheck, UserSearch, Wallet } from 'lucide-react';
+import { Banknote, CheckCircle2, Search, ShieldCheck, UserSearch, Wallet, X } from 'lucide-react';
 import type {
   ApiResponse,
   ProcessWithdrawalResult,
@@ -22,6 +22,8 @@ import { useSocketRefetch } from '../hooks/useSocketRefetch';
 function formatMoney(amount: string): string {
   return `$${Number(amount).toFixed(2)}`;
 }
+
+const SUCCESS_MESSAGE_TIMEOUT_MS = 4000;
 
 function ReadyToDispenseSection({
   withdrawals,
@@ -220,6 +222,15 @@ export function ProcessWithdrawal() {
     }, [loadApprovedWithdrawals])
   );
 
+  // Only the success (green) banner times out on its own — the info (amber) one flags that a
+  // withdrawal still needs parent approval, which the agent shouldn't lose track of just because
+  // 4s passed. Both stay manually dismissible via the X button either way.
+  useEffect(() => {
+    if (resultMessage?.tone !== 'success') return;
+    const timer = setTimeout(() => setResultMessage(null), SUCCESS_MESSAGE_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [resultMessage]);
+
   const handleSearch = async (event: FormEvent) => {
     event.preventDefault();
     if (!query.trim()) return;
@@ -315,7 +326,15 @@ export function ProcessWithdrawal() {
           }`}
         >
           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{resultMessage.text}</span>
+          <span className="flex-1">{resultMessage.text}</span>
+          <button
+            type="button"
+            onClick={() => setResultMessage(null)}
+            aria-label="Dismiss"
+            className="shrink-0 rounded p-0.5 opacity-70 transition-opacity hover:opacity-100"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 

@@ -1059,6 +1059,88 @@ export async function getRolloverHistory(): Promise<RolloverHistoryRow[]> {
   return rows.sort((a, b) => b.month.localeCompare(a.month));
 }
 
+export type LockedFundHistoryRow = {
+  month: string;
+  studentCount: number;
+  totalLocked: number;
+  totalSpent: number;
+  totalRolledOver: number;
+  archivedAt: string;
+  students: Array<{
+    id: string;
+    name: string;
+    email: string;
+    totalLocked: number;
+    totalSpent: number;
+    rolledOver: number;
+    categories: Array<{ category: string; totalLocked: number; totalSpent: number; rolledOver: number }>;
+  }>;
+};
+
+// Unlike PersonalSavingsHistory's ROLLOVER rows (one per wallet per month), LockedFundHistory has
+// one row per wallet PER CATEGORY per month — grouped by month, then by student, then listing
+// each student's categories.
+export async function getLockedFundHistory(): Promise<LockedFundHistoryRow[]> {
+  const entries = await prisma.lockedFundHistory.findMany({
+    include: {
+      wallet: { include: { user: { select: { id: true, fullName: true, email: true } } } },
+    },
+    orderBy: { archivedAt: 'desc' },
+  });
+
+  const byMonth = new Map<string, typeof entries>();
+  for (const entry of entries) {
+    const list = byMonth.get(entry.month) ?? [];
+    list.push(entry);
+    byMonth.set(entry.month, list);
+  }
+
+  const rows: LockedFundHistoryRow[] = [...byMonth.entries()].map(([month, monthEntries]) => {
+    const byWallet = new Map<string, typeof monthEntries>();
+    for (const entry of monthEntries) {
+      const list = byWallet.get(entry.walletId) ?? [];
+      list.push(entry);
+      byWallet.set(entry.walletId, list);
+    }
+
+    const students = [...byWallet.values()].map((walletEntries) => {
+      const user = walletEntries[0]!.wallet.user;
+      const categories = walletEntries.map((entry) => ({
+        category: entry.category,
+        totalLocked: Number(entry.totalLocked),
+        totalSpent: Number(entry.totalSpent),
+        rolledOver: Number(entry.rolledOver),
+      }));
+      return {
+        id: user.id,
+        name: user.fullName,
+        email: user.email,
+        totalLocked: categories.reduce((sum, c) => sum + c.totalLocked, 0),
+        totalSpent: categories.reduce((sum, c) => sum + c.totalSpent, 0),
+        rolledOver: categories.reduce((sum, c) => sum + c.rolledOver, 0),
+        categories,
+      };
+    });
+
+    const archivedAt = monthEntries.reduce(
+      (earliest, entry) => (entry.archivedAt < earliest ? entry.archivedAt : earliest),
+      monthEntries[0]!.archivedAt
+    );
+
+    return {
+      month,
+      studentCount: students.length,
+      totalLocked: students.reduce((sum, s) => sum + s.totalLocked, 0),
+      totalSpent: students.reduce((sum, s) => sum + s.totalSpent, 0),
+      totalRolledOver: students.reduce((sum, s) => sum + s.rolledOver, 0),
+      archivedAt: archivedAt.toISOString(),
+      students,
+    };
+  });
+
+  return rows.sort((a, b) => b.month.localeCompare(a.month));
+}
+
 export async function reactivateAgent(adminId: string, agentId: string): Promise<SafeUser> {
   const agent = await prisma.user.findUnique({ where: { id: agentId } });
   if (!agent || agent.userType !== 'AGENT') {

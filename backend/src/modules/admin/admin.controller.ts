@@ -26,6 +26,7 @@ import {
   getAnalytics,
   getAuditLog,
   getFraudAlerts,
+  getLockedFundHistory,
   getRelationships,
   getRolloverHistory,
   getSystemStats,
@@ -263,6 +264,15 @@ export async function getRelationshipsHandler(request: FastifyRequest, reply: Fa
 export async function getRolloverHistoryHandler(request: FastifyRequest, reply: FastifyReply) {
   try {
     const history = await getRolloverHistory();
+    return reply.status(200).send(successResponse(history));
+  } catch (error) {
+    return handleAdminError(request, reply, error);
+  }
+}
+
+export async function getLockedFundHistoryHandler(request: FastifyRequest, reply: FastifyReply) {
+  try {
+    const history = await getLockedFundHistory();
     return reply.status(200).send(successResponse(history));
   } catch (error) {
     return handleAdminError(request, reply, error);

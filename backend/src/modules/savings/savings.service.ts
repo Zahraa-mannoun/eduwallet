@@ -6,6 +6,7 @@ import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
 import { getCurrentMonth } from '../budget/budget.service';
 import { createNotification } from '../notifications/notifications.service';
+import { getSpentByCategory } from '../wallet/wallet.service';
 import type { RequestWithdrawalInput } from './savings.schema';
 
 // Categories excluded from the "unspent locked funds" rollover sum — TUITION is essential/
@@ -335,6 +336,14 @@ export async function runRollover(): Promise<RolloverResult> {
         }
       }
 
+      // BudgetCategory is keyed by (walletId, category, month), so deleting the current month's
+      // rows here — not just zeroing their `spent` — is what guarantees "next month starts at
+      // $0": any row created for a new month is necessarily a brand-new row (setBudget()'s
+      // create-branch relies on `spent`'s schema default of 0; updateSpent()'s create-branch
+      // sets `spent` to exactly the new spend, nothing carried over). A zero-out here instead of
+      // a delete would be redundant with this and would still need the row to exist to affect
+      // anything — it wouldn't run before this point either way, since MonthlyBudgetHistory needs
+      // the pre-reset `spent` value archived first.
       const budgets = await tx.budgetCategory.findMany({
         where: { walletId: wallet.id, month },
       });
@@ -353,11 +362,36 @@ export async function runRollover(): Promise<RolloverResult> {
       }
 
       if (totalUnspent > 0) {
-        // Funds have been rolled over — zero out the remaining balance, but totalLocked
-        // (the all-time total ever locked) is deliberately left untouched.
+        // Snapshot this cycle's per-category totals into LockedFundHistory before the updateMany
+        // below zeroes them — otherwise "how much was locked/spent in Books last month" becomes
+        // unanswerable the moment this transaction commits (LockedFund only ever reflects the
+        // current cycle). getSpentByCategory() is called via the plain client rather than `tx`:
+        // it's a pure read with nothing else concurrently writing Transaction rows for this
+        // wallet at this instant, the same "reads outside the transaction, writes inside it"
+        // split this function already uses for notifications below.
+        const spentThisMonth = await getSpentByCategory(wallet.id, month);
+        const historyRows = lockedFunds
+          .filter((fund) => Number(fund.totalLocked) > 0)
+          .map((fund) => ({
+            walletId: wallet.id,
+            category: fund.category,
+            totalLocked: fund.totalLocked,
+            totalSpent: spentThisMonth.get(fund.category) ?? 0,
+            rolledOver: fund.amount,
+            month,
+          }));
+        if (historyRows.length > 0) {
+          await tx.lockedFundHistory.createMany({ data: historyRows });
+        }
+
+        // Funds have been rolled over — zero out both the remaining balance AND totalLocked, so
+        // next month's locked-funds tracking starts completely fresh per category rather than
+        // totalLocked accumulating forever across rollover cycles (a parent locking $200 next
+        // month should show "$200 of $200", not "$200 of $500" stacked on top of money that's
+        // already been swept to savings).
         await tx.lockedFund.updateMany({
           where: { walletId: wallet.id, category: { notIn: ROLLOVER_EXCLUDED_CATEGORIES_LIST } },
-          data: { amount: 0 },
+          data: { amount: 0, totalLocked: 0 },
         });
 
         // The locked-fund balance being rolled over was still counted in Wallet.balance (locked
@@ -383,16 +417,6 @@ export async function runRollover(): Promise<RolloverResult> {
             status: 'APPROVED',
             categoryBreakdown,
           },
-        });
-
-        // BudgetCategory.spent tracks this wallet's own spend-against-category totals
-        // independently of LockedFund — the archive-and-delete above only clears whichever
-        // BudgetCategory row already existed for `month` at the top of this transaction, so it
-        // won't catch a row that didn't exist yet then. Reset explicitly so the Budget screen and
-        // Parent spending overview can't keep showing spend against money that's now in savings.
-        await tx.budgetCategory.updateMany({
-          where: { walletId: wallet.id, category: { notIn: ROLLOVER_EXCLUDED_CATEGORIES_LIST } },
-          data: { spent: 0 },
         });
       }
 
