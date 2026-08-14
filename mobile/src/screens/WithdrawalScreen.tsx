@@ -472,7 +472,12 @@ export default function WithdrawalScreen({
                 </Text>
 
                 <View style={styles.infoBannerBlue}>
-                  <Text style={styles.infoBannerBlueIcon}>ℹ️</Text>
+                  <MaterialCommunityIcons
+                    name="information-outline"
+                    size={16}
+                    color="#1E40AF"
+                    style={styles.infoBannerBlueIcon}
+                  />
                   <Text style={styles.infoBannerBlueText}>
                     Receipt will be verified against our merchant database automatically
                   </Text>
@@ -930,8 +935,8 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   infoBannerBlueIcon: {
-    fontSize: 14,
     marginRight: 8,
+    marginTop: 1,
   },
   infoBannerBlueText: {
     flex: 1,

@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
+import { MessageSquare } from 'lucide-react';
 import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
-import { Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
+import { DotBadge } from '../components/DotBadge';
 import { EmptyState } from '../components/EmptyState';
+import { PageHeader } from '../components/PageHeader';
+import { PersonCell } from '../components/PersonCell';
 import { SkeletonRows } from '../components/SkeletonRows';
+import { TableCard, TABLE_HEAD_ROW_CLASS, TABLE_TD_CLASS, TABLE_TH_CLASS, tableRowClass } from '../components/TableCard';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
-import { formatDateTime } from '../lib/format';
+import { formatDate, formatRelativeTime } from '../lib/format';
 import type { SupportMessageRow } from '../types/admin';
 
 function ReplyModal({
@@ -59,7 +63,7 @@ function ReplyModal({
             rows={3}
             value={reply}
             onChange={(event) => setReply(event.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-full rounded-xl border-2 border-slate-200 px-3 py-2 text-sm transition-colors focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
           />
         </div>
 
@@ -69,14 +73,14 @@ function ReplyModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            className="rounded-full border-2 border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition-all duration-200 hover:bg-slate-50"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={isSubmitting}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-60"
+            className="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-primary-600 disabled:opacity-60"
           >
             {isSubmitting ? 'Sending…' : 'Send Reply'}
           </button>
@@ -127,59 +131,59 @@ export function AgentMessages() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-lg font-semibold text-slate-900">Agent Messages</h1>
-        <p className="mt-1 text-sm text-slate-500">Messages sent by agents from the agent portal.</p>
-      </div>
+      <PageHeader title="Agent Messages" subtitle="Messages sent by agents from the agent portal" />
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+      <TableCard title="Messages" subtitle={`${messages.length} shown`}>
+        <table className="min-w-full divide-y divide-slate-100 text-sm">
+          <thead className={TABLE_HEAD_ROW_CLASS}>
             <tr>
-              <th className="px-4 py-3 text-left">Agent</th>
-              <th className="px-4 py-3 text-left">Subject</th>
-              <th className="px-4 py-3 text-left">Message</th>
-              <th className="px-4 py-3 text-left">Date</th>
-              <th className="px-4 py-3 text-left">Status</th>
-              <th className="px-4 py-3 text-left">Actions</th>
+              <th className={TABLE_TH_CLASS}>Agent</th>
+              <th className={TABLE_TH_CLASS}>Message</th>
+              <th className={TABLE_TH_CLASS}>Date</th>
+              <th className={TABLE_TH_CLASS}>Status</th>
+              <th className={TABLE_TH_CLASS}>Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {isLoading && <SkeletonRows columns={6} />}
+            {isLoading && <SkeletonRows columns={5} />}
             {!isLoading && messages.length === 0 && (
               <tr>
-                <td colSpan={6}>
-                  <EmptyState title="No agent messages yet" />
+                <td colSpan={5}>
+                  <EmptyState icon={<MessageSquare className="h-8 w-8" />} title="No agent messages yet" />
                 </td>
               </tr>
             )}
             {!isLoading &&
-              messages.map((message) => (
-                <tr key={message.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-slate-900">{message.user.fullName}</div>
-                    <div className="text-xs text-slate-500">{message.user.email}</div>
+              messages.map((message, index) => (
+                <tr key={message.id} className={tableRowClass(index)}>
+                  <td className={TABLE_TD_CLASS}>
+                    <PersonCell name={message.user.fullName} email={message.user.email} />
                   </td>
-                  <td className="px-4 py-3 max-w-xs font-medium text-slate-800">
-                    {message.subject ?? '—'}
+                  <td className={`${TABLE_TD_CLASS} max-w-sm`}>
+                    {message.subject && (
+                      <p className="truncate font-medium text-slate-800">{message.subject}</p>
+                    )}
+                    <p className="truncate text-sm text-slate-500">{message.message}</p>
                   </td>
-                  <td className="px-4 py-3 max-w-sm text-slate-700">{message.message}</td>
-                  <td className="px-4 py-3 text-slate-500">{formatDateTime(message.createdAt)}</td>
-                  <td className="px-4 py-3">
-                    <Badge tone={message.status === 'UNREAD' ? 'yellow' : 'gray'}>
+                  <td className={TABLE_TD_CLASS}>
+                    <p className="text-slate-700">{formatDate(message.createdAt)}</p>
+                    <p className="text-xs text-slate-400">{formatRelativeTime(message.createdAt)}</p>
+                  </td>
+                  <td className={TABLE_TD_CLASS}>
+                    <DotBadge tone={message.status === 'UNREAD' ? 'yellow' : 'green'}>
                       {message.status === 'UNREAD' ? 'Unread' : 'Read'}
-                    </Badge>
+                    </DotBadge>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className={TABLE_TD_CLASS}>
                     <div className="flex flex-wrap gap-2">
                       {message.status === 'UNREAD' && (
                         <button
                           type="button"
                           disabled={busyMessageId === message.id}
                           onClick={() => void markAsRead(message)}
-                          className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                          className="rounded-full border-2 border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition-all duration-200 hover:scale-[1.03] hover:bg-slate-50 disabled:opacity-40"
                         >
                           Mark as Read
                         </button>
@@ -187,7 +191,7 @@ export function AgentMessages() {
                       <button
                         type="button"
                         onClick={() => setReplyTarget(message)}
-                        className="rounded-lg border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary-100"
+                        className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-white transition-all duration-200 hover:scale-[1.03] hover:bg-primary-600"
                       >
                         Reply
                       </button>
@@ -197,7 +201,7 @@ export function AgentMessages() {
               ))}
           </tbody>
         </table>
-      </div>
+      </TableCard>
 
       {replyTarget && (
         <ReplyModal

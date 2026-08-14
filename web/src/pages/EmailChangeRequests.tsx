@@ -1,17 +1,30 @@
 import { useCallback, useEffect, useState } from 'react';
+import { ArrowRight, Check, FileText, Mail, X } from 'lucide-react';
 import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
+import type { BadgeTone } from '../components/Badge';
+import { DotBadge } from '../components/DotBadge';
 import { Modal } from '../components/Modal';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { roleTone } from '../lib/badgeTones';
 import { formatDateTime } from '../lib/format';
 import { humanizeEnum } from '../lib/humanize';
 import { EmptyState } from '../components/EmptyState';
+import { FilterTabs } from '../components/FilterTabs';
+import { PageHeader } from '../components/PageHeader';
+import { PersonCell } from '../components/PersonCell';
 import { SkeletonRows } from '../components/SkeletonRows';
-import type { EmailChangeRequestRow } from '../types/admin';
+import { TableCard, TABLE_HEAD_ROW_CLASS, TABLE_TD_CLASS, TABLE_TH_CLASS, tableRowClass } from '../components/TableCard';
+import type { EmailChangeRequestRow, EmailChangeStatus } from '../types/admin';
 
 type Tab = 'pending' | 'accepted';
+
+const STATUS_TONE: Record<EmailChangeStatus, BadgeTone> = {
+  PENDING: 'yellow',
+  ACCEPTED: 'green',
+  REJECTED: 'red',
+};
 
 export function EmailChangeRequests() {
   const [pending, setPending] = useState<EmailChangeRequestRow[]>([]);
@@ -58,107 +71,108 @@ export function EmailChangeRequests() {
   };
 
   const rows = activeTab === 'pending' ? pending : accepted;
+  const columnCount = activeTab === 'pending' ? 7 : 6;
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-lg font-semibold text-slate-900">Email Change Requests</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Users requesting to change the email address on their account.
-        </p>
-      </div>
-
-      <div className="flex gap-1 border-b border-slate-200">
-        <button
-          type="button"
-          onClick={() => setActiveTab('pending')}
-          className={`px-4 py-2 text-sm font-medium ${
-            activeTab === 'pending'
-              ? 'border-b-2 border-primary text-primary'
-              : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          Pending ({pending.length})
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('accepted')}
-          className={`px-4 py-2 text-sm font-medium ${
-            activeTab === 'accepted'
-              ? 'border-b-2 border-primary text-primary'
-              : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          Accepted ({accepted.length})
-        </button>
-      </div>
+      <PageHeader
+        title="Email Change Requests"
+        subtitle="Users requesting to change the email address on their account"
+      />
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+      <TableCard
+        title={activeTab === 'pending' ? 'Pending Requests' : 'Resolved Requests'}
+        subtitle={`${rows.length} shown`}
+        actions={
+          <FilterTabs
+            tabs={[
+              { value: 'pending', label: `Pending (${pending.length})` },
+              { value: 'accepted', label: `Accepted (${accepted.length})` },
+            ]}
+            value={activeTab}
+            onChange={setActiveTab}
+          />
+        }
+      >
+        <table className="min-w-full divide-y divide-slate-100 text-sm">
+          <thead className={TABLE_HEAD_ROW_CLASS}>
             <tr>
-              <th className="px-4 py-3 text-left">User</th>
-              <th className="px-4 py-3 text-left">Role</th>
-              <th className="px-4 py-3 text-left">Current Email</th>
-              <th className="px-4 py-3 text-left">Requested Email</th>
-              <th className="px-4 py-3 text-left">Reason</th>
-              <th className="px-4 py-3 text-left">Proof</th>
-              <th className="px-4 py-3 text-left">Requested</th>
-              {activeTab === 'accepted' && <th className="px-4 py-3 text-left">Resolved</th>}
-              {activeTab === 'pending' && <th className="px-4 py-3 text-left">Actions</th>}
+              <th className={TABLE_TH_CLASS}>User</th>
+              <th className={TABLE_TH_CLASS}>Email Change</th>
+              <th className={TABLE_TH_CLASS}>Reason</th>
+              <th className={TABLE_TH_CLASS}>Proof</th>
+              <th className={TABLE_TH_CLASS}>Requested</th>
+              <th className={TABLE_TH_CLASS}>Status</th>
+              {activeTab === 'pending' && <th className={TABLE_TH_CLASS}>Actions</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {isLoading && <SkeletonRows columns={8} />}
+            {isLoading && <SkeletonRows columns={columnCount} />}
             {!isLoading && rows.length === 0 && (
               <tr>
-                <td colSpan={8}>
-                  <EmptyState title={`No ${activeTab} email change requests`} />
+                <td colSpan={columnCount}>
+                  <EmptyState
+                    icon={<Mail className="h-8 w-8" />}
+                    title={`No ${activeTab} email change requests`}
+                  />
                 </td>
               </tr>
             )}
             {!isLoading &&
-              rows.map((row) => (
-                <tr key={row.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-900">{row.user.fullName}</td>
-                  <td className="px-4 py-3">
-                    <Badge tone={roleTone[row.user.userType] ?? 'gray'}>{humanizeEnum(row.user.userType)}</Badge>
+              rows.map((row, index) => (
+                <tr key={row.id} className={tableRowClass(index)}>
+                  <td className={TABLE_TD_CLASS}>
+                    <PersonCell
+                      name={row.user.fullName}
+                      email={row.user.email}
+                      extra={
+                        <Badge tone={roleTone[row.user.userType] ?? 'gray'}>
+                          {humanizeEnum(row.user.userType)}
+                        </Badge>
+                      }
+                    />
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{row.currentEmail}</td>
-                  <td className="px-4 py-3 text-slate-600">{row.requestedEmail}</td>
-                  <td className="px-4 py-3 max-w-xs text-slate-700">{row.reason}</td>
-                  <td className="px-4 py-3">
+                  <td className={TABLE_TD_CLASS}>
+                    <div className="flex max-w-xs items-center gap-1.5 text-sm">
+                      <span className="text-slate-500">{row.currentEmail}</span>
+                      <ArrowRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                      <span className="font-medium text-slate-900">{row.requestedEmail}</span>
+                    </div>
+                  </td>
+                  <td className={`${TABLE_TD_CLASS} max-w-xs truncate text-slate-500`}>{row.reason}</td>
+                  <td className={TABLE_TD_CLASS}>
                     <button
                       type="button"
                       onClick={() => void viewProof(row.id)}
-                      className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                      className="inline-flex items-center gap-1.5 rounded-full border-2 border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition-all duration-200 hover:scale-[1.03] hover:bg-slate-50"
                     >
-                      View
+                      <FileText className="h-3.5 w-3.5" />
+                      View Proof
                     </button>
                   </td>
-                  <td className="px-4 py-3 text-slate-500">{formatDateTime(row.createdAt)}</td>
-                  {activeTab === 'accepted' && (
-                    <td className="px-4 py-3 text-slate-500">
-                      {row.resolvedAt ? formatDateTime(row.resolvedAt) : '—'}
-                    </td>
-                  )}
+                  <td className={`${TABLE_TD_CLASS} text-slate-500`}>{formatDateTime(row.createdAt)}</td>
+                  <td className={TABLE_TD_CLASS}>
+                    <DotBadge tone={STATUS_TONE[row.status]}>{humanizeEnum(row.status)}</DotBadge>
+                  </td>
                   {activeTab === 'pending' && (
-                    <td className="px-4 py-3">
+                    <td className={TABLE_TD_CLASS}>
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
                           onClick={() => setApproveTarget(row)}
-                          className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+                          className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1 text-xs font-semibold text-white transition-all duration-200 hover:scale-[1.03] hover:bg-emerald-700"
                         >
+                          <Check className="h-3.5 w-3.5" />
                           Approve
                         </button>
                         <button
                           type="button"
                           onClick={() => setRejectTarget(row)}
-                          className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
+                          className="inline-flex items-center gap-1.5 rounded-full border-2 border-red-200 px-3 py-1 text-xs font-semibold text-red-600 transition-all duration-200 hover:scale-[1.03] hover:bg-red-50"
                         >
+                          <X className="h-3.5 w-3.5" />
                           Reject
                         </button>
                       </div>
@@ -168,7 +182,7 @@ export function EmailChangeRequests() {
               ))}
           </tbody>
         </table>
-      </div>
+      </TableCard>
 
       {approveTarget && (
         <ApproveModal
@@ -221,7 +235,7 @@ function ApproveModal({
   };
 
   return (
-    <Modal title="Approve Email Change" onClose={onClose}>
+    <Modal title="Approve Email Change" tone="success" icon={<Check className="h-6 w-6 text-white" />} onClose={onClose}>
       <p className="text-sm text-slate-600">
         Are you sure you want to change {row.user.fullName}&apos;s email to{' '}
         <span className="font-medium text-slate-900">{row.requestedEmail}</span>? They will need
@@ -235,7 +249,7 @@ function ApproveModal({
           type="button"
           onClick={onClose}
           disabled={isSubmitting}
-          className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+          className="rounded-full border-2 border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition-all duration-200 hover:bg-slate-50 disabled:opacity-60"
         >
           Cancel
         </button>
@@ -243,7 +257,7 @@ function ApproveModal({
           type="button"
           onClick={() => void handleConfirm()}
           disabled={isSubmitting}
-          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+          className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-emerald-700 disabled:opacity-60"
         >
           {isSubmitting ? 'Approving…' : 'Confirm'}
         </button>
@@ -278,7 +292,7 @@ function RejectModal({
   };
 
   return (
-    <Modal title="Reject Email Change" onClose={onClose}>
+    <Modal title="Reject Email Change" tone="danger" icon={<X className="h-6 w-6 text-white" />} onClose={onClose}>
       <p className="text-sm text-slate-600">
         Are you sure you want to reject {row.user.fullName}&apos;s request to change their email
         to <span className="font-medium text-slate-900">{row.requestedEmail}</span>?
@@ -291,7 +305,7 @@ function RejectModal({
           type="button"
           onClick={onClose}
           disabled={isSubmitting}
-          className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+          className="rounded-full border-2 border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition-all duration-200 hover:bg-slate-50 disabled:opacity-60"
         >
           Cancel
         </button>
@@ -299,7 +313,7 @@ function RejectModal({
           type="button"
           onClick={() => void handleConfirm()}
           disabled={isSubmitting}
-          className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+          className="rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-red-700 disabled:opacity-60"
         >
           {isSubmitting ? 'Rejecting…' : 'Confirm'}
         </button>

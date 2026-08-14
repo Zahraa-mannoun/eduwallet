@@ -1,13 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Eye, FileText } from 'lucide-react';
 import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
+import type { BadgeTone } from '../components/Badge';
+import { DotBadge } from '../components/DotBadge';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { useSocketRefetch } from '../hooks/useSocketRefetch';
 import { formatDate } from '../lib/format';
 import { reportStatusTone } from '../lib/badgeTones';
 import { EmptyState } from '../components/EmptyState';
+import { PageHeader } from '../components/PageHeader';
+import { PersonCell } from '../components/PersonCell';
 import { SkeletonRows } from '../components/SkeletonRows';
+import { TableCard, TABLE_HEAD_ROW_CLASS, TABLE_TD_CLASS, TABLE_TH_CLASS, tableRowClass } from '../components/TableCard';
 import { REPORT_PERIOD_LABELS } from '../types/admin';
 import type { ReportRequestRow, ReportStatus } from '../types/admin';
 
@@ -17,13 +23,13 @@ const REPORT_STATUS_LABEL: Record<ReportStatus, string> = {
   SENT: 'Sent',
 };
 
-const INCLUDE_LABELS: Array<{ key: keyof ReportRequestRow; label: string }> = [
-  { key: 'includeCardPurchases', label: 'Card Purchases' },
-  { key: 'includeTransfers', label: 'Transfers' },
-  { key: 'includeWithdrawals', label: 'Withdrawals' },
-  { key: 'includeFlagged', label: 'Flagged' },
-  { key: 'includePending', label: 'Pending' },
-  { key: 'includeSavings', label: 'Savings' },
+const INCLUDE_META: Array<{ key: keyof ReportRequestRow; label: string; tone: BadgeTone }> = [
+  { key: 'includeCardPurchases', label: 'Card Purchases', tone: 'blue' },
+  { key: 'includeTransfers', label: 'Transfers', tone: 'purple' },
+  { key: 'includeWithdrawals', label: 'Withdrawals', tone: 'orange' },
+  { key: 'includeFlagged', label: 'Flagged', tone: 'red' },
+  { key: 'includePending', label: 'Pending', tone: 'yellow' },
+  { key: 'includeSavings', label: 'Savings', tone: 'green' },
 ];
 
 export function Reports() {
@@ -121,26 +127,24 @@ export function Reports() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-lg font-semibold text-slate-900">History Reports</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Parent-requested transaction history reports, generated as downloadable PDFs.
-        </p>
-      </div>
+      <PageHeader
+        title="History Reports"
+        subtitle="Parent-requested transaction history reports, generated as downloadable PDFs"
+      />
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+      <TableCard title="Report Requests" subtitle={`${reports.length} shown`}>
+        <table className="min-w-full divide-y divide-slate-100 text-sm">
+          <thead className={TABLE_HEAD_ROW_CLASS}>
             <tr>
-              <th className="px-4 py-3 text-left">Parent</th>
-              <th className="px-4 py-3 text-left">Student</th>
-              <th className="px-4 py-3 text-left">Period</th>
-              <th className="px-4 py-3 text-left">Requested</th>
-              <th className="px-4 py-3 text-left">Included</th>
-              <th className="px-4 py-3 text-left">Status</th>
-              <th className="px-4 py-3 text-left">Actions</th>
+              <th className={TABLE_TH_CLASS}>Parent</th>
+              <th className={TABLE_TH_CLASS}>Student</th>
+              <th className={TABLE_TH_CLASS}>Period</th>
+              <th className={TABLE_TH_CLASS}>Requested</th>
+              <th className={TABLE_TH_CLASS}>Included</th>
+              <th className={TABLE_TH_CLASS}>Status</th>
+              <th className={TABLE_TH_CLASS}>Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -148,47 +152,44 @@ export function Reports() {
             {!isLoading && reports.length === 0 && (
               <tr>
                 <td colSpan={7}>
-                  <EmptyState title="No report requests yet" />
+                  <EmptyState icon={<FileText className="h-8 w-8" />} title="No report requests yet" />
                 </td>
               </tr>
             )}
             {!isLoading &&
-              reports.map((report) => (
-                <tr key={report.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-slate-900">{report.parent.fullName}</div>
-                    <div className="text-xs text-slate-500">{report.parent.email}</div>
+              reports.map((report, index) => (
+                <tr key={report.id} className={tableRowClass(index)}>
+                  <td className={TABLE_TD_CLASS}>
+                    <PersonCell name={report.parent.fullName} email={report.parent.email} />
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-slate-900">{report.student.fullName}</div>
-                    <div className="text-xs text-slate-500">{report.student.email}</div>
+                  <td className={TABLE_TD_CLASS}>
+                    <PersonCell name={report.student.fullName} email={report.student.email} />
                   </td>
-                  <td className="px-4 py-3 text-slate-700">{REPORT_PERIOD_LABELS[report.period]}</td>
-                  <td className="px-4 py-3 text-slate-500">{formatDate(report.createdAt)}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      {INCLUDE_LABELS.filter((item) => report[item.key]).map((item) => (
-                        <span
-                          key={item.key}
-                          className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600"
-                        >
+                  <td className={TABLE_TD_CLASS}>
+                    <Badge tone="blue">{REPORT_PERIOD_LABELS[report.period]}</Badge>
+                  </td>
+                  <td className={`${TABLE_TD_CLASS} text-slate-500`}>{formatDate(report.createdAt)}</td>
+                  <td className={TABLE_TD_CLASS}>
+                    <div className="flex max-w-xs flex-wrap gap-1.5">
+                      {INCLUDE_META.filter((item) => report[item.key]).map((item) => (
+                        <Badge key={item.key} tone={item.tone}>
                           {item.label}
-                        </span>
+                        </Badge>
                       ))}
                     </div>
                   </td>
-                  <td className="px-4 py-3">
-                    <Badge tone={reportStatusTone[report.status] ?? 'gray'}>
+                  <td className={TABLE_TD_CLASS}>
+                    <DotBadge tone={reportStatusTone[report.status] ?? 'gray'}>
                       {REPORT_STATUS_LABEL[report.status]}
-                    </Badge>
+                    </DotBadge>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className={TABLE_TD_CLASS}>
                     {report.status === 'PENDING' && (
                       <button
                         type="button"
                         disabled={busyId === report.id}
                         onClick={() => void handleGenerate(report)}
-                        className="rounded-lg bg-primary px-2.5 py-1 text-xs font-semibold text-white hover:bg-primary-600 disabled:opacity-40"
+                        className="rounded-full bg-primary px-3.5 py-1.5 text-xs font-semibold text-white transition-all duration-200 hover:scale-[1.03] hover:bg-primary-600 disabled:opacity-40"
                       >
                         {busyId === report.id ? 'Generating…' : 'Generate PDF'}
                       </button>
@@ -197,8 +198,9 @@ export function Reports() {
                       <button
                         type="button"
                         onClick={() => void openPreview(report)}
-                        className="rounded-lg bg-primary px-2.5 py-1 text-xs font-semibold text-white hover:bg-primary-600"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-xs font-semibold text-white transition-all duration-200 hover:scale-[1.03] hover:bg-primary-600"
                       >
+                        <Eye className="h-3.5 w-3.5" />
                         Preview
                       </button>
                     )}
@@ -206,8 +208,9 @@ export function Reports() {
                       <button
                         type="button"
                         onClick={() => void openPreview(report)}
-                        className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                        className="inline-flex items-center gap-1.5 rounded-full border-2 border-slate-200 px-3.5 py-1.5 text-xs font-semibold text-slate-600 transition-all duration-200 hover:scale-[1.03] hover:bg-slate-50"
                       >
+                        <Eye className="h-3.5 w-3.5" />
                         View PDF
                       </button>
                     )}
@@ -216,14 +219,14 @@ export function Reports() {
               ))}
           </tbody>
         </table>
-      </div>
+      </TableCard>
 
       {previewReport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-          <div className="flex h-[90vh] w-[90vw] flex-col overflow-hidden rounded-xl bg-white shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="animate-modal-in flex h-[90vh] w-[90vw] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">
+                <h2 className="text-lg font-bold text-slate-900">
                   Report Preview — {previewReport.student.fullName}
                 </h2>
                 <p className="mt-0.5 text-sm text-slate-500">
@@ -270,7 +273,7 @@ export function Reports() {
                 type="button"
                 onClick={closePreview}
                 disabled={isSending}
-                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                className="rounded-full border-2 border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition-all duration-200 hover:bg-slate-50 disabled:opacity-40"
               >
                 Cancel
               </button>
@@ -279,7 +282,7 @@ export function Reports() {
                   type="button"
                   onClick={() => void handleSendToParent()}
                   disabled={isSending || !previewUrl}
-                  className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-40"
+                  className="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-primary-600 disabled:opacity-40"
                 >
                   {isSending ? 'Sending…' : 'Send to Parent'}
                 </button>

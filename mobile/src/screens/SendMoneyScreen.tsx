@@ -232,7 +232,12 @@ export default function SendMoneyScreen({ navigation }: RootStackScreenProps<'Se
             </View>
 
             <View style={styles.approvalInfoBanner}>
-              <Text style={styles.approvalInfoBannerIcon}>ℹ️</Text>
+              <MaterialCommunityIcons
+                name="information-outline"
+                size={16}
+                color="#92400E"
+                style={styles.approvalInfoBannerIcon}
+              />
               <Text style={styles.approvalInfoBannerText}>
                 Your parent will be notified to approve this transfer. You&apos;ll receive a
                 notification once it&apos;s approved or rejected.
@@ -393,7 +398,12 @@ export default function SendMoneyScreen({ navigation }: RootStackScreenProps<'Se
 
             {approvalThreshold !== null && (
               <View style={styles.thresholdBanner}>
-                <Text style={styles.thresholdBannerIcon}>⚡</Text>
+                <MaterialCommunityIcons
+                  name="flash-outline"
+                  size={16}
+                  color="#92400E"
+                  style={styles.thresholdBannerIcon}
+                />
                 <Text style={styles.thresholdBannerText}>
                   Transfers above ${approvalThreshold.toFixed(0)} require parent approval
                 </Text>
@@ -582,8 +592,8 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   thresholdBannerIcon: {
-    fontSize: 14,
     marginRight: 8,
+    marginTop: 1,
   },
   thresholdBannerText: {
     flex: 1,
@@ -769,8 +779,8 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   approvalInfoBannerIcon: {
-    fontSize: 14,
     marginRight: 8,
+    marginTop: 1,
   },
   approvalInfoBannerText: {
     flex: 1,

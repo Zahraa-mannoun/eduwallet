@@ -235,7 +235,8 @@ export default function ParentSendMoneyScreen({ navigation }: Readonly<ParentTab
                 <View style={styles.receiptRow}>
                   <Text style={styles.receiptLabel}>Status</Text>
                   <View style={styles.statusBadge}>
-                    <Text style={styles.statusBadgeText}>✅ Completed</Text>
+                    <MaterialCommunityIcons name="check-circle" size={12} color="#065F46" />
+                    <Text style={styles.statusBadgeText}>Completed</Text>
                   </View>
                 </View>
               </View>
@@ -268,7 +269,12 @@ export default function ParentSendMoneyScreen({ navigation }: Readonly<ParentTab
             {loadError ? <Text style={styles.errorText}>{loadError}</Text> : null}
 
             <View style={styles.infoBanner}>
-              <Text style={styles.infoBannerIcon}>ℹ️</Text>
+              <MaterialCommunityIcons
+                name="information-outline"
+                size={16}
+                color={colors.primaryDark}
+                style={styles.infoBannerIcon}
+              />
               <Text style={styles.infoBannerText}>
                 Money you send with an Education Lock is automatically approved when your student
                 spends it in the correct category. No extra approval needed.
@@ -450,8 +456,8 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   infoBannerIcon: {
-    fontSize: 14,
     marginRight: 8,
+    marginTop: 1,
   },
   infoBannerText: {
     flex: 1,
@@ -696,6 +702,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#D1FAE5',
     borderRadius: 999,
     paddingHorizontal: 10,
@@ -705,6 +713,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#065F46',
+    marginLeft: 4,
   },
   dashboardButton: {
     width: '100%',

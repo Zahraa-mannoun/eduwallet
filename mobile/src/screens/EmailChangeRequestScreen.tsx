@@ -154,9 +154,12 @@ export default function EmailChangeRequestScreen({
           <ActivityIndicator color={colors.primary} style={styles.loading} />
         ) : justSubmitted && currentRequest?.status === 'PENDING' ? (
           <View style={styles.successCard}>
-            <Text style={styles.successCardText}>
-              ✅ Request submitted! Admin will review your request.
-            </Text>
+            <View style={styles.successCardRow}>
+              <MaterialCommunityIcons name="check-circle" size={20} color={colors.accent} />
+              <Text style={styles.successCardText}>
+                Request submitted! Admin will review your request.
+              </Text>
+            </View>
           </View>
         ) : currentRequest?.status === 'PENDING' ? (
           <View style={styles.statusCard}>
@@ -280,7 +283,12 @@ export default function EmailChangeRequestScreen({
                 )}
 
                 <View style={styles.infoBanner}>
-                  <Text style={styles.infoBannerIcon}>ℹ️</Text>
+                  <MaterialCommunityIcons
+                    name="information-outline"
+                    size={18}
+                    color={colors.primaryDark}
+                    style={styles.infoBannerIcon}
+                  />
                   <Text style={styles.infoBannerText}>
                     Your request will be reviewed by admin within 24-48 hours. You&apos;ll be
                     notified once approved.
@@ -425,12 +433,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
+  successCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   successCardText: {
+    flexShrink: 1,
     fontSize: 14,
     fontWeight: '600',
     color: '#065F46',
-    textAlign: 'center',
     lineHeight: 20,
+    marginLeft: 8,
   },
   rejectedNotice: {
     backgroundColor: '#FFFFFF',
@@ -555,8 +568,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   infoBannerIcon: {
-    fontSize: 15,
     marginRight: 8,
+    marginTop: 1,
   },
   infoBannerText: {
     flex: 1,

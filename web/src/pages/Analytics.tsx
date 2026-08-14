@@ -20,13 +20,26 @@ import { useSocketRefetch } from '../hooks/useSocketRefetch';
 import { formatMoney } from '../lib/format';
 import { humanizeEnum } from '../lib/humanize';
 import { categoryColor } from '../lib/categoryColors';
-import type { AnalyticsResult } from '../types/admin';
+import { TRANSACTION_STATUS_LABELS } from '../lib/transactionStatus';
+import type { AnalyticsResult, SystemStats } from '../types/admin';
 
 const FRAUD_TYPE_COLORS: Record<string, string> = {
   CIRCULAR: '#7C3AED',
   VELOCITY: '#F59E0B',
   DUPLICATE: '#0EA5E9',
   UNUSUAL_AMOUNT: '#DC2626',
+};
+
+// Auto-Approved green, Approved blue, Rejected red, Awaiting Parent Approval amber (per spec) —
+// the rest get a reasonable fallback color so any status the API returns still renders.
+const TRANSACTION_STATUS_COLORS: Record<string, string> = {
+  AUTO_APPROVED: '#10B981',
+  APPROVED: '#2E5FAC',
+  REJECTED: '#DC2626',
+  PENDING_PARENT_APPROVAL: '#F59E0B',
+  EMERGENCY: '#F97316',
+  PENDING: '#94A3B8',
+  COMPLETED: '#059669',
 };
 
 function formatPercent(ratio: number): string {
@@ -75,6 +88,7 @@ const categoryTick = (category: string) => humanizeEnum(category);
 
 export function Analytics() {
   const [data, setData] = useState<AnalyticsResult | null>(null);
+  const [stats, setStats] = useState<SystemStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -82,8 +96,12 @@ export function Analytics() {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await api.get<ApiResponse<AnalyticsResult>>('/admin/analytics');
-      setData(unwrap(response.data));
+      const [analyticsRes, statsRes] = await Promise.all([
+        api.get<ApiResponse<AnalyticsResult>>('/admin/analytics'),
+        api.get<ApiResponse<SystemStats>>('/admin/stats'),
+      ]);
+      setData(unwrap(analyticsRes.data));
+      setStats(unwrap(statsRes.data));
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -119,6 +137,14 @@ export function Analytics() {
     ...row,
     label: formatMonthLabel(row.month),
   }));
+
+  const transactionStatusData = stats
+    ? Object.entries(stats.transactions.byStatus).map(([status, count]) => ({
+        status,
+        label: TRANSACTION_STATUS_LABELS[status] ?? humanizeEnum(status),
+        count,
+      }))
+    : [];
 
   return (
     <div className="space-y-8">
@@ -195,6 +221,21 @@ export function Analytics() {
                 <Tooltip formatter={(value: number) => formatMoney(value, 'USD')} />
                 <Line type="monotone" dataKey="total" stroke="#2E5FAC" strokeWidth={2} dot={false} />
               </LineChart>
+            </ResponsiveContainer>
+          </ChartCard>
+          <ChartCard title="Transactions by Status" subtitle="Breakdown of all transactions by current status">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={transactionStatusData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={0} angle={-20} textAnchor="end" height={55} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #E2E8F0', fontSize: 13 }} cursor={{ fill: '#EFF6FF' }} />
+                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                  {transactionStatusData.map((entry) => (
+                    <Cell key={entry.status} fill={TRANSACTION_STATUS_COLORS[entry.status] ?? '#2E5FAC'} />
+                  ))}
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
           </ChartCard>
         </div>

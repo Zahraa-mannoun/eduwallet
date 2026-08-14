@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { ChevronDown } from 'lucide-react';
 import type { ApiResponse } from '@eduwallet/shared';
 import { api, unwrap } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useSocketRefetch } from '../hooks/useSocketRefetch';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
+import { Avatar } from './Avatar';
 import { NotificationBell } from './NotificationBell';
 import {
   IconAlert,
@@ -13,7 +15,6 @@ import {
   IconBriefcase,
   IconBuilding,
   IconCash,
-  IconChevronDown,
   IconDashboard,
   IconEmail,
   IconGraduation,
@@ -61,17 +62,20 @@ const PAGE_META: Record<string, { title: string; breadcrumb: string }> = {
   '/settings': { title: 'Settings', breadcrumb: 'System / Settings' },
 };
 
-function getInitials(fullName: string | undefined): string {
-  if (!fullName) return '?';
-  const parts = fullName.trim().split(/\s+/);
-  const first = parts[0]?.[0] ?? '';
-  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? '') : '';
-  return (first + last).toUpperCase();
-}
+// Top-level items (plain leaves, and a group header whose child is active) get a left accent
+// bar + a subdued lighter-navy fill — a deliberately different, quieter treatment from the solid
+// blue pill used for the specific active item once you've drilled into a group (see
+// subNavLinkClass below), so the two levels of "you are here" never look identical.
+const topNavLinkClass = ({ isActive }: { isActive: boolean }) =>
+  `flex items-center gap-3 border-l-[3px] px-3 py-2 text-sm font-medium transition-all duration-200 ${
+    isActive
+      ? 'border-white bg-sidebar-hover text-white'
+      : 'border-transparent text-sidebar-muted hover:border-white/25 hover:bg-sidebar-hover/60 hover:text-white'
+  }`;
 
-const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-  `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-    isActive ? 'bg-primary text-white' : 'text-sidebar-muted hover:bg-sidebar-hover hover:text-white'
+const subNavLinkClass = ({ isActive }: { isActive: boolean }) =>
+  `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150 ${
+    isActive ? 'bg-primary text-white shadow-sm' : 'text-sidebar-muted hover:bg-sidebar-hover hover:text-white'
   }`;
 
 function NavBadge({ count }: { count: number }) {
@@ -83,9 +87,9 @@ function NavBadge({ count }: { count: number }) {
   );
 }
 
-function NavLeafLink({ item }: { item: NavLeaf }) {
+function NavLeafLink({ item, sub = false }: { item: NavLeaf; sub?: boolean }) {
   return (
-    <NavLink to={item.to} className={navLinkClass}>
+    <NavLink to={item.to} className={sub ? subNavLinkClass : topNavLinkClass}>
       <item.icon className="h-5 w-5 shrink-0" />
       <span className="flex-1 text-left">{item.label}</span>
       {item.badge !== undefined && <NavBadge count={item.badge} />}
@@ -107,21 +111,31 @@ function NavGroup({ group }: { group: NavGroupDef }) {
       <button
         type="button"
         onClick={() => setIsExpanded((expanded) => !expanded)}
-        className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-          isActive ? 'bg-primary text-white' : 'text-sidebar-muted hover:bg-sidebar-hover hover:text-white'
+        className={`flex w-full items-center gap-3 border-l-[3px] px-3 py-2 text-sm font-medium transition-all duration-200 ${
+          isActive
+            ? 'border-white bg-sidebar-hover text-white'
+            : 'border-transparent text-sidebar-muted hover:border-white/25 hover:bg-sidebar-hover/60 hover:text-white'
         }`}
       >
         <group.icon className="h-5 w-5 shrink-0" />
         <span className="flex-1 text-left">{group.label}</span>
-        <IconChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+        <ChevronDown
+          className={`h-4 w-4 transition-transform duration-300 ease-in-out ${isExpanded ? 'rotate-180' : ''}`}
+        />
       </button>
-      {isExpanded && (
-        <div className="mt-1 space-y-1 pl-4">
-          {group.items.map((item) => (
-            <NavLeafLink key={item.to} item={item} />
-          ))}
+      <div
+        className={`grid overflow-hidden transition-all duration-300 ease-in-out ${
+          isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+        }`}
+      >
+        <div className="min-h-0">
+          <div className="mt-1 space-y-1 py-0.5 pl-4">
+            {group.items.map((item) => (
+              <NavLeafLink key={item.to} item={item} sub />
+            ))}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -230,11 +244,10 @@ export function Layout({ children }: { children: ReactNode }) {
   };
 
   const pageMeta = PAGE_META[location.pathname] ?? { title: 'EduWallet Admin', breadcrumb: '' };
-  const initials = getInitials(admin?.fullName);
 
   return (
     <div className="flex min-h-screen bg-surface font-sans">
-      <aside className="flex w-64 shrink-0 flex-col bg-sidebar">
+      <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col bg-sidebar">
         <div className="flex items-center gap-2.5 px-5 py-5">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-sm font-bold text-white">
             EW
@@ -245,10 +258,13 @@ export function Layout({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4">
-          {sections.map((section) => (
-            <div key={section.heading}>
-              <p className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+        <nav className="sidebar-scroll flex-1 overflow-y-auto px-3 pb-4">
+          {sections.map((section, index) => (
+            <div
+              key={section.heading}
+              className={index > 0 ? 'mt-5 border-t border-white/10 pt-5' : ''}
+            >
+              <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                 {section.heading}
               </p>
               <div className="space-y-1">
@@ -264,11 +280,9 @@ export function Layout({ children }: { children: ReactNode }) {
           ))}
         </nav>
 
-        <div className="border-t border-white/10 px-4 py-4">
+        <div className="border-t border-white/10 bg-black/10 px-4 py-4">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-700 text-xs font-semibold text-white">
-              {initials}
-            </div>
+            <Avatar name={admin?.fullName ?? 'Admin User'} size="sm" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-white">{admin?.fullName ?? 'Admin User'}</p>
               <p className="truncate text-xs text-sidebar-muted">{admin?.email}</p>
@@ -278,7 +292,7 @@ export function Layout({ children }: { children: ReactNode }) {
               onClick={handleLogout}
               title="Logout"
               aria-label="Logout"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sidebar-muted hover:bg-sidebar-hover hover:text-white"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sidebar-muted transition-colors hover:bg-sidebar-hover hover:text-white"
             >
               <IconLogout className="h-4 w-4" />
             </button>
@@ -298,9 +312,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <NotificationBell />
             <div className="h-8 w-px bg-slate-200" />
             <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-xs font-semibold text-primary">
-                {initials}
-              </div>
+              <Avatar name={admin?.fullName ?? 'Admin User'} size="sm" />
               <span className="text-sm font-medium text-slate-700">{admin?.fullName}</span>
             </div>
           </div>

@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Ban, Building2, CheckCircle, MessageCircle, Wallet } from 'lucide-react';
 import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { AddFundsModal } from '../components/AddFundsModal';
-import { SuspendModal } from '../components/SuspendModal';
 import { EmptyState } from '../components/EmptyState';
+import { PageHeader } from '../components/PageHeader';
+import { Pagination } from '../components/Pagination';
+import { PersonCell } from '../components/PersonCell';
+import { SearchInput } from '../components/SearchInput';
 import { SkeletonRows } from '../components/SkeletonRows';
+import { SuspendModal } from '../components/SuspendModal';
+import { TableCard, TABLE_HEAD_ROW_CLASS, TABLE_TD_CLASS, TABLE_TH_CLASS, tableRowClass } from '../components/TableCard';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { formatDate } from '../lib/format';
 import type { AdminUser } from '../types/admin';
@@ -81,86 +87,98 @@ export function Institutions() {
 
   return (
     <div className="space-y-4">
-      <form
-        onSubmit={handleSearchSubmit}
-        className="flex max-w-xs gap-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-      >
-        <input
-          type="search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search by name or email…"
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-        />
-        <button
-          type="submit"
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-        >
-          Search
-        </button>
-      </form>
+      <PageHeader title="Institutions" subtitle="Manage institution accounts and scholarship disbursements" />
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+      <TableCard
+        title="All Institutions"
+        subtitle={`${total} institution${total === 1 ? '' : 's'}`}
+        actions={<SearchInput value={search} onChange={setSearch} onSubmit={handleSearchSubmit} />}
+      >
+        <table className="min-w-full divide-y divide-slate-100 text-sm">
+          <thead className={TABLE_HEAD_ROW_CLASS}>
             <tr>
-              <th className="px-4 py-3 text-left">Name</th>
-              <th className="px-4 py-3 text-left">Email</th>
-              <th className="px-4 py-3 text-left">Total Disbursements</th>
-              <th className="px-4 py-3 text-left">Joined</th>
-              <th className="px-4 py-3 text-left">Actions</th>
+              <th className={TABLE_TH_CLASS}>Institution</th>
+              <th className={TABLE_TH_CLASS}>Total Disbursements</th>
+              <th className={TABLE_TH_CLASS}>Joined</th>
+              <th className={TABLE_TH_CLASS}>Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {isLoading && <SkeletonRows columns={5} />}
+            {isLoading && <SkeletonRows columns={4} />}
             {!isLoading && users.length === 0 && (
               <tr>
-                <td colSpan={5}>
-                  <EmptyState title="No institutions found" />
+                <td colSpan={4}>
+                  <EmptyState icon={<Building2 className="h-8 w-8" />} title="No institutions found" />
                 </td>
               </tr>
             )}
             {!isLoading &&
-              users.map((user) => (
-                <tr key={user.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-900">
-                    <div className="flex items-center gap-1.5">
-                      <span>{user.fullName}</span>
-                      {user.suspended && user.hasSupportMessage && (
+              users.map((user, index) => (
+                <tr key={user.id} className={tableRowClass(index)}>
+                  <td className={TABLE_TD_CLASS}>
+                    <PersonCell
+                      name={user.fullName}
+                      email={user.email}
+                      extra={
+                        <>
+                          {user.suspended && user.hasSupportMessage && (
+                            <button
+                              type="button"
+                              title="View support message"
+                              onClick={() => navigate(`/support?highlight=${user.id}`)}
+                              className="rounded-lg p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                            >
+                              <MessageCircle className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          {user.suspended && (
+                            <span className="whitespace-nowrap text-xs font-normal text-red-500">
+                              (suspended)
+                            </span>
+                          )}
+                        </>
+                      }
+                    />
+                  </td>
+                  <td className={TABLE_TD_CLASS}>
+                    {user.disbursementsCount ? (
+                      <span className="text-base font-bold text-slate-900">{user.disbursementsCount}</span>
+                    ) : (
+                      <span className="text-slate-300">—</span>
+                    )}
+                  </td>
+                  <td className={`${TABLE_TD_CLASS} text-slate-500`}>{formatDate(user.createdAt)}</td>
+                  <td className={TABLE_TD_CLASS}>
+                    <div className="flex flex-wrap gap-2">
+                      {user.suspended ? (
                         <button
                           type="button"
-                          title="View support message"
-                          onClick={() => navigate(`/support?highlight=${user.id}`)}
-                          className="rounded-lg p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                          disabled={busyUserId === user.id}
+                          onClick={() => void toggleSuspend(user)}
+                          className="inline-flex items-center gap-1.5 rounded-full border-2 border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-600 transition-all duration-200 hover:scale-[1.03] hover:bg-emerald-50 disabled:opacity-50"
                         >
-                          💬
+                          <CheckCircle className="h-3.5 w-3.5" />
+                          Unsuspend
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={busyUserId === user.id}
+                          onClick={() => void toggleSuspend(user)}
+                          className="inline-flex items-center gap-1.5 rounded-full border-2 border-red-200 px-3 py-1 text-xs font-semibold text-red-600 transition-all duration-200 hover:scale-[1.03] hover:bg-red-50 disabled:opacity-50"
+                        >
+                          <Ban className="h-3.5 w-3.5" />
+                          Suspend
                         </button>
                       )}
-                      {user.suspended && (
-                        <span className="text-xs font-normal text-red-500">(suspended)</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">{user.email}</td>
-                  <td className="px-4 py-3 text-slate-600">{user.disbursementsCount ?? 0}</td>
-                  <td className="px-4 py-3 text-slate-500">{formatDate(user.createdAt)}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={busyUserId === user.id}
-                        onClick={() => void toggleSuspend(user)}
-                        className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                      >
-                        {user.suspended ? 'Unsuspend' : 'Suspend'}
-                      </button>
                       <button
                         type="button"
                         onClick={() => setFundsUser(user)}
-                        className="rounded-lg border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary-100"
+                        className="inline-flex items-center gap-1.5 rounded-full border-2 border-primary-200 bg-primary-50 px-3 py-1 text-xs font-semibold text-primary transition-all duration-200 hover:scale-[1.03] hover:bg-primary-100"
                       >
+                        <Wallet className="h-3.5 w-3.5" />
                         Add Funds
                       </button>
                     </div>
@@ -169,31 +187,17 @@ export function Institutions() {
               ))}
           </tbody>
         </table>
-      </div>
+      </TableCard>
 
-      <div className="flex items-center justify-between text-sm text-slate-500">
-        <span>
-          Page {page} of {totalPages} ({total} institutions)
-        </span>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 disabled:opacity-40"
-          >
-            Previous
-          </button>
-          <button
-            type="button"
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 disabled:opacity-40"
-          >
-            Next
-          </button>
-        </div>
-      </div>
+      {!isLoading && users.length > 0 && (
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          itemLabel="institutions"
+          onPageChange={setPage}
+        />
+      )}
 
       {fundsUser && (
         <AddFundsModal

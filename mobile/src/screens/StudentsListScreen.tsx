@@ -357,7 +357,12 @@ export default function StudentsListScreen(_props: ParentTabScreenProps<'Student
 
               <View style={styles.infoBox}>
                 <View style={styles.infoBoxHeader}>
-                  <Text style={styles.infoBoxIcon}>ℹ️</Text>
+                  <MaterialCommunityIcons
+                    name="information-outline"
+                    size={16}
+                    color={colors.primary}
+                    style={styles.infoBoxIcon}
+                  />
                   <Text style={styles.infoBoxTitle}>What is Approval Threshold?</Text>
                 </View>
                 <Text style={styles.infoBoxText}>
@@ -779,7 +784,6 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   infoBoxIcon: {
-    fontSize: 14,
     marginRight: 6,
   },
   infoBoxTitle: {

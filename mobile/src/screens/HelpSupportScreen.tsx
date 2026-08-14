@@ -152,9 +152,12 @@ export default function HelpSupportScreen({
           <View style={styles.formCard}>
             {sent ? (
               <View style={styles.successCard}>
-                <Text style={styles.successText}>
-                  ✅ Message sent! We&apos;ll get back to you within 24 hours.
-                </Text>
+                <View style={styles.successCardRow}>
+                  <MaterialCommunityIcons name="check-circle" size={20} color={colors.accent} />
+                  <Text style={styles.successText}>
+                    Message sent! We&apos;ll get back to you within 24 hours.
+                  </Text>
+                </View>
                 <TouchableOpacity onPress={resetForm}>
                   <Text style={styles.sendAnotherLink}>Send another message</Text>
                 </TouchableOpacity>
@@ -402,12 +405,17 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
   },
+  successCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   successText: {
+    flexShrink: 1,
     fontSize: 13,
     fontWeight: '600',
     color: '#065F46',
-    textAlign: 'center',
     lineHeight: 19,
+    marginLeft: 8,
   },
   sendAnotherLink: {
     fontSize: 12,

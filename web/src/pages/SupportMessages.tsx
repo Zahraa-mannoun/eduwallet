@@ -1,13 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { CheckCircle, Inbox, ShieldCheck } from 'lucide-react';
 import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
+import { DotBadge } from '../components/DotBadge';
 import { UnsuspendModal } from '../components/UnsuspendModal';
 import { EmptyState } from '../components/EmptyState';
+import { FilterTabs } from '../components/FilterTabs';
+import { PageHeader } from '../components/PageHeader';
+import { PersonCell } from '../components/PersonCell';
 import { SkeletonRows } from '../components/SkeletonRows';
+import { TableCard, TABLE_HEAD_ROW_CLASS, TABLE_TD_CLASS, TABLE_TH_CLASS, tableRowClass } from '../components/TableCard';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
-import { formatDateTime } from '../lib/format';
+import { formatDate, formatRelativeTime } from '../lib/format';
+import { roleTone } from '../lib/badgeTones';
 import { humanizeEnum } from '../lib/humanize';
 import type { SupportMessageRow } from '../types/admin';
 
@@ -65,178 +72,118 @@ export function SupportMessages() {
 
   const appealMessages = messages.filter((message) => message.type === 'SUSPENSION_APPEAL');
   const generalMessages = messages.filter((message) => message.type === 'GENERAL');
+  const rows = activeTab === 'appeals' ? appealMessages : generalMessages;
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-lg font-semibold text-slate-900">Support Messages</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Suspension appeals from suspended users, and general support requests.
-        </p>
-      </div>
-
-      <div className="flex gap-1 border-b border-slate-200">
-        <button
-          type="button"
-          onClick={() => setActiveTab('appeals')}
-          className={`px-4 py-2 text-sm font-medium ${
-            activeTab === 'appeals'
-              ? 'border-b-2 border-primary text-primary'
-              : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          Suspension Appeals
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('general')}
-          className={`px-4 py-2 text-sm font-medium ${
-            activeTab === 'general'
-              ? 'border-b-2 border-primary text-primary'
-              : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          General Support
-        </button>
-      </div>
+      <PageHeader
+        title="Support Messages"
+        subtitle="Suspension appeals from suspended users, and general support requests"
+      />
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      {activeTab === 'general' && (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-4 py-3 text-left">User</th>
-                <th className="px-4 py-3 text-left">Role</th>
-                <th className="px-4 py-3 text-left">Subject</th>
-                <th className="px-4 py-3 text-left">Message</th>
-                <th className="px-4 py-3 text-left">Date</th>
-                <th className="px-4 py-3 text-left">Status</th>
-                <th className="px-4 py-3 text-left">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {isLoading && <SkeletonRows columns={7} />}
-              {!isLoading && generalMessages.length === 0 && (
-                <tr>
-                  <td colSpan={7}>
-                    <EmptyState title="No general support requests yet" />
-                  </td>
-                </tr>
-              )}
-              {!isLoading &&
-                generalMessages.map((message) => {
-                  const isHighlighted = message.user.id === highlightUserId;
-                  return (
-                    <tr
-                      key={message.id}
-                      ref={isHighlighted ? highlightedRowRef : undefined}
-                      className={
-                        isHighlighted ? 'bg-amber-50 ring-1 ring-inset ring-amber-300' : 'hover:bg-slate-50'
-                      }
-                    >
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-slate-900">{message.user.fullName}</div>
-                        <div className="text-xs text-slate-500">{message.user.email}</div>
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">{humanizeEnum(message.user.userType)}</td>
-                      <td className="px-4 py-3 max-w-xs font-medium text-slate-800">
-                        {message.subject ?? '—'}
-                      </td>
-                      <td className="px-4 py-3 max-w-sm text-slate-700">{message.message}</td>
-                      <td className="px-4 py-3 text-slate-500">{formatDateTime(message.createdAt)}</td>
-                      <td className="px-4 py-3">
-                        <Badge tone={message.status === 'UNREAD' ? 'yellow' : 'gray'}>
-                          {message.status === 'UNREAD' ? 'Unread' : 'Read'}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-3">
-                        {message.status === 'UNREAD' && (
-                          <button
-                            type="button"
-                            disabled={busyMessageId === message.id}
-                            onClick={() => void markAsRead(message)}
-                            className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
-                          >
-                            Mark as Read
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {activeTab === 'appeals' && (
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+      <TableCard
+        title={activeTab === 'appeals' ? 'Suspension Appeals' : 'General Support'}
+        subtitle={`${rows.length} shown`}
+        actions={
+          <FilterTabs
+            tabs={[
+              { value: 'appeals', label: 'Suspension Appeals' },
+              { value: 'general', label: 'General Support' },
+            ]}
+            value={activeTab}
+            onChange={setActiveTab}
+          />
+        }
+      >
+        <table className="min-w-full divide-y divide-slate-100 text-sm">
+          <thead className={TABLE_HEAD_ROW_CLASS}>
             <tr>
-              <th className="px-4 py-3 text-left">User</th>
-              <th className="px-4 py-3 text-left">Role</th>
-              <th className="px-4 py-3 text-left">Message</th>
-              <th className="px-4 py-3 text-left">Date</th>
-              <th className="px-4 py-3 text-left">Status</th>
-              <th className="px-4 py-3 text-left">Actions</th>
+              <th className={TABLE_TH_CLASS}>User</th>
+              <th className={TABLE_TH_CLASS}>Message</th>
+              <th className={TABLE_TH_CLASS}>Date</th>
+              <th className={TABLE_TH_CLASS}>Status</th>
+              <th className={TABLE_TH_CLASS}>Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {isLoading && <SkeletonRows columns={6} />}
-            {!isLoading && appealMessages.length === 0 && (
+            {isLoading && <SkeletonRows columns={5} />}
+            {!isLoading && rows.length === 0 && (
               <tr>
-                <td colSpan={6}>
-                  <EmptyState title="No support messages yet" />
+                <td colSpan={5}>
+                  <EmptyState
+                    icon={<Inbox className="h-8 w-8" />}
+                    title={`No ${activeTab === 'appeals' ? 'support messages' : 'general support requests'} yet`}
+                  />
                 </td>
               </tr>
             )}
             {!isLoading &&
-              appealMessages.map((message) => {
+              rows.map((message, index) => {
                 const isHighlighted = message.user.id === highlightUserId;
                 return (
                   <tr
                     key={message.id}
                     ref={isHighlighted ? highlightedRowRef : undefined}
-                    className={isHighlighted ? 'bg-amber-50 ring-1 ring-inset ring-amber-300' : 'hover:bg-slate-50'}
+                    className={
+                      isHighlighted
+                        ? 'bg-amber-50 ring-1 ring-inset ring-amber-300'
+                        : tableRowClass(index)
+                    }
                   >
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-slate-900">{message.user.fullName}</div>
-                      <div className="text-xs text-slate-500">{message.user.email}</div>
+                    <td className={TABLE_TD_CLASS}>
+                      <PersonCell
+                        name={message.user.fullName}
+                        email={message.user.email}
+                        extra={
+                          <Badge tone={roleTone[message.user.userType] ?? 'gray'}>
+                            {humanizeEnum(message.user.userType)}
+                          </Badge>
+                        }
+                      />
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{humanizeEnum(message.user.userType)}</td>
-                    <td className="px-4 py-3 max-w-sm text-slate-700">{message.message}</td>
-                    <td className="px-4 py-3 text-slate-500">{formatDateTime(message.createdAt)}</td>
-                    <td className="px-4 py-3">
-                      <Badge tone={message.status === 'UNREAD' ? 'yellow' : 'gray'}>
+                    <td className={`${TABLE_TD_CLASS} max-w-sm`}>
+                      {message.subject && (
+                        <p className="truncate font-medium text-slate-800">{message.subject}</p>
+                      )}
+                      <p className="truncate text-sm italic text-slate-500">{message.message}</p>
+                    </td>
+                    <td className={TABLE_TD_CLASS}>
+                      <p className="text-slate-700">{formatDate(message.createdAt)}</p>
+                      <p className="text-xs text-slate-400">{formatRelativeTime(message.createdAt)}</p>
+                    </td>
+                    <td className={TABLE_TD_CLASS}>
+                      <DotBadge tone={message.status === 'UNREAD' ? 'yellow' : 'green'}>
                         {message.status === 'UNREAD' ? 'Unread' : 'Read'}
-                      </Badge>
+                      </DotBadge>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className={TABLE_TD_CLASS}>
                       <div className="flex flex-wrap gap-2">
                         {message.status === 'UNREAD' && (
                           <button
                             type="button"
                             disabled={busyMessageId === message.id}
                             onClick={() => void markAsRead(message)}
-                            className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                            className="inline-flex items-center gap-1.5 rounded-full border-2 border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition-all duration-200 hover:scale-[1.03] hover:bg-slate-50 disabled:opacity-40"
                           >
+                            <CheckCircle className="h-3.5 w-3.5" />
                             Mark as Read
                           </button>
                         )}
-                        {message.user.suspended ? (
-                          <button
-                            type="button"
-                            onClick={() => setUnsuspendTarget(message)}
-                            className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-40"
-                          >
-                            Unsuspend
-                          </button>
-                        ) : (
-                          <span className="text-xs text-slate-400">Not suspended</span>
-                        )}
+                        {activeTab === 'appeals' &&
+                          (message.user.suspended ? (
+                            <button
+                              type="button"
+                              onClick={() => setUnsuspendTarget(message)}
+                              className="inline-flex items-center gap-1.5 rounded-full border-2 border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-600 transition-all duration-200 hover:scale-[1.03] hover:bg-emerald-50"
+                            >
+                              <ShieldCheck className="h-3.5 w-3.5" />
+                              Unsuspend
+                            </button>
+                          ) : (
+                            <span className="text-xs text-slate-400">Not suspended</span>
+                          ))}
                       </div>
                     </td>
                   </tr>
@@ -244,8 +191,7 @@ export function SupportMessages() {
               })}
           </tbody>
         </table>
-      </div>
-      )}
+      </TableCard>
 
       {unsuspendTarget && (
         <UnsuspendModal

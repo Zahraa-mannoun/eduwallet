@@ -1,171 +1,100 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+  ArrowRight,
+  Banknote,
+  Briefcase,
+  CalendarClock,
+  FileText,
+  GraduationCap,
+  Mail,
+  MessageSquare,
+  PiggyBank,
+  ShieldAlert,
+  ShieldCheck,
+  UserX,
+  Users,
+  Wallet,
+} from 'lucide-react';
 import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { StatCard } from '../components/StatCard';
-import { Badge } from '../components/Badge';
-import { Modal } from '../components/Modal';
+import { DOT_COLOR } from '../components/DotBadge';
 import { EmptyState } from '../components/EmptyState';
+import { PageHeader } from '../components/PageHeader';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { useSocketRefetch } from '../hooks/useSocketRefetch';
-import { severityTone } from '../lib/badgeTones';
-import { formatDate, formatMoney } from '../lib/format';
-import { transactionStatusMeta, TRANSACTION_STATUS_LABELS } from '../lib/transactionStatus';
+import { formatMoney, formatRelativeTime } from '../lib/format';
 import { humanizeEnum } from '../lib/humanize';
-import type { AnalyticsResult, FraudAlertRow, SystemStats, TransactionRow } from '../types/admin';
+import { transactionStatusMeta } from '../lib/transactionStatus';
+import { bucketTransaction } from '../lib/transactionKind';
+import type { SupportMessageRow, SystemStats, TransactionRow } from '../types/admin';
 
-type RolloverResult = {
-  month: string;
-  processed: Array<{ walletId: string; userId: string; amountSaved: string }>;
-};
+// Turns a raw transaction row into a one-line activity feed entry — description text plus the
+// status-derived tone that drives the leading dot color. Reuses bucketTransaction/
+// transactionStatusMeta (the same classification Transactions.tsx and Dashboard's old status
+// chart used) instead of re-deriving transaction "kind" from scratch.
+function activityDescription(tx: TransactionRow): { text: string; tone: ReturnType<typeof transactionStatusMeta>['tone'] } {
+  const kind = bucketTransaction(tx);
+  const statusMeta = transactionStatusMeta(tx);
+  const amount = formatMoney(tx.amount, tx.currency);
+  const categoryLabel = humanizeEnum(tx.category);
+  const senderName =
+    tx.fromWallet?.user.fullName ??
+    (tx.note === 'Admin added funds' || tx.note === 'Wallet top-up' ? 'Admin' : 'Someone');
+  const receiverName = tx.toWallet?.user.fullName ?? tx.receiverName ?? 'someone';
 
-const STATUS_COLORS: Record<string, string> = {
-  AUTO_APPROVED: '#10B981',
-  APPROVED: '#2E5FAC',
-  REJECTED: '#DC2626',
-  EMERGENCY: '#F97316',
-  PENDING_PARENT_APPROVAL: '#F59E0B',
-  PENDING: '#94A3B8',
-  COMPLETED: '#059669',
-};
-
-function formatMonthLabel(month: string): string {
-  const [year, monthNum] = month.split('-').map(Number);
-  const date = new Date(year, (monthNum ?? 1) - 1, 1);
-  return date.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  if (kind === 'WITHDRAWAL') {
+    return { text: `${senderName} withdrew ${amount} · ${categoryLabel}`, tone: statusMeta.tone };
+  }
+  if (kind === 'FUNDING') {
+    const verb = tx.fromWallet?.user.userType === 'INSTITUTION' ? 'disbursed' : 'sent';
+    return { text: `${senderName} ${verb} ${amount} to ${receiverName} · ${categoryLabel}`, tone: statusMeta.tone };
+  }
+  if (kind === 'CARD_PAYMENT') {
+    return { text: `${senderName} spent ${amount} at ${receiverName}`, tone: statusMeta.tone };
+  }
+  return { text: `${senderName} sent ${amount} to ${receiverName} · ${statusMeta.label}`, tone: statusMeta.tone };
 }
 
-function formatShortDate(iso: string): string {
-  const [, month, day] = iso.split('-');
-  return `${month}/${day}`;
-}
-
-function RolloverConfirmModal({
-  onClose,
-  onConfirmed,
+function NeedsAttentionCard({
+  count,
+  label,
+  description,
+  onReview,
 }: {
-  onClose: () => void;
-  onConfirmed: (result: RolloverResult) => void;
+  count: number;
+  label: string;
+  description: string;
+  onReview: () => void;
 }) {
-  const [isRunning, setIsRunning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleConfirm = async () => {
-    setIsRunning(true);
-    setError(null);
-    try {
-      const res = await api.post<ApiResponse<RolloverResult>>('/savings/rollover');
-      onConfirmed(unwrap(res.data));
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setIsRunning(false);
-    }
-  };
-
+  const needsAttention = count > 0;
   return (
-    <Modal title="Trigger Monthly Rollover" onClose={onClose}>
-      <div className="space-y-4">
-        <p className="text-sm text-slate-700">
-          Are you sure you want to trigger the monthly rollover for all students?
-        </p>
-        <p className="text-xs text-slate-400">
-          This sweeps every student&apos;s unspent budget for the current month into their
-          Personal Savings and archives the month&apos;s budget categories. This is the same job
-          that runs automatically at midnight on the last day of every month.
-        </p>
-
-        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={isRunning}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleConfirm}
-            disabled={isRunning}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-60"
-          >
-            {isRunning ? 'Running…' : 'Confirm'}
-          </button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
-function SystemActionsCard() {
-  const [modalOpen, setModalOpen] = useState(false);
-  const [result, setResult] = useState<RolloverResult | null>(null);
-
-  const totalSaved = result?.processed.reduce((sum, entry) => sum + Number(entry.amountSaved), 0) ?? 0;
-
-  return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-5 shadow-sm">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">System Actions</h2>
-
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3">
-        <div>
-          <p className="text-sm font-medium text-slate-700">Personal Savings — Monthly Rollover</p>
-          <p className="mt-1 text-sm text-slate-500">
-            Normally runs automatically at midnight on the last day of every month. Trigger it
-            manually here for demo or testing purposes.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            setResult(null);
-            setModalOpen(true);
-          }}
-          className="whitespace-nowrap rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
-        >
-          Trigger Monthly Rollover
-        </button>
-      </div>
-
-      {result && (
-        <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-          Rollover complete for {formatMonthLabel(result.month)} — {result.processed.length}{' '}
-          student{result.processed.length === 1 ? '' : 's'} saved a total of ${totalSaved.toFixed(2)}.
-        </p>
-      )}
-
-      {modalOpen && (
-        <RolloverConfirmModal
-          onClose={() => setModalOpen(false)}
-          onConfirmed={(res) => {
-            setResult(res);
-            setModalOpen(false);
-          }}
-        />
-      )}
+    <div
+      className={`rounded-xl border border-slate-200 border-l-4 bg-white p-5 shadow-sm ${
+        needsAttention ? 'border-l-red-400' : 'border-l-emerald-400'
+      }`}
+    >
+      <p className={`text-3xl font-bold ${needsAttention ? 'text-slate-900' : 'text-slate-400'}`}>{count}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-700">{label}</p>
+      <p className="mt-0.5 text-xs text-slate-400">{description}</p>
+      <button
+        type="button"
+        onClick={onReview}
+        className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+      >
+        Review Now
+        <ArrowRight className="h-3 w-3" />
+      </button>
     </div>
   );
 }
 
 export function Dashboard() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState<SystemStats | null>(null);
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
-  const [alerts, setAlerts] = useState<FraudAlertRow[]>([]);
-  const [dailyVolume, setDailyVolume] = useState<AnalyticsResult['spending']['dailyVolume']>([]);
+  const [pendingSupportCount, setPendingSupportCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -173,20 +102,16 @@ export function Dashboard() {
     setIsLoading(true);
     setError(null);
     try {
-      const [statsRes, txRes, alertsRes, analyticsRes] = await Promise.all([
+      const [statsRes, txRes, supportRes] = await Promise.all([
         api.get<ApiResponse<SystemStats>>('/admin/stats'),
         api.get<ApiResponse<{ transactions: TransactionRow[] }>>('/admin/transactions', {
-          params: { limit: 10 },
+          params: { limit: 5 },
         }),
-        api.get<ApiResponse<FraudAlertRow[]>>('/admin/fraud-alerts', {
-          params: { resolved: 'false' },
-        }),
-        api.get<ApiResponse<AnalyticsResult>>('/admin/analytics'),
+        api.get<ApiResponse<SupportMessageRow[]>>('/support/messages'),
       ]);
       setStats(unwrap(statsRes.data));
       setTransactions(unwrap(txRes.data).transactions);
-      setAlerts(unwrap(alertsRes.data).slice(0, 5));
-      setDailyVolume(unwrap(analyticsRes.data).spending.dailyVolume);
+      setPendingSupportCount(unwrap(supportRes.data).filter((m) => m.status === 'UNREAD').length);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -213,19 +138,13 @@ export function Dashboard() {
     return null;
   }
 
-  const chartData = Object.entries(stats.transactions.byStatus).map(([status, count]) => ({
-    status,
-    label: TRANSACTION_STATUS_LABELS[status] ?? humanizeEnum(status),
-    count,
-  }));
-
-  const volumeData = dailyVolume.map((row) => ({ ...row, label: formatShortDate(row.date) }));
-
   const pluralize = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`;
   const usersSubtitle = [
     pluralize(stats.users.studentCount, 'student'),
     pluralize(stats.users.parentCount, 'parent'),
     pluralize(stats.users.institutionCount, 'institution'),
+    pluralize(stats.users.agentCount, 'agent'),
+    pluralize(stats.users.adminCount, 'admin'),
   ].join(' · ');
 
   const today = new Date().toLocaleDateString(undefined, {
@@ -235,23 +154,44 @@ export function Dashboard() {
     day: 'numeric',
   });
 
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const activeUsersToday = new Set(
+    transactions
+      .filter((tx) => tx.createdAt.slice(0, 10) === todayKey)
+      .flatMap((tx) => [tx.fromWallet?.user.id, tx.toWallet?.user.id])
+      .filter((id): id is string => Boolean(id))
+  ).size;
+
+  const totalBalance = Object.values(stats.wallets.balanceByCurrency).reduce((sum, v) => sum + v, 0);
+
+  const iconClass = 'h-5 w-5';
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-slate-900">Dashboard</h1>
-        <p className="mt-0.5 text-sm text-slate-500">{today}</p>
-      </div>
+      <PageHeader title="Dashboard" subtitle={today} />
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Total Users" value={stats.users.total} subtitle={usersSubtitle} accent="blue" />
-        <StatCard label="Total Transactions" value={stats.transactions.total} accent="indigo" />
+        <StatCard
+          label="Total Users"
+          value={stats.users.total}
+          subtitle={usersSubtitle}
+          accent="blue"
+          icon={<Users className={iconClass} />}
+        />
+        <StatCard
+          label="Total Transactions"
+          value={stats.transactions.total}
+          accent="indigo"
+          icon={<Banknote className={iconClass} />}
+        />
         <StatCard
           label="Active Fraud Alerts"
           value={stats.fraudAlerts.active}
           accent="red"
           emphasizeValue={stats.fraudAlerts.active > 0}
+          icon={<ShieldAlert className={iconClass} />}
         />
         <StatCard
           label="Pending KYC"
@@ -259,186 +199,149 @@ export function Dashboard() {
           subtitle="Students awaiting review"
           accent="orange"
           emphasizeValue={stats.kyc.pending > 0}
+          icon={<ShieldCheck className={iconClass} />}
         />
-        <StatCard label="Total Withdrawals" value={stats.withdrawals.totalCompleted} accent="teal" />
-        <StatCard label="Withdrawals Today" value={stats.withdrawals.today} accent="teal" />
-        <StatCard label="Pending Reports" value={stats.reportRequests.pending} accent="purple" />
+        <StatCard
+          label="Total Withdrawals"
+          value={stats.withdrawals.totalCompleted}
+          accent="teal"
+          icon={<Wallet className={iconClass} />}
+        />
+        <StatCard
+          label="Withdrawals Today"
+          value={stats.withdrawals.today}
+          accent="teal"
+          icon={<CalendarClock className={iconClass} />}
+        />
+        <StatCard
+          label="Pending Reports"
+          value={stats.reportRequests.pending}
+          accent="purple"
+          icon={<FileText className={iconClass} />}
+        />
         <StatCard
           label="Scholarships This Month"
           value={formatMoney(stats.scholarships.totalThisMonth, 'USD')}
           accent="green"
+          icon={<GraduationCap className={iconClass} />}
         />
 
-        <StatCard label="Active Agents" value={stats.agents.active} accent="slate" />
+        <StatCard
+          label="Active Agents"
+          value={stats.agents.active}
+          accent="slate"
+          icon={<Briefcase className={iconClass} />}
+        />
         <StatCard
           label="Suspended Agents"
           value={stats.agents.suspended}
           accent="red"
           emphasizeValue={stats.agents.suspended > 0}
+          icon={<UserX className={iconClass} />}
         />
         <StatCard
           label="Pending Agent Messages"
           value={stats.agentMessages.pending}
           accent="yellow"
           emphasizeValue={stats.agentMessages.pending > 0}
+          icon={<MessageSquare className={iconClass} />}
         />
         <StatCard
           label="Pending Email Change Requests"
           value={stats.emailChangeRequests.pending}
           accent="yellow"
           emphasizeValue={stats.emailChangeRequests.pending > 0}
+          icon={<Mail className={iconClass} />}
         />
         <StatCard
           label="Total Personal Savings"
           value={formatMoney(stats.personalSavings.totalBalance, 'USD')}
           accent="slate"
+          icon={<PiggyBank className={iconClass} />}
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">Transactions by Status</h2>
-          <p className="text-xs text-slate-400">Breakdown of all transactions by current status</p>
-          <div className="mt-4 h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} interval={0} angle={-20} textAnchor="end" height={55} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                <Tooltip />
-                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                  {chartData.map((entry) => (
-                    <Cell key={entry.status} fill={STATUS_COLORS[entry.status] ?? '#2E5FAC'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-sm font-semibold text-slate-900">Transaction Volume — Last 30 Days</h2>
-          <p className="text-xs text-slate-400">Total spending volume per day</p>
-          <div className="mt-4 h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={volumeData}>
-                <defs>
-                  <linearGradient id="volumeFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#2E5FAC" stopOpacity={0.25} />
-                    <stop offset="100%" stopColor="#2E5FAC" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip formatter={(value: number) => formatMoney(value, 'USD')} />
-                <Area
-                  type="monotone"
-                  dataKey="total"
-                  stroke="#2E5FAC"
-                  strokeWidth={2}
-                  fill="url(#volumeFill)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+      <div>
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">Needs Attention</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <NeedsAttentionCard
+            count={stats.kyc.pending}
+            label="Pending KYC Reviews"
+            description="Students awaiting document review"
+            onReview={() => navigate('/kyc')}
+          />
+          <NeedsAttentionCard
+            count={stats.fraudAlerts.active}
+            label="Active Fraud Alerts"
+            description="Suspicious transactions to review"
+            onReview={() => navigate('/fraud')}
+          />
+          <NeedsAttentionCard
+            count={stats.reportRequests.pending}
+            label="Pending Reports"
+            description="Parent report requests awaiting generation"
+            onReview={() => navigate('/reports')}
+          />
+          <NeedsAttentionCard
+            count={pendingSupportCount}
+            label="Pending Support Messages"
+            description="Unread messages from users"
+            onReview={() => navigate('/support')}
+          />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-          <h2 className="border-b border-slate-200 px-5 py-3 text-sm font-semibold text-slate-900">
-            Recent Transactions
-          </h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-4 py-2.5 text-left">Sender</th>
-                  <th className="px-4 py-2.5 text-left">Receiver</th>
-                  <th className="px-4 py-2.5 text-left">Amount</th>
-                  <th className="px-4 py-2.5 text-left">Category</th>
-                  <th className="px-4 py-2.5 text-left">Status</th>
-                  <th className="px-4 py-2.5 text-left">Date</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {transactions.map((tx) => {
-                  const statusMeta = transactionStatusMeta(tx);
-                  return (
-                    <tr key={tx.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-2.5 text-slate-600">
-                        {tx.fromWallet
-                          ? tx.fromWallet.user.fullName
-                          : tx.note === 'Admin added funds' || tx.note === 'Wallet top-up'
-                            ? 'Admin'
-                            : '—'}
-                      </td>
-                      <td className="px-4 py-2.5 text-slate-600">
-                        {tx.toWallet?.user.fullName ?? tx.receiverName ?? '—'}
-                      </td>
-                      <td className="px-4 py-2.5 font-medium text-slate-900">
-                        {formatMoney(tx.amount, tx.currency)}
-                      </td>
-                      <td className="px-4 py-2.5 text-slate-600">{humanizeEnum(tx.category)}</td>
-                      <td className="px-4 py-2.5">
-                        <Badge tone={statusMeta.tone}>{statusMeta.label}</Badge>
-                      </td>
-                      <td className="px-4 py-2.5 text-slate-500">{formatDate(tx.createdAt)}</td>
-                    </tr>
-                  );
-                })}
-                {transactions.length === 0 && (
-                  <tr>
-                    <td colSpan={6}>
-                      <EmptyState title="No transactions yet" />
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-md">
+        <h2 className="text-sm font-bold text-slate-900">Recent Activity</h2>
+        <p className="text-xs text-slate-400">Latest system events</p>
+
+        <div className="mt-4">
+          {transactions.length === 0 ? (
+            <EmptyState icon={<Banknote className="h-8 w-8" />} title="No recent activity" />
+          ) : (
+            <div className="space-y-3">
+              {transactions.map((tx) => {
+                const { text, tone } = activityDescription(tx);
+                return (
+                  <div
+                    key={tx.id}
+                    className="flex items-center gap-3 border-b border-slate-100 pb-3 last:border-0 last:pb-0"
+                  >
+                    <span className={`h-2 w-2 shrink-0 rounded-full ${DOT_COLOR[tone]}`} />
+                    <p className="flex-1 truncate text-sm text-slate-700">{text}</p>
+                    <p className="shrink-0 text-xs text-slate-400">{formatRelativeTime(tx.createdAt)}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-          <h2 className="border-b border-slate-200 px-5 py-3 text-sm font-semibold text-slate-900">
-            Recent Fraud Alerts
-          </h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-4 py-2.5 text-left">Type</th>
-                  <th className="px-4 py-2.5 text-left">Severity</th>
-                  <th className="px-4 py-2.5 text-left">Date</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {alerts.map((alert) => (
-                  <tr key={alert.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-2.5 text-slate-700">{humanizeEnum(alert.alertType)}</td>
-                    <td className="px-4 py-2.5">
-                      <Badge tone={severityTone[alert.severity] ?? 'gray'}>
-                        {humanizeEnum(alert.severity)}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-2.5 text-slate-500">{formatDate(alert.createdAt)}</td>
-                  </tr>
-                ))}
-                {alerts.length === 0 && (
-                  <tr>
-                    <td colSpan={3}>
-                      <EmptyState title="No active fraud alerts" />
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={() => navigate('/transactions')}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+          >
+            View all
+            <ArrowRight className="h-3 w-3" />
+          </button>
         </div>
       </div>
 
-      <SystemActionsCard />
+      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-around">
+          <div className="text-center sm:text-left">
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Active Users Today</p>
+            <p className="mt-1 text-2xl font-bold text-slate-900">{activeUsersToday}</p>
+          </div>
+          <div className="hidden h-10 w-px bg-slate-200 sm:block" />
+          <div className="text-center sm:text-left">
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Total Balance in System</p>
+            <p className="mt-1 text-2xl font-bold text-slate-900">{formatMoney(totalBalance, 'USD')}</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

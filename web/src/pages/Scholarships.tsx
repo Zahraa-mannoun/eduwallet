@@ -1,14 +1,18 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
+import { ChevronDown, ChevronRight, GraduationCap } from 'lucide-react';
 import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
+import { Avatar } from '../components/Avatar';
 import { Badge } from '../components/Badge';
+import { EmptyState } from '../components/EmptyState';
+import { PageHeader } from '../components/PageHeader';
+import { SkeletonRows } from '../components/SkeletonRows';
+import { TableCard, TABLE_HEAD_ROW_CLASS, TABLE_TD_CLASS, TABLE_TH_CLASS, tableRowClass } from '../components/TableCard';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { useSocketRefetch } from '../hooks/useSocketRefetch';
 import { categoryTone } from '../lib/badgeTones';
 import { formatDate, formatMoney } from '../lib/format';
 import { humanizeEnum } from '../lib/humanize';
-import { EmptyState } from '../components/EmptyState';
-import { SkeletonRows } from '../components/SkeletonRows';
 import type { TransactionRow } from '../types/admin';
 
 type ScholarshipRow = {
@@ -117,75 +121,81 @@ export function Scholarships() {
 
   return (
     <div className="space-y-4">
+      <PageHeader title="Scholarships" subtitle="Institutional scholarship disbursements, grouped by recipient category" />
+
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+      <TableCard title="Disbursements" subtitle={`${rows.length} groups`}>
+        <table className="min-w-full divide-y divide-slate-100 text-sm">
+          <thead className={TABLE_HEAD_ROW_CLASS}>
             <tr>
-              <th className="px-4 py-3 text-left">Institution Name</th>
-              <th className="px-4 py-3 text-left">Students Count</th>
-              <th className="px-4 py-3 text-left">Total Amount</th>
-              <th className="px-4 py-3 text-left">Category</th>
-              <th className="px-4 py-3 text-left">Date</th>
+              <th className={TABLE_TH_CLASS}>Institution Name</th>
+              <th className={TABLE_TH_CLASS}>Students Count</th>
+              <th className={TABLE_TH_CLASS}>Total Amount</th>
+              <th className={TABLE_TH_CLASS}>Category</th>
+              <th className={TABLE_TH_CLASS}>Date</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {isLoading && <SkeletonRows columns={5} />}
+            {isLoading && <SkeletonRows columns={5} avatarColumn={false} />}
             {!isLoading && rows.length === 0 && (
               <tr>
                 <td colSpan={5}>
-                  <EmptyState title="No scholarship disbursements found" />
+                  <EmptyState
+                    icon={<GraduationCap className="h-8 w-8" />}
+                    title="No scholarship disbursements found"
+                  />
                 </td>
               </tr>
             )}
             {!isLoading &&
-              rows.map((row) => {
+              rows.map((row, index) => {
                 const isExpanded = expandedKey === row.key;
                 return (
                   <Fragment key={row.key}>
                     <tr
-                      className="cursor-pointer hover:bg-slate-50"
+                      className={tableRowClass(index, 'cursor-pointer')}
                       onClick={() => setExpandedKey(isExpanded ? null : row.key)}
                     >
-                      <td className="px-4 py-3 font-medium text-slate-900">
+                      <td className={`${TABLE_TD_CLASS} font-medium text-slate-900`}>
                         <span className="inline-flex items-center gap-1.5">
-                          <svg
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth={2}
-                            className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
-                          </svg>
+                          {isExpanded ? (
+                            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                          ) : (
+                            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                          )}
                           {row.institutionName}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-slate-700">{row.studentsCount}</td>
-                      <td className="px-4 py-3 font-medium text-slate-900">
+                      <td className={TABLE_TD_CLASS}>
+                        <Badge tone="blue">{row.studentsCount}</Badge>
+                      </td>
+                      <td className={`${TABLE_TD_CLASS} font-bold text-slate-900`}>
                         {formatMoney(row.totalAmount, row.currency)}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className={TABLE_TD_CLASS}>
                         <Badge tone={categoryTone[row.category] ?? 'gray'}>{humanizeEnum(row.category)}</Badge>
                       </td>
-                      <td className="px-4 py-3 text-slate-500">{formatDate(row.date)}</td>
+                      <td className={`${TABLE_TD_CLASS} text-slate-500`}>{formatDate(row.date)}</td>
                     </tr>
                     {isExpanded && (
-                      <tr className="bg-slate-50">
-                        <td colSpan={5} className="px-4 py-3">
-                          <p className="mb-1.5 text-xs font-semibold uppercase text-slate-500">
-                            Recipient Students
-                          </p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {row.studentNames.map((name) => (
-                              <span
-                                key={name}
-                                className="rounded-full bg-white px-2.5 py-1 text-xs text-slate-700 ring-1 ring-inset ring-slate-200"
-                              >
-                                {name}
-                              </span>
-                            ))}
+                      <tr className="bg-slate-50/70">
+                        <td colSpan={5} className="px-6 py-4">
+                          <div className="rounded-xl border border-slate-200 bg-white p-4">
+                            <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                              Recipient Students
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {row.studentNames.map((name) => (
+                                <span
+                                  key={name}
+                                  className="inline-flex items-center gap-2 rounded-full bg-slate-50 py-1 pl-1 pr-3 text-xs text-slate-700 ring-1 ring-inset ring-slate-200"
+                                >
+                                  <Avatar name={name} size="sm" />
+                                  <span className="font-medium text-slate-900">{name}</span>
+                                </span>
+                              ))}
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -195,7 +205,7 @@ export function Scholarships() {
               })}
           </tbody>
         </table>
-      </div>
+      </TableCard>
     </div>
   );
 }

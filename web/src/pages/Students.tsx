@@ -1,18 +1,25 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Ban, CheckCircle, GraduationCap, MessageCircle } from 'lucide-react';
 import type { ApiResponse, KYCStatus } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
-import { Badge } from '../components/Badge';
+import { DotBadge } from '../components/DotBadge';
+import { EmptyState } from '../components/EmptyState';
+import { FilterTabs } from '../components/FilterTabs';
+import { PageHeader } from '../components/PageHeader';
+import { Pagination } from '../components/Pagination';
+import { PersonCell } from '../components/PersonCell';
+import { SearchInput } from '../components/SearchInput';
+import { SkeletonRows } from '../components/SkeletonRows';
 import { SuspendModal } from '../components/SuspendModal';
+import { TableCard, TABLE_HEAD_ROW_CLASS, TABLE_TD_CLASS, TABLE_TH_CLASS, tableRowClass } from '../components/TableCard';
 import { UnsuspendModal } from '../components/UnsuspendModal';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { useSocketRefetch } from '../hooks/useSocketRefetch';
 import { getKycDisplayStatus } from '../lib/kycDisplayStatus';
 import { formatDate } from '../lib/format';
 import { humanizeEnum } from '../lib/humanize';
-import { EmptyState } from '../components/EmptyState';
-import { SkeletonRows } from '../components/SkeletonRows';
 import type { AdminUser } from '../types/admin';
 
 const KYC_FILTERS: Array<KYCStatus | 'ALL'> = ['ALL', 'VERIFIED', 'PENDING', 'REJECTED'];
@@ -81,133 +88,123 @@ export function Students() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <form onSubmit={handleSearchSubmit} className="flex flex-1 gap-2">
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search by name or email…"
-            className="w-full max-w-xs rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          />
-          <button
-            type="submit"
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-          >
-            Search
-          </button>
-        </form>
-
-        <div className="flex gap-1">
-          {KYC_FILTERS.map((status) => (
-            <button
-              key={status}
-              type="button"
-              onClick={() => {
-                setKycFilter(status);
-                setPage(1);
-              }}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-                kycFilter === status
-                  ? 'bg-primary text-white'
-                  : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
-              }`}
-            >
-              {status === 'ALL' ? 'All' : humanizeEnum(status)}
-            </button>
-          ))}
-        </div>
-      </div>
+      <PageHeader title="Students" subtitle="Manage student accounts and KYC status" />
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+      <TableCard
+        title="All Students"
+        subtitle={`${total} student${total === 1 ? '' : 's'}`}
+        actions={
+          <>
+            <SearchInput value={search} onChange={setSearch} onSubmit={handleSearchSubmit} />
+            <FilterTabs
+              tabs={KYC_FILTERS.map((status) => ({
+                value: status,
+                label: status === 'ALL' ? 'All' : humanizeEnum(status),
+              }))}
+              value={kycFilter}
+              onChange={(value) => {
+                setKycFilter(value);
+                setPage(1);
+              }}
+            />
+          </>
+        }
+      >
+        <table className="min-w-full divide-y divide-slate-100 text-sm">
+          <thead className={TABLE_HEAD_ROW_CLASS}>
             <tr>
-              <th className="px-4 py-3 text-left">Name</th>
-              <th className="px-4 py-3 text-left">Email</th>
-              <th className="px-4 py-3 text-left">KYC Status</th>
-              <th className="px-4 py-3 text-left">Joined</th>
-              <th className="px-4 py-3 text-left">Actions</th>
+              <th className={TABLE_TH_CLASS}>Student</th>
+              <th className={TABLE_TH_CLASS}>KYC Status</th>
+              <th className={TABLE_TH_CLASS}>Joined</th>
+              <th className={TABLE_TH_CLASS}>Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {isLoading && <SkeletonRows columns={5} />}
+            {isLoading && <SkeletonRows columns={4} />}
             {!isLoading && users.length === 0 && (
               <tr>
-                <td colSpan={5}>
-                  <EmptyState title="No students found" message="Try adjusting your search or filter." />
+                <td colSpan={4}>
+                  <EmptyState
+                    icon={<GraduationCap className="h-8 w-8" />}
+                    title="No students found"
+                    message="Try adjusting your search or filter."
+                  />
                 </td>
               </tr>
             )}
             {!isLoading &&
-              users.map((user) => (
-                <tr key={user.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium text-slate-900">
-                    <div className="flex items-center gap-1.5">
-                      <span>{user.fullName}</span>
-                      {user.suspended && user.hasSupportMessage && (
+              users.map((user, index) => {
+                const status = getKycDisplayStatus(user.kycStatus, user.hasDocuments);
+                return (
+                  <tr key={user.id} className={tableRowClass(index)}>
+                    <td className={TABLE_TD_CLASS}>
+                      <PersonCell
+                        name={user.fullName}
+                        email={user.email}
+                        extra={
+                          <>
+                            {user.suspended && user.hasSupportMessage && (
+                              <button
+                                type="button"
+                                title="View support message"
+                                onClick={() => navigate(`/support?highlight=${user.id}`)}
+                                className="rounded-lg p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                              >
+                                <MessageCircle className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                            {user.suspended && (
+                              <span className="whitespace-nowrap text-xs font-normal text-red-500">
+                                (suspended)
+                              </span>
+                            )}
+                          </>
+                        }
+                      />
+                    </td>
+                    <td className={TABLE_TD_CLASS}>
+                      <DotBadge tone={status.tone}>{status.label}</DotBadge>
+                    </td>
+                    <td className={`${TABLE_TD_CLASS} text-slate-500`}>{formatDate(user.createdAt)}</td>
+                    <td className={TABLE_TD_CLASS}>
+                      {user.suspended ? (
                         <button
                           type="button"
-                          title="View support message"
-                          onClick={() => navigate(`/support?highlight=${user.id}`)}
-                          className="rounded-lg p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                          onClick={() => handleSuspendToggleClick(user)}
+                          className="inline-flex items-center gap-1.5 rounded-full border-2 border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-600 transition-all duration-200 hover:scale-[1.03] hover:bg-emerald-50"
                         >
-                          💬
+                          <CheckCircle className="h-3.5 w-3.5" />
+                          Unsuspend
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleSuspendToggleClick(user)}
+                          className="inline-flex items-center gap-1.5 rounded-full border-2 border-red-200 px-3 py-1 text-xs font-semibold text-red-600 transition-all duration-200 hover:scale-[1.03] hover:bg-red-50"
+                        >
+                          <Ban className="h-3.5 w-3.5" />
+                          Suspend
                         </button>
                       )}
-                      {user.suspended && (
-                        <span className="text-xs font-normal text-red-500">(suspended)</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">{user.email}</td>
-                  <td className="px-4 py-3">
-                    {(() => {
-                      const status = getKycDisplayStatus(user.kycStatus, user.hasDocuments);
-                      return <Badge tone={status.tone}>{status.label}</Badge>;
-                    })()}
-                  </td>
-                  <td className="px-4 py-3 text-slate-500">{formatDate(user.createdAt)}</td>
-                  <td className="px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => handleSuspendToggleClick(user)}
-                      className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                    >
-                      {user.suspended ? 'Unsuspend' : 'Suspend'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                );
+              })}
           </tbody>
         </table>
-      </div>
+      </TableCard>
 
-      <div className="flex items-center justify-between text-sm text-slate-500">
-        <span>
-          Page {page} of {totalPages} ({total} students)
-        </span>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 disabled:opacity-40"
-          >
-            Previous
-          </button>
-          <button
-            type="button"
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 disabled:opacity-40"
-          >
-            Next
-          </button>
-        </div>
-      </div>
+      {!isLoading && users.length > 0 && (
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          itemLabel="students"
+          onPageChange={setPage}
+        />
+      )}
 
       {suspendTarget && (
         <SuspendModal

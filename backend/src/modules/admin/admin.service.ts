@@ -71,6 +71,7 @@ export async function getUsers(filters: GetUsersInput): Promise<{
     disbursementsCount?: number;
     hasDocuments?: boolean;
     hasSupportMessage: boolean;
+    hasResubmitted?: boolean;
   })[];
   total: number;
   page: number;
@@ -136,6 +137,10 @@ export async function getUsers(filters: GetUsersInput): Promise<{
   }
 
   let studentIdsWithDocuments = new Set<string>();
+  // Same "rejected, then uploaded something newer" definition as kyc.service.ts's
+  // getPendingKYC() — a student only counts once they've actually resubmitted, not just
+  // because they were rejected at some point.
+  let studentIdsWithResubmission = new Set<string>();
   if (filters.userType === 'STUDENT' && userIds.length > 0) {
     const documentOwners = await prisma.academicDocument.findMany({
       where: { userId: { in: userIds } },
@@ -143,6 +148,23 @@ export async function getUsers(filters: GetUsersInput): Promise<{
       distinct: ['userId'],
     });
     studentIdsWithDocuments = new Set(documentOwners.map((doc) => doc.userId));
+
+    const rejectedUsers = usersWithWallets.filter((user) => user.kycRejectedAt !== null);
+    if (rejectedUsers.length > 0) {
+      const rejectedAtByUserId = new Map(
+        rejectedUsers.map((user) => [user.id, user.kycRejectedAt as Date])
+      );
+      const documentsForRejected = await prisma.academicDocument.findMany({
+        where: { userId: { in: [...rejectedAtByUserId.keys()] } },
+        select: { userId: true, createdAt: true },
+      });
+      for (const document of documentsForRejected) {
+        const rejectedAt = rejectedAtByUserId.get(document.userId);
+        if (rejectedAt && document.createdAt > rejectedAt) {
+          studentIdsWithResubmission.add(document.userId);
+        }
+      }
+    }
   }
 
   // Drives the 💬 icon next to a suspended user's name (Students/Parents/Institutions
@@ -171,7 +193,10 @@ export async function getUsers(filters: GetUsersInput): Promise<{
         ? { disbursementsCount: disbursementsCountByInstitution.get(user.id) ?? 0 }
         : {}),
       ...(filters.userType === 'STUDENT'
-        ? { hasDocuments: studentIdsWithDocuments.has(user.id) }
+        ? {
+            hasDocuments: studentIdsWithDocuments.has(user.id),
+            hasResubmitted: studentIdsWithResubmission.has(user.id),
+          }
         : {}),
     };
   });

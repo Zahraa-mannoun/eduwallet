@@ -152,7 +152,8 @@ function ChangePasswordSection() {
 
         {succeeded ? (
           <View style={styles.successBanner}>
-            <Text style={styles.successBannerText}>✅ Password updated successfully</Text>
+            <MaterialCommunityIcons name="check-circle" size={16} color={colors.accent} />
+            <Text style={styles.successBannerText}>Password updated successfully</Text>
           </View>
         ) : null}
 
@@ -398,16 +399,19 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   successBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: `${colors.accent}1A`,
     borderRadius: 10,
     padding: 10,
     marginTop: 12,
   },
   successBannerText: {
+    flexShrink: 1,
     fontSize: 12.5,
     fontWeight: '600',
     color: '#065F46',
-    textAlign: 'center',
+    marginLeft: 8,
   },
   errorBanner: {
     flexDirection: 'row',

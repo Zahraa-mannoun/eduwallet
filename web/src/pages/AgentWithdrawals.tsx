@@ -1,14 +1,27 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  AlertTriangle,
+  Banknote,
+  ChevronDown,
+  Eye,
+  EyeOff,
+  Receipt,
+  Store,
+  Tag,
+} from 'lucide-react';
 import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
-import { Badge } from '../components/Badge';
+import { DotBadge } from '../components/DotBadge';
+import { EmptyState } from '../components/EmptyState';
+import { PageHeader } from '../components/PageHeader';
+import { PersonCell } from '../components/PersonCell';
+import { SkeletonRows } from '../components/SkeletonRows';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { useSocketRefetch } from '../hooks/useSocketRefetch';
 import { receiptStatusTone, withdrawalStatusTone } from '../lib/badgeTones';
 import { formatDateTime, formatMoney } from '../lib/format';
 import { humanizeEnum } from '../lib/humanize';
-import { EmptyState } from '../components/EmptyState';
-import { SkeletonRows } from '../components/SkeletonRows';
+import { TableCard, TABLE_HEAD_ROW_CLASS, TABLE_TD_CLASS, TABLE_TH_CLASS, tableRowClass } from '../components/TableCard';
 import { WITHDRAWAL_STATUS_LABELS } from '../lib/transactionStatus';
 import {
   RECEIPT_VERIFICATION_STATUSES,
@@ -54,6 +67,11 @@ function receiptStatusLabel(status: ReceiptFilterValue): string {
   if (status === 'MANUALLY_VERIFIED') return 'Manually Verified';
   return status.charAt(0) + status.slice(1).toLowerCase();
 }
+
+const selectClass =
+  'w-full appearance-none rounded-xl border-2 border-slate-200 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 transition-colors focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100';
+const dateInputClass =
+  'w-full rounded-xl border-2 border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 transition-colors focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100';
 
 function renderReceiptPreview(
   row: WithdrawalAdminRow,
@@ -184,103 +202,106 @@ export function AgentWithdrawals() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-lg font-semibold text-slate-900">Agent Withdrawals</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Every cash withdrawal dispensed by an agent, with receipt verification status.
-        </p>
-      </div>
+      <PageHeader title="Agent Withdrawals" subtitle="Every cash withdrawal dispensed by an agent, with receipt verification status" />
 
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div>
-          <label htmlFor="status-filter" className="mb-1 block text-xs font-medium text-slate-600">
-            Status
+      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="w-44">
+            <label htmlFor="status-filter" className="mb-1.5 block text-xs font-semibold text-slate-600">
+              Status
+            </label>
+            <div className="relative">
+              <select
+                id="status-filter"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as WithdrawalStatus | 'ALL')}
+                className={selectClass}
+              >
+                <option value="ALL">All statuses</option>
+                {WITHDRAWAL_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {WITHDRAWAL_STATUS_LABELS[s] ?? humanizeEnum(s)}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            </div>
+          </div>
+
+          <div className="w-48">
+            <label htmlFor="receipt-filter" className="mb-1.5 block text-xs font-semibold text-slate-600">
+              Receipt Status
+            </label>
+            <div className="relative">
+              <select
+                id="receipt-filter"
+                value={receiptFilter}
+                onChange={(event) => setReceiptFilter(event.target.value as ReceiptFilterValue | 'ALL')}
+                className={selectClass}
+              >
+                <option value="ALL">All receipt statuses</option>
+                {RECEIPT_FILTER_VALUES.map((s) => (
+                  <option key={s} value={s}>
+                    {receiptStatusLabel(s)}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            </div>
+          </div>
+
+          <div className="w-40">
+            <label htmlFor="date-from" className="mb-1.5 block text-xs font-semibold text-slate-600">
+              From
+            </label>
+            <input
+              id="date-from"
+              type="date"
+              value={dateFrom}
+              onChange={(event) => setDateFrom(event.target.value)}
+              className={dateInputClass}
+            />
+          </div>
+
+          <div className="w-40">
+            <label htmlFor="date-to" className="mb-1.5 block text-xs font-semibold text-slate-600">
+              To
+            </label>
+            <input
+              id="date-to"
+              type="date"
+              value={dateTo}
+              onChange={(event) => setDateTo(event.target.value)}
+              className={dateInputClass}
+            />
+          </div>
+
+          <label className="flex items-center gap-2 pb-2.5 text-sm font-medium text-slate-600">
+            <input
+              type="checkbox"
+              checked={flaggedOnly}
+              onChange={(event) => setFlaggedOnly(event.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+            />
+            Flagged only
           </label>
-          <select
-            id="status-filter"
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value as WithdrawalStatus | 'ALL')}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          >
-            <option value="ALL">All statuses</option>
-            {WITHDRAWAL_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {WITHDRAWAL_STATUS_LABELS[s] ?? humanizeEnum(s)}
-              </option>
-            ))}
-          </select>
         </div>
-
-        <div>
-          <label htmlFor="receipt-filter" className="mb-1 block text-xs font-medium text-slate-600">
-            Receipt Status
-          </label>
-          <select
-            id="receipt-filter"
-            value={receiptFilter}
-            onChange={(event) => setReceiptFilter(event.target.value as ReceiptFilterValue | 'ALL')}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          >
-            <option value="ALL">All receipt statuses</option>
-            {RECEIPT_FILTER_VALUES.map((s) => (
-              <option key={s} value={s}>
-                {receiptStatusLabel(s)}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label htmlFor="date-from" className="mb-1 block text-xs font-medium text-slate-600">
-            From
-          </label>
-          <input
-            id="date-from"
-            type="date"
-            value={dateFrom}
-            onChange={(event) => setDateFrom(event.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="date-to" className="mb-1 block text-xs font-medium text-slate-600">
-            To
-          </label>
-          <input
-            id="date-to"
-            type="date"
-            value={dateTo}
-            onChange={(event) => setDateTo(event.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          />
-        </div>
-
-        <label className="flex items-center gap-2 pb-2 text-sm text-slate-600">
-          <input
-            type="checkbox"
-            checked={flaggedOnly}
-            onChange={(event) => setFlaggedOnly(event.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-          />
-          Flagged only
-        </label>
       </div>
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+      <TableCard title="Withdrawals" subtitle={`${filtered.length} shown`}>
+        <table className="min-w-full divide-y divide-slate-100 text-sm">
+          <thead className={TABLE_HEAD_ROW_CLASS}>
             <tr>
-              <th className="px-4 py-3 text-left">Student</th>
-              <th className="px-4 py-3 text-left">Agent</th>
-              <th className="px-4 py-3 text-left">Amount</th>
-              <th className="px-4 py-3 text-left">Category</th>
-              <th className="px-4 py-3 text-left">Status</th>
-              <th className="px-4 py-3 text-left">Receipt</th>
-              <th className="px-4 py-3 text-left">Date</th>
-              <th className="px-4 py-3 text-left">Actions</th>
+              <th className={TABLE_TH_CLASS}>Student</th>
+              <th className={TABLE_TH_CLASS}>Agent</th>
+              <th className={TABLE_TH_CLASS}>Amount</th>
+              <th className={TABLE_TH_CLASS}>Category</th>
+              <th className={TABLE_TH_CLASS}>Status</th>
+              <th className={TABLE_TH_CLASS}>Receipt</th>
+              <th className={TABLE_TH_CLASS}>Date</th>
+              <th className={TABLE_TH_CLASS}>Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -288,120 +309,162 @@ export function AgentWithdrawals() {
             {!isLoading && filtered.length === 0 && (
               <tr>
                 <td colSpan={8}>
-                  <EmptyState title="No withdrawals match these filters" message="Try adjusting the filters above." />
+                  <EmptyState
+                    icon={<Banknote className="h-8 w-8" />}
+                    title="No withdrawals match these filters"
+                    message="Try adjusting the filters above."
+                  />
                 </td>
               </tr>
             )}
             {!isLoading &&
-              filtered.map((row) => {
+              filtered.map((row, index) => {
                 const receiptStatus = receiptStatusFor(row);
                 const expanded = expandedId === row.id;
+                const decisions = row.receiptPath ? AVAILABLE_DECISIONS[row.receiptVerificationStatus] : [];
                 return (
                   <Fragment key={row.id}>
                     <tr
                       onClick={() => void toggleExpand(row)}
-                      className="cursor-pointer hover:bg-slate-50"
+                      className={tableRowClass(index, 'cursor-pointer')}
                     >
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-slate-900">{row.wallet.user.fullName}</div>
-                        <div className="text-xs text-slate-500">{row.wallet.user.email}</div>
+                      <td className={TABLE_TD_CLASS}>
+                        <PersonCell name={row.wallet.user.fullName} email={row.wallet.user.email} />
                       </td>
-                      <td className="px-4 py-3 text-slate-700">
+                      <td className={`${TABLE_TD_CLASS} text-slate-700`}>
                         {row.agent ? row.agent.fullName : '—'}
                       </td>
-                      <td className="px-4 py-3 font-medium text-slate-900">
+                      <td className={`${TABLE_TD_CLASS} font-semibold text-slate-900`}>
                         {formatMoney(row.amount, 'USD')}
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{humanizeEnum(row.category)}</td>
-                      <td className="px-4 py-3">
-                        <Badge tone={withdrawalStatusTone[row.status] ?? 'gray'}>
+                      <td className={`${TABLE_TD_CLASS} text-slate-600`}>{humanizeEnum(row.category)}</td>
+                      <td className={TABLE_TD_CLASS}>
+                        <DotBadge tone={withdrawalStatusTone[row.status] ?? 'gray'}>
                           {WITHDRAWAL_STATUS_LABELS[row.status] ?? row.status}
-                        </Badge>
+                        </DotBadge>
                       </td>
-                      <td className="px-4 py-3">
-                        <Badge tone={receiptStatusTone[receiptStatus] ?? 'gray'}>
+                      <td className={TABLE_TD_CLASS}>
+                        <DotBadge tone={receiptStatusTone[receiptStatus] ?? 'gray'}>
                           {receiptStatusLabel(receiptStatus)}
-                        </Badge>
+                        </DotBadge>
                       </td>
-                      <td className="px-4 py-3 text-slate-500">
+                      <td className={`${TABLE_TD_CLASS} text-slate-500`}>
                         {formatDateTime(row.completedAt ?? row.createdAt)}
                       </td>
-                      <td className="px-4 py-3 text-primary">{expanded ? 'Hide' : 'View'}</td>
+                      <td className={TABLE_TD_CLASS}>
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary">
+                          {expanded ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                          {expanded ? 'Hide' : 'View'}
+                        </span>
+                      </td>
                     </tr>
                     {expanded && (
                       <tr key={`${row.id}-detail`}>
-                        <td colSpan={8} className="bg-slate-50 px-4 py-4">
+                        <td colSpan={8} className="bg-slate-50/70 px-6 py-5">
+                          {receiptStatus === 'FLAGGED' && (
+                            <div className="mb-4 flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-medium text-amber-800">
+                              <AlertTriangle className="h-4 w-4 shrink-0" />
+                              This receipt was flagged — the detected merchant category doesn&apos;t match
+                              the declared withdrawal category.
+                            </div>
+                          )}
+
                           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                            <div>
-                              <h3 className="mb-2 text-xs font-semibold uppercase text-slate-500">
-                                Receipt
-                              </h3>
-                              {renderReceiptPreview(row, isReceiptLoading, receiptImageUrl)}
+                            <div className="rounded-xl border border-dashed border-slate-300 bg-[#FAFAFA] p-4">
+                              <div className="mb-3 flex items-center gap-2 border-b border-slate-200 pb-3">
+                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-200 text-slate-500">
+                                  <Receipt className="h-4 w-4" />
+                                </div>
+                                <div>
+                                  <p className="font-mono text-xs font-semibold text-slate-700">
+                                    RECEIPT #{row.id.slice(0, 8).toUpperCase()}
+                                  </p>
+                                  <p className="font-mono text-[11px] text-slate-400">
+                                    {formatDateTime(row.completedAt ?? row.createdAt)}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="font-mono">
+                                {renderReceiptPreview(row, isReceiptLoading, receiptImageUrl)}
+                              </div>
                             </div>
 
-                            <div className="space-y-3">
-                              <div>
-                                <h3 className="mb-1 text-xs font-semibold uppercase text-slate-500">
+                            <div className="space-y-4">
+                              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
                                   Detection Notes
                                 </h3>
-                                <dl className="space-y-1 text-sm text-slate-600">
-                                  <div className="flex justify-between gap-4">
-                                    <dt className="text-slate-400">Merchant</dt>
-                                    <dd>{row.merchantName ?? '—'}</dd>
+                                <dl className="space-y-2.5 text-sm">
+                                  <div className="flex items-center justify-between gap-4">
+                                    <dt className="flex items-center gap-1.5 text-slate-400">
+                                      <Store className="h-3.5 w-3.5" />
+                                      Merchant
+                                    </dt>
+                                    <dd className="font-medium text-slate-700">{row.merchantName ?? '—'}</dd>
                                   </div>
-                                  <div className="flex justify-between gap-4">
-                                    <dt className="text-slate-400">Detected Category</dt>
-                                    <dd>{row.detectedCategory ? humanizeEnum(row.detectedCategory) : '—'}</dd>
+                                  <div className="flex items-center justify-between gap-4">
+                                    <dt className="flex items-center gap-1.5 text-slate-400">
+                                      <Tag className="h-3.5 w-3.5" />
+                                      Detected Category
+                                    </dt>
+                                    <dd className="font-medium text-slate-700">
+                                      {row.detectedCategory ? humanizeEnum(row.detectedCategory) : '—'}
+                                    </dd>
                                   </div>
                                   {row.receiptVerificationNote && (
-                                    <div>
-                                      <dt className="text-slate-400">Note</dt>
-                                      <dd className="mt-0.5">{row.receiptVerificationNote}</dd>
+                                    <div className="border-t border-slate-100 pt-2.5">
+                                      <dt className="mb-1 text-slate-400">Note</dt>
+                                      <dd className="text-slate-600">{row.receiptVerificationNote}</dd>
                                     </div>
                                   )}
                                 </dl>
                               </div>
 
-                              {row.receiptPath &&
-                                AVAILABLE_DECISIONS[row.receiptVerificationStatus].length > 0 && (
-                                  <div>
-                                    <label
-                                      htmlFor={`note-${row.id}`}
-                                      className="mb-1 block text-xs font-semibold uppercase text-slate-500"
-                                    >
-                                      Review Note (optional)
-                                    </label>
-                                    <textarea
-                                      id={`note-${row.id}`}
-                                      rows={2}
-                                      value={noteDraft}
-                                      onChange={(event) => setNoteDraft(event.target.value)}
-                                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                                    />
+                              {row.receiptPath && decisions.length > 0 && (
+                                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                                  <label
+                                    htmlFor={`note-${row.id}`}
+                                    className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500"
+                                  >
+                                    Review Note (optional)
+                                  </label>
+                                  <textarea
+                                    id={`note-${row.id}`}
+                                    rows={2}
+                                    value={noteDraft}
+                                    onChange={(event) => setNoteDraft(event.target.value)}
+                                    className="w-full rounded-xl border-2 border-slate-200 px-3.5 py-2.5 text-sm transition-colors focus:border-blue-400 focus:outline-none"
+                                  />
 
-                                    {actionError && (
-                                      <p className="mt-2 text-sm text-red-600">{actionError}</p>
-                                    )}
+                                  {actionError && (
+                                    <p className="mt-2 text-sm text-red-600">{actionError}</p>
+                                  )}
 
-                                    <div className="mt-2 flex flex-wrap gap-2">
-                                      {AVAILABLE_DECISIONS[row.receiptVerificationStatus].map(
-                                        (decision) => (
-                                          <button
-                                            key={decision}
-                                            type="button"
-                                            disabled={pendingDecision !== null}
-                                            onClick={() => void handleDecision(row, decision)}
-                                            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
-                                          >
-                                            {pendingDecision === decision
-                                              ? 'Saving…'
-                                              : DECISION_LABEL[decision]}
-                                          </button>
-                                        )
-                                      )}
-                                    </div>
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    {decisions.map((decision) => {
+                                      const isPrimary = decision === 'VERIFIED';
+                                      const isReject = decision === 'REJECTED';
+                                      return (
+                                        <button
+                                          key={decision}
+                                          type="button"
+                                          disabled={pendingDecision !== null}
+                                          onClick={() => void handleDecision(row, decision)}
+                                          className={
+                                            isPrimary
+                                              ? 'rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-emerald-700 disabled:opacity-50 disabled:hover:scale-100'
+                                              : isReject
+                                                ? 'rounded-xl border-2 border-red-300 px-5 py-2.5 text-sm font-semibold text-red-600 transition-all duration-200 hover:scale-[1.02] hover:bg-red-50 disabled:opacity-50 disabled:hover:scale-100'
+                                                : 'rounded-xl border-2 border-amber-300 px-5 py-2.5 text-sm font-semibold text-amber-700 transition-all duration-200 hover:scale-[1.02] hover:bg-amber-50 disabled:opacity-50 disabled:hover:scale-100'
+                                          }
+                                        >
+                                          {pendingDecision === decision ? 'Saving…' : DECISION_LABEL[decision]}
+                                        </button>
+                                      );
+                                    })}
                                   </div>
-                                )}
+                                </div>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -412,7 +475,7 @@ export function AgentWithdrawals() {
               })}
           </tbody>
         </table>
-      </div>
+      </TableCard>
     </div>
   );
 }

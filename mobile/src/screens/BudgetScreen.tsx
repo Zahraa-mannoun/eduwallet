@@ -212,7 +212,12 @@ export default function BudgetScreen(_props: Readonly<StudentTabScreenProps<'Bud
         refreshControl={<RefreshControl refreshing={isLoading} onRefresh={load} />}
       >
         <View style={styles.bannerCard}>
-          <Text style={styles.bannerIcon}>ℹ️</Text>
+          <MaterialCommunityIcons
+            name="information-outline"
+            size={17}
+            color={colors.primaryDark}
+            style={styles.bannerIcon}
+          />
           <Text style={styles.bannerText}>
             Track your locked funds and set your own monthly spending goals for categories your
             parent has authorized.
@@ -481,8 +486,8 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   bannerIcon: {
-    fontSize: 15,
     marginRight: 8,
+    marginTop: 1,
   },
   bannerText: {
     flex: 1,

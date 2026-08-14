@@ -1,21 +1,28 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
+import { AlertTriangle, CheckCircle, ShieldAlert } from 'lucide-react';
 import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
-import { Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
+import { DotBadge } from '../components/DotBadge';
 import { useVisibilityRefetch } from '../hooks/useVisibilityRefetch';
 import { useSocketRefetch } from '../hooks/useSocketRefetch';
 import { severityTone } from '../lib/badgeTones';
 import { formatDateTime, formatMoney } from '../lib/format';
 import { humanizeEnum } from '../lib/humanize';
 import { EmptyState } from '../components/EmptyState';
+import { FilterTabs } from '../components/FilterTabs';
+import { PageHeader } from '../components/PageHeader';
+import { PersonCell } from '../components/PersonCell';
 import { SkeletonRows } from '../components/SkeletonRows';
+import { TableCard, TABLE_HEAD_ROW_CLASS, TABLE_TD_CLASS, TABLE_TH_CLASS, tableRowClass } from '../components/TableCard';
 import type { FraudAlertRow } from '../types/admin';
+
+type Filter = 'unresolved' | 'all';
 
 export function Fraud() {
   const [alerts, setAlerts] = useState<FraudAlertRow[]>([]);
-  const [showAll, setShowAll] = useState(false);
+  const [filter, setFilter] = useState<Filter>('unresolved');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [resolveTarget, setResolveTarget] = useState<FraudAlertRow | null>(null);
@@ -25,7 +32,7 @@ export function Fraud() {
     setError(null);
     try {
       const response = await api.get<ApiResponse<FraudAlertRow[]>>('/admin/fraud-alerts', {
-        params: showAll ? {} : { resolved: 'false' },
+        params: filter === 'all' ? {} : { resolved: 'false' },
       });
       setAlerts(unwrap(response.data));
     } catch (err) {
@@ -33,7 +40,7 @@ export function Fraud() {
     } finally {
       setIsLoading(false);
     }
-  }, [showAll]);
+  }, [filter]);
 
   useEffect(() => {
     void load();
@@ -44,94 +51,97 @@ export function Fraud() {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
-        <button
-          type="button"
-          onClick={() => setShowAll(false)}
-          className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-            !showAll ? 'bg-primary text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-          }`}
-        >
-          Unresolved only
-        </button>
-        <button
-          type="button"
-          onClick={() => setShowAll(true)}
-          className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-            showAll ? 'bg-primary text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-          }`}
-        >
-          All
-        </button>
-      </div>
+      <PageHeader title="Fraud Alerts" subtitle="Review and resolve suspicious transaction activity" />
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+      <TableCard
+        title="Alerts"
+        subtitle={`${alerts.length} shown`}
+        actions={
+          <FilterTabs
+            tabs={[
+              { value: 'unresolved', label: 'Unresolved only' },
+              { value: 'all', label: 'All' },
+            ]}
+            value={filter}
+            onChange={setFilter}
+          />
+        }
+      >
+        <table className="min-w-full divide-y divide-slate-100 text-sm">
+          <thead className={TABLE_HEAD_ROW_CLASS}>
             <tr>
-              <th className="px-4 py-3 text-left">Type</th>
-              <th className="px-4 py-3 text-left">Severity</th>
-              <th className="px-4 py-3 text-left">Amount</th>
-              <th className="px-4 py-3 text-left">From User</th>
-              <th className="px-4 py-3 text-left">To User</th>
-              <th className="px-4 py-3 text-left">Date</th>
-              <th className="px-4 py-3 text-left">Status</th>
-              <th className="px-4 py-3 text-left">Actions</th>
+              <th className={TABLE_TH_CLASS}>Student</th>
+              <th className={TABLE_TH_CLASS}>Alert Type</th>
+              <th className={TABLE_TH_CLASS}>Severity</th>
+              <th className={TABLE_TH_CLASS}>Amount</th>
+              <th className={TABLE_TH_CLASS}>Date</th>
+              <th className={TABLE_TH_CLASS}>Resolved</th>
+              <th className={TABLE_TH_CLASS}>Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {isLoading && <SkeletonRows columns={8} />}
+            {isLoading && <SkeletonRows columns={7} />}
             {!isLoading && alerts.length === 0 && (
               <tr>
-                <td colSpan={8}>
-                  <EmptyState title="No fraud alerts found" />
+                <td colSpan={7}>
+                  <EmptyState icon={<ShieldAlert className="h-8 w-8" />} title="No fraud alerts found" />
                 </td>
               </tr>
             )}
             {!isLoading &&
-              alerts.map((alert) => (
-                <tr key={alert.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3">
-                    <Badge tone="gray">{humanizeEnum(alert.alertType)}</Badge>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge tone={severityTone[alert.severity] ?? 'gray'}>{humanizeEnum(alert.severity)}</Badge>
-                  </td>
-                  <td className="px-4 py-3 font-medium text-slate-900">
-                    {formatMoney(alert.transaction.amount, alert.transaction.currency)}
-                  </td>
-                  <td className="px-4 py-3 text-slate-700">
-                    {alert.transaction.fromWallet?.user.fullName ?? '—'}
-                  </td>
-                  <td className="px-4 py-3 text-slate-700">
-                    {alert.transaction.toWallet?.user.fullName ?? alert.transaction.receiverName ?? '—'}
-                  </td>
-                  <td className="px-4 py-3 text-slate-500">{formatDateTime(alert.createdAt)}</td>
-                  <td className="px-4 py-3">
-                    {alert.resolved ? (
-                      <Badge tone="green">Resolved</Badge>
-                    ) : (
-                      <Badge tone="yellow">Open</Badge>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    {!alert.resolved && (
-                      <button
-                        type="button"
-                        onClick={() => setResolveTarget(alert)}
-                        className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                      >
-                        Resolve
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              alerts.map((alert, index) => {
+                const party = alert.transaction.fromWallet?.user ?? alert.transaction.toWallet?.user;
+                return (
+                  <tr key={alert.id} className={tableRowClass(index)}>
+                    <td className={TABLE_TD_CLASS}>
+                      {party ? (
+                        <PersonCell name={party.fullName} email={party.email} />
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                    <td className={TABLE_TD_CLASS}>
+                      <span className="inline-flex items-center gap-1.5 text-slate-700">
+                        <AlertTriangle className="h-3.5 w-3.5 text-slate-400" />
+                        {humanizeEnum(alert.alertType)}
+                      </span>
+                    </td>
+                    <td className={TABLE_TD_CLASS}>
+                      <DotBadge tone={severityTone[alert.severity] ?? 'gray'}>
+                        {humanizeEnum(alert.severity)}
+                      </DotBadge>
+                    </td>
+                    <td className={`${TABLE_TD_CLASS} font-bold text-slate-900`}>
+                      {formatMoney(alert.transaction.amount, alert.transaction.currency)}
+                    </td>
+                    <td className={`${TABLE_TD_CLASS} text-slate-500`}>{formatDateTime(alert.createdAt)}</td>
+                    <td className={TABLE_TD_CLASS}>
+                      {alert.resolved ? (
+                        <DotBadge tone="green">Resolved</DotBadge>
+                      ) : (
+                        <DotBadge tone="red">Active</DotBadge>
+                      )}
+                    </td>
+                    <td className={TABLE_TD_CLASS}>
+                      {!alert.resolved && (
+                        <button
+                          type="button"
+                          onClick={() => setResolveTarget(alert)}
+                          className="inline-flex items-center gap-1.5 rounded-full border-2 border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-600 transition-all duration-200 hover:scale-[1.03] hover:bg-emerald-50"
+                        >
+                          <CheckCircle className="h-3.5 w-3.5" />
+                          Resolve
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
           </tbody>
         </table>
-      </div>
+      </TableCard>
 
       {resolveTarget && (
         <ResolveModal
@@ -179,7 +189,12 @@ function ResolveModal({
   };
 
   return (
-    <Modal title="Resolve Fraud Alert" onClose={onClose}>
+    <Modal
+      title="Resolve Fraud Alert"
+      tone="success"
+      icon={<CheckCircle className="h-6 w-6 text-white" />}
+      onClose={onClose}
+    >
       <form className="space-y-4" onSubmit={handleSubmit}>
         <div>
           <label htmlFor="note" className="mb-1 block text-sm font-medium text-slate-700">
@@ -191,7 +206,7 @@ function ResolveModal({
             rows={3}
             value={note}
             onChange={(event) => setNote(event.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-full rounded-xl border-2 border-slate-200 px-3 py-2 text-sm transition-colors focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
           />
         </div>
 
@@ -201,14 +216,14 @@ function ResolveModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            className="rounded-full border-2 border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition-all duration-200 hover:bg-slate-50"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={isSubmitting}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-60"
+            className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-emerald-700 disabled:opacity-60"
           >
             {isSubmitting ? 'Resolving…' : 'Resolve'}
           </button>

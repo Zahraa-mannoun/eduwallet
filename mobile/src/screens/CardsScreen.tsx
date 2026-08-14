@@ -490,7 +490,7 @@ export default function CardsScreen(_props: Readonly<StudentTabScreenProps<'Card
             </View>
 
             <View style={styles.securityNoteCard}>
-              <Text style={styles.securityNoteIcon}>🔒</Text>
+              <MaterialCommunityIcons name="lock-outline" size={16} color={colors.danger} style={styles.securityNoteIcon} />
               <Text style={styles.securityNoteText}>Never share your card details with anyone</Text>
             </View>
           </Dialog.Content>
@@ -884,7 +884,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   securityNoteIcon: {
-    fontSize: 14,
+    marginTop: 1,
     marginRight: 8,
   },
   securityNoteText: {

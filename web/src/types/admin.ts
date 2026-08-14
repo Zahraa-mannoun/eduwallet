@@ -36,6 +36,7 @@ export type AdminUser = User & {
   disbursementsCount?: number;
   hasDocuments?: boolean;
   hasSupportMessage: boolean;
+  hasResubmitted?: boolean;
 };
 
 export type AgentRow = User & { withdrawalsCount: number };

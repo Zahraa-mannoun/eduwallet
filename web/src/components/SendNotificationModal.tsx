@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
+import { Bell } from 'lucide-react';
 import { api, getErrorMessage } from '../lib/api';
 import { Modal } from './Modal';
 import type { AgentRow } from '../types/admin';
+
+const MAX_LENGTH = 500;
 
 export function SendNotificationModal({
   agent,
@@ -36,42 +39,56 @@ export function SendNotificationModal({
   };
 
   return (
-    <Modal title={`Send Notification — ${agent.fullName}`} onClose={onClose}>
+    <Modal
+      title="Send Notification"
+      subtitle={agent.fullName}
+      icon={<Bell className="h-6 w-6 text-white" />}
+      tone="primary"
+      onClose={onClose}
+    >
       <form className="space-y-4" onSubmit={handleSubmit}>
         <div>
-          <label htmlFor="notify-message" className="mb-1 block text-sm font-medium text-slate-700">
-            Message
-          </label>
+          <div className="mb-1.5 flex items-center justify-between">
+            <label htmlFor="notify-message" className="block text-sm font-medium text-slate-700">
+              Message
+            </label>
+            <span
+              className={`text-xs ${message.length > MAX_LENGTH ? 'font-semibold text-red-500' : 'text-slate-400'}`}
+            >
+              {message.length}/{MAX_LENGTH}
+            </span>
+          </div>
           <textarea
             id="notify-message"
             required
-            rows={3}
+            rows={4}
+            maxLength={MAX_LENGTH}
             value={message}
             onChange={(event) => setMessage(event.target.value)}
             placeholder="What would you like to tell this agent?"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-full rounded-xl border-2 border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-colors focus:border-blue-400 focus:outline-none"
           />
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1.5 text-xs text-slate-400">
             The agent will see this in their notifications bell in the agent portal.
           </p>
         </div>
 
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-end gap-2 pt-1">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            className="rounded-xl border-2 border-slate-200 px-6 py-3 text-sm font-semibold text-slate-600 transition-all duration-200 hover:scale-[1.02] hover:bg-slate-50"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={isSubmitting}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-600 disabled:opacity-60"
+            className="rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-primary-600 disabled:opacity-60 disabled:hover:scale-100"
           >
-            {isSubmitting ? 'Sending…' : 'Send Notification'}
+            {isSubmitting ? 'Sending…' : 'Send'}
           </button>
         </div>
       </form>

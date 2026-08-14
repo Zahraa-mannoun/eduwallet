@@ -356,13 +356,15 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
 
               {approvalThreshold > 0 ? (
                 <View style={[styles.approvalBadge, styles.approvalBadgeBlue]}>
+                  <MaterialCommunityIcons name="flash-outline" size={14} color={colors.primary} />
                   <Text style={styles.approvalBadgeText}>
-                    ⚡ ${approvalThreshold.toFixed(0)} approval limit
+                    ${approvalThreshold.toFixed(0)} approval limit
                   </Text>
                 </View>
               ) : (
                 <View style={[styles.approvalBadge, styles.approvalBadgeGreen]}>
-                  <Text style={styles.approvalBadgeText}>✅ No approval limit</Text>
+                  <MaterialCommunityIcons name="check-circle" size={14} color={colors.accent} />
+                  <Text style={styles.approvalBadgeText}>No approval limit</Text>
                 </View>
               )}
             </View>
@@ -697,6 +699,8 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through',
   },
   approvalBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     alignSelf: 'flex-start',
     borderRadius: 999,
     paddingVertical: 6,
@@ -713,6 +717,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: colors.heading,
+    marginLeft: 6,
   },
   transactionRow: {
     flexDirection: 'row',
