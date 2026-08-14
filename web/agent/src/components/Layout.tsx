@@ -1,15 +1,31 @@
+import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Clock, LayoutDashboard, LogOut, MessageSquare, Search, ShieldCheck, User } from 'lucide-react';
+import {
+  Clock,
+  LayoutDashboard,
+  LogOut,
+  MessageSquare,
+  PiggyBank,
+  Search,
+  ShieldCheck,
+  User,
+} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import type { AgentSavingsWithdrawalRow, ApiResponse } from '../types';
+import { api, unwrap } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
+import { useSocketRefetch } from '../hooks/useSocketRefetch';
 import { NotificationBell } from './NotificationBell';
 import { Avatar } from './Avatar';
 
-const navItems: Array<{ to: string; label: string; icon: LucideIcon }> = [
+const POLL_INTERVAL_MS = 30_000;
+
+const navItems: Array<{ to: string; label: string; icon: LucideIcon; badgeKey?: 'savingsWithdrawals' }> = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/process', label: 'Process Withdrawal', icon: Search },
   { to: '/history', label: 'Withdrawal History', icon: Clock },
+  { to: '/savings-withdrawals', label: 'Savings Withdrawals', icon: PiggyBank, badgeKey: 'savingsWithdrawals' },
   { to: '/messages', label: 'Messages', icon: MessageSquare },
   { to: '/profile', label: 'Profile', icon: User },
 ];
@@ -18,6 +34,10 @@ const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   '/dashboard': { title: 'Dashboard', subtitle: 'Your activity overview' },
   '/process': { title: 'Process Withdrawal', subtitle: 'Dispense cash withdrawals to students' },
   '/history': { title: 'Withdrawal History', subtitle: 'Every cash withdrawal you have dispensed' },
+  '/savings-withdrawals': {
+    title: 'Savings Withdrawals',
+    subtitle: 'Approved savings withdrawal requests ready to dispense',
+  },
   '/messages': { title: 'Messages', subtitle: 'Send a message to the EduWallet admin team' },
   '/profile': { title: 'Profile', subtitle: 'Your agent account details and credentials' },
 };
@@ -27,10 +47,39 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     isActive ? 'bg-primary text-white shadow-sm' : 'text-sidebar-muted hover:bg-sidebar-hover hover:text-white'
   }`;
 
+function NavBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="ml-auto flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">
+      {count > 99 ? '99+' : count}
+    </span>
+  );
+}
+
 export function Layout({ children }: { children: ReactNode }) {
   const { agent, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const [pendingSavingsWithdrawals, setPendingSavingsWithdrawals] = useState(0);
+
+  const loadBadgeCounts = useCallback(async () => {
+    try {
+      const response = await api.get<ApiResponse<AgentSavingsWithdrawalRow[]>>('/agent/savings-withdrawals');
+      const rows = unwrap(response.data);
+      setPendingSavingsWithdrawals(rows.filter((row) => !row.dispensedAt).length);
+    } catch {
+      // silent — sidebar badge just won't update until the next successful poll
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadBadgeCounts();
+    const interval = setInterval(() => void loadBadgeCounts(), POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [loadBadgeCounts]);
+
+  useSocketRefetch(loadBadgeCounts);
 
   const handleLogout = () => {
     logout();
@@ -53,10 +102,11 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="sidebar-scroll flex-1 space-y-1 overflow-y-auto px-3 pb-4">
-          {navItems.map(({ to, label, icon: Icon }) => (
+          {navItems.map(({ to, label, icon: Icon, badgeKey }) => (
             <NavLink key={to} to={to} className={navLinkClass}>
               <Icon className="h-[18px] w-[18px] shrink-0" />
               {label}
+              {badgeKey === 'savingsWithdrawals' && <NavBadge count={pendingSavingsWithdrawals} />}
             </NavLink>
           ))}
         </nav>

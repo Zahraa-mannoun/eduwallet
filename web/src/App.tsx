@@ -20,6 +20,7 @@ import { SupportMessages } from './pages/SupportMessages';
 import { Fraud } from './pages/Fraud';
 import { Scholarships } from './pages/Scholarships';
 import { Reports } from './pages/Reports';
+import { RolloverHistory } from './pages/RolloverHistory';
 import { EmailChangeRequests } from './pages/EmailChangeRequests';
 import { Settings } from './pages/Settings';
 
@@ -162,6 +163,14 @@ export function App() {
           element={
             <ProtectedPage>
               <Reports />
+            </ProtectedPage>
+          }
+        />
+        <Route
+          path="/rollover-history"
+          element={
+            <ProtectedPage>
+              <RolloverHistory />
             </ProtectedPage>
           }
         />

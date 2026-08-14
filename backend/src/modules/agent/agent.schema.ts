@@ -6,3 +6,9 @@ export const sendAgentMessageSchema = z.object({
 });
 
 export type SendAgentMessageInput = z.infer<typeof sendAgentMessageSchema>;
+
+export const savingsWithdrawalIdParamsSchema = z.object({
+  id: z.string().uuid('id must be a valid UUID'),
+});
+
+export type SavingsWithdrawalIdParams = z.infer<typeof savingsWithdrawalIdParamsSchema>;

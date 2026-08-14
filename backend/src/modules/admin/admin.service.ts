@@ -998,6 +998,67 @@ export async function sendAgentNotification(
   await logAdminAction(adminId, 'NOTIFY_AGENT', agentId, message);
 }
 
+export type RolloverHistoryRow = {
+  month: string;
+  studentCount: number;
+  totalAmount: number;
+  triggeredAt: string;
+  students: Array<{
+    id: string;
+    name: string;
+    email: string;
+    amount: number;
+    categories: Array<{ category: string; amount: number }>;
+  }>;
+};
+
+export async function getRolloverHistory(): Promise<RolloverHistoryRow[]> {
+  const rollovers = await prisma.personalSavingsHistory.findMany({
+    where: { type: 'ROLLOVER' },
+    include: {
+      wallet: { include: { user: { select: { id: true, fullName: true, email: true } } } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  // The monthly cron (and a manual admin trigger) processes every student wallet in one run, so
+  // every row sharing a month came from the same rollover event — grouped here purely for
+  // display, there's no Prisma-level grouping across a Json field and a join this shallow.
+  const byMonth = new Map<string, typeof rollovers>();
+  for (const entry of rollovers) {
+    const key = entry.month ?? 'Unknown';
+    const list = byMonth.get(key) ?? [];
+    list.push(entry);
+    byMonth.set(key, list);
+  }
+
+  const rows: RolloverHistoryRow[] = [...byMonth.entries()].map(([month, entries]) => {
+    const students = entries.map((entry) => ({
+      id: entry.wallet.user.id,
+      name: entry.wallet.user.fullName,
+      email: entry.wallet.user.email,
+      amount: Number(entry.amount),
+      categories: Object.entries(
+        (entry.categoryBreakdown as Record<string, number> | null) ?? {}
+      ).map(([category, amount]) => ({ category, amount: Number(amount) })),
+    }));
+    const triggeredAt = entries.reduce(
+      (earliest, entry) => (entry.createdAt < earliest ? entry.createdAt : earliest),
+      entries[0]!.createdAt
+    );
+
+    return {
+      month,
+      studentCount: students.length,
+      totalAmount: students.reduce((sum, student) => sum + student.amount, 0),
+      triggeredAt: triggeredAt.toISOString(),
+      students,
+    };
+  });
+
+  return rows.sort((a, b) => b.month.localeCompare(a.month));
+}
+
 export async function reactivateAgent(adminId: string, agentId: string): Promise<SafeUser> {
   const agent = await prisma.user.findUnique({ where: { id: agentId } });
   if (!agent || agent.userType !== 'AGENT') {

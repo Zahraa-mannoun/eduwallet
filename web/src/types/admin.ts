@@ -112,6 +112,20 @@ export type SupportMessageRow = SupportMessage & {
   repliedAt: string | null;
 };
 
+export type RolloverHistoryRow = {
+  month: string;
+  studentCount: number;
+  totalAmount: number;
+  triggeredAt: string;
+  students: Array<{
+    id: string;
+    name: string;
+    email: string;
+    amount: number;
+    categories: Array<{ category: string; amount: number }>;
+  }>;
+};
+
 export type RelationshipRow = {
   id: string;
   parentUserId: string;

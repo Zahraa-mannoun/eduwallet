@@ -20,6 +20,7 @@ import {
   IconGraduation,
   IconLink,
   IconLogout,
+  IconPiggyBank,
   IconReports,
   IconRepeat,
   IconSettings,
@@ -54,6 +55,7 @@ const PAGE_META: Record<string, { title: string; breadcrumb: string }> = {
   '/agent-withdrawals': { title: 'Withdrawals', breadcrumb: 'Finance / Withdrawals' },
   '/scholarships': { title: 'Scholarships', breadcrumb: 'Finance / Scholarships' },
   '/reports': { title: 'Reports', breadcrumb: 'Finance / Reports' },
+  '/rollover-history': { title: 'Rollover History', breadcrumb: 'Finance / Rollover History' },
   '/agents': { title: 'Manage Agents', breadcrumb: 'System / Agents' },
   '/agent-messages': { title: 'Agent Messages', breadcrumb: 'System / Agents / Messages' },
   '/fraud': { title: 'Fraud Alerts', breadcrumb: 'System / Fraud Alerts' },
@@ -206,6 +208,7 @@ export function Layout({ children }: { children: ReactNode }) {
         { to: '/agent-withdrawals', label: 'Withdrawals', icon: IconCash },
         { to: '/scholarships', label: 'Scholarships', icon: IconGraduation },
         { to: '/reports', label: 'Reports', icon: IconReports },
+        { to: '/rollover-history', label: 'Rollover History', icon: IconPiggyBank },
       ],
     },
     {

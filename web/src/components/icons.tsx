@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { PiggyBank } from 'lucide-react';
 
 type IconProps = { className?: string };
 
@@ -186,6 +187,10 @@ export function IconBriefcase({ className = base }: IconProps) {
       <path d="M10.5 12.5h3v1.5h-3z" />
     </svg>
   );
+}
+
+export function IconPiggyBank({ className = base }: IconProps) {
+  return <PiggyBank className={className} strokeWidth={1.8} />;
 }
 
 export function IconSettings({ className = base }: IconProps) {

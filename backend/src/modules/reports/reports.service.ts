@@ -8,7 +8,7 @@ import { createNotification } from '../notifications/notifications.service';
 import type { TransactionWithParties } from '../admin/admin.service';
 import type { CreateReportRequestInput } from './reports.schema';
 import { generateReportBuffer } from './reports.pdf';
-import type { ReportData } from './reports.pdf';
+import type { LockedFundBreakdownRow, ReportData } from './reports.pdf';
 
 // backend/src/modules/reports -> backend (three levels up), same resolution used by
 // kyc.service.ts's UPLOADS_ROOT and withdrawals.service.ts's UPLOADS_ROOT.
@@ -159,6 +159,39 @@ function sumAmounts(amounts: Array<number | string | { toString(): string }>): n
   return amounts.reduce<number>((sum, value) => sum + Number(value.toString()), 0);
 }
 
+// Aggregated across every wallet the student holds — mirrors how the rest of this function
+// treats walletIds as "the student", never a single wallet in isolation.
+async function getLockedFundsBreakdown(walletIds: string[]): Promise<LockedFundBreakdownRow[]> {
+  const lockedFunds = await prisma.lockedFund.findMany({ where: { walletId: { in: walletIds } } });
+
+  const byCategory = new Map<string, { totalReceived: number; remaining: number }>();
+  for (const fund of lockedFunds) {
+    const existing = byCategory.get(fund.category) ?? { totalReceived: 0, remaining: 0 };
+    existing.totalReceived += Number(fund.totalLocked);
+    existing.remaining += Number(fund.amount);
+    byCategory.set(fund.category, existing);
+  }
+
+  return [...byCategory.entries()]
+    .filter(([, totals]) => totals.totalReceived > 0)
+    .map(([category, totals]) => {
+      const totalSpent = Math.max(0, totals.totalReceived - totals.remaining);
+      const status =
+        totals.remaining <= 0
+          ? 'FULLY_USED'
+          : totals.remaining < totals.totalReceived
+            ? 'PARTIALLY_USED'
+            : 'UNUSED';
+      return {
+        category,
+        totalReceived: totals.totalReceived,
+        totalSpent,
+        remaining: totals.remaining,
+        status,
+      };
+    });
+}
+
 export async function generateReport(reportId: string): Promise<ReportRequest> {
   const reportRequest = await prisma.reportRequest.findUnique({
     where: { id: reportId },
@@ -183,7 +216,12 @@ export async function generateReport(reportId: string): Promise<ReportRequest> {
     createdAt: { gte: start },
   };
 
-  const [cardPurchases, transfers, withdrawals, flagged, pending, savings] = await Promise.all([
+  const universityStudent = await prisma.universityStudent.findFirst({
+    where: { userId: reportRequest.studentUserId },
+    include: { university: { select: { name: true } } },
+  });
+
+  const [cardPurchases, transfers, withdrawals, flagged, pending, savings, lockedFunds] = await Promise.all([
     reportRequest.includeCardPurchases
       ? prisma.cardHistory.findMany({
           where: { walletId: { in: walletIds }, usedAt: { gte: start } },
@@ -223,6 +261,7 @@ export async function generateReport(reportId: string): Promise<ReportRequest> {
           orderBy: { createdAt: 'desc' },
         })
       : Promise.resolve(null),
+    getLockedFundsBreakdown(walletIds),
   ]);
 
   const byCategoryMap = new Map<string, number>();
@@ -257,7 +296,10 @@ export async function generateReport(reportId: string): Promise<ReportRequest> {
 
   const reportData: ReportData = {
     studentName: reportRequest.student.fullName,
+    studentEmail: reportRequest.student.email,
     parentName: reportRequest.parent.fullName,
+    enrollmentNumber: universityStudent?.studentNumber ?? null,
+    university: universityStudent?.university.name ?? null,
     period: reportRequest.period,
     generatedAt: new Date(),
     cardPurchases,
@@ -266,6 +308,7 @@ export async function generateReport(reportId: string): Promise<ReportRequest> {
     flagged: flagged as (TransactionWithParties & { fraudAlerts: FraudAlert[] })[] | null,
     pending,
     savings,
+    lockedFunds,
     summary: {
       byCategory: [...byCategoryMap.entries()].map(([category, total]) => ({ category, total })),
       totalSpent,

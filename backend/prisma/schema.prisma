@@ -456,7 +456,24 @@ model PersonalSavingsHistory {
   month     String?
   reason    String?
   status    SavingsHistoryStatus @default(PENDING)
+  // Per-category snapshot of what contributed to a ROLLOVER row, e.g. {"BOOKS": 205, "FOOD":
+  // 267.01} — only ever set for type ROLLOVER. Captured at rollover time because the same
+  // transaction zeroes out LockedFund.amount (see runRollover() in savings.service.ts), so the
+  // per-category detail would otherwise be unrecoverable after the fact; this row's own `amount`
+  // only holds the pre-summed total.
+  categoryBreakdown Json?
   createdAt DateTime             @default(now())
+  // Set alongside status/type when a parent approves a WITHDRAWAL_REQUEST (see
+  // approveWithdrawal() in savings.service.ts) — createdAt stays the original request time, so
+  // this is what the agent portal's "Approved Date" column actually reads.
+  approvedAt DateTime?
+  // Set once an agent has physically handed over the cash for an APPROVED withdrawal (see
+  // dispenseSavingsWithdrawal() in savings.service.ts). PersonalSavings.balance is already
+  // decremented at approval time above — dispensedAt/agentId are a fulfillment/audit marker
+  // only, not a second money movement. No Prisma relation to User, same as WithdrawalRequest's
+  // own agentId — resolved with a second lookup where needed.
+  dispensedAt DateTime?
+  agentId     String?
 
   wallet Wallet @relation(fields: [walletId], references: [id])
 

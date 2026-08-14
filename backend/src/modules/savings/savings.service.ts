@@ -179,7 +179,7 @@ export async function approveWithdrawal(
 
     return tx.personalSavingsHistory.update({
       where: { id: request.id },
-      data: { status: 'APPROVED', type: 'WITHDRAWAL_APPROVED' },
+      data: { status: 'APPROVED', type: 'WITHDRAWAL_APPROVED', approvedAt: new Date() },
     });
   });
 
@@ -220,6 +220,83 @@ export async function rejectWithdrawal(
   return updated;
 }
 
+export type AgentSavingsWithdrawalRow = {
+  id: string;
+  amount: string;
+  reason: string | null;
+  requestedAt: string;
+  approvedAt: string | null;
+  dispensedAt: string | null;
+  agentId: string | null;
+  student: { id: string; fullName: string; email: string };
+};
+
+const savingsWithdrawalStudentInclude = {
+  wallet: { include: { user: { select: { id: true, fullName: true, email: true } as const } } },
+} as const;
+
+type SavingsWithdrawalWithStudent = PersonalSavingsHistory & {
+  wallet: Wallet & { user: { id: string; fullName: string; email: string } };
+};
+
+function toAgentSavingsWithdrawalRow(row: SavingsWithdrawalWithStudent): AgentSavingsWithdrawalRow {
+  return {
+    id: row.id,
+    amount: formatMoney(row.amount),
+    reason: row.reason,
+    requestedAt: row.createdAt.toISOString(),
+    approvedAt: row.approvedAt ? row.approvedAt.toISOString() : null,
+    dispensedAt: row.dispensedAt ? row.dispensedAt.toISOString() : null,
+    agentId: row.agentId,
+    student: row.wallet.user,
+  };
+}
+
+// Every WITHDRAWAL_APPROVED row, dispensed or not — the agent portal's Savings Withdrawals page
+// derives its Pending Dispense / Dispensed / All tabs from this one fetch (same pattern as every
+// other tabbed list in this app) rather than three separate endpoints.
+export async function getAgentSavingsWithdrawals(): Promise<AgentSavingsWithdrawalRow[]> {
+  const rows = await prisma.personalSavingsHistory.findMany({
+    where: { type: 'WITHDRAWAL_APPROVED' },
+    include: savingsWithdrawalStudentInclude,
+    orderBy: { approvedAt: 'desc' },
+  });
+  return rows.map(toAgentSavingsWithdrawalRow);
+}
+
+// The agent's confirmation that cash was physically handed over — PersonalSavings.balance was
+// already decremented when the parent approved this request (see approveWithdrawal() above), so
+// this does not touch the balance again, and there is no receipt step: unlike a locked-category
+// cash withdrawal, this money already left a category-agnostic Personal Savings pot the parent
+// explicitly signed off on, so there's no spend category left to verify against.
+export async function dispenseSavingsWithdrawal(
+  agentId: string,
+  historyId: string
+): Promise<AgentSavingsWithdrawalRow> {
+  const request = await prisma.personalSavingsHistory.findUnique({ where: { id: historyId } });
+  if (!request || request.type !== 'WITHDRAWAL_APPROVED') {
+    throw new AppError(404, 'SAVINGS_WITHDRAWAL_NOT_FOUND', 'Savings withdrawal not found');
+  }
+  if (request.dispensedAt) {
+    throw new AppError(400, 'ALREADY_DISPENSED', 'This savings withdrawal has already been dispensed');
+  }
+
+  const updated = await prisma.personalSavingsHistory.update({
+    where: { id: historyId },
+    data: { agentId, dispensedAt: new Date() },
+    include: savingsWithdrawalStudentInclude,
+  });
+
+  await createNotification(
+    updated.wallet.userId,
+    'Savings Withdrawal Dispensed',
+    `Your $${formatMoney(updated.amount)} Personal Savings withdrawal has been dispensed in cash.`,
+    'SAVINGS_WITHDRAWAL_DISPENSED'
+  );
+
+  return toAgentSavingsWithdrawalRow(updated);
+}
+
 export type RolloverResult = {
   month: string;
   processed: Array<{ walletId: string; userId: string; amountSaved: string }>;
@@ -246,6 +323,17 @@ export async function runRollover(): Promise<RolloverResult> {
         where: { walletId: wallet.id, category: { notIn: ROLLOVER_EXCLUDED_CATEGORIES_LIST } },
       });
       const totalUnspent = lockedFunds.reduce((sum, fund) => sum + Number(fund.amount), 0);
+
+      // Snapshot per-category amounts now — the updateMany below zeroes LockedFund.amount in the
+      // same transaction, so this is the only point where the per-category breakdown is still
+      // available to persist onto the PersonalSavingsHistory row (see its categoryBreakdown field).
+      const categoryBreakdown: Record<string, number> = {};
+      for (const fund of lockedFunds) {
+        const amount = Number(fund.amount);
+        if (amount > 0) {
+          categoryBreakdown[fund.category] = amount;
+        }
+      }
 
       const budgets = await tx.budgetCategory.findMany({
         where: { walletId: wallet.id, month },
@@ -293,7 +381,18 @@ export async function runRollover(): Promise<RolloverResult> {
             amount: totalUnspent,
             month,
             status: 'APPROVED',
+            categoryBreakdown,
           },
+        });
+
+        // BudgetCategory.spent tracks this wallet's own spend-against-category totals
+        // independently of LockedFund — the archive-and-delete above only clears whichever
+        // BudgetCategory row already existed for `month` at the top of this transaction, so it
+        // won't catch a row that didn't exist yet then. Reset explicitly so the Budget screen and
+        // Parent spending overview can't keep showing spend against money that's now in savings.
+        await tx.budgetCategory.updateMany({
+          where: { walletId: wallet.id, category: { notIn: ROLLOVER_EXCLUDED_CATEGORIES_LIST } },
+          data: { spent: 0 },
         });
       }
 

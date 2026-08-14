@@ -27,6 +27,7 @@ import {
   getAuditLog,
   getFraudAlerts,
   getRelationships,
+  getRolloverHistory,
   getSystemStats,
   getUserById,
   getUsers,
@@ -254,6 +255,15 @@ export async function getRelationshipsHandler(request: FastifyRequest, reply: Fa
   try {
     const relationships = await getRelationships();
     return reply.status(200).send(successResponse(relationships));
+  } catch (error) {
+    return handleAdminError(request, reply, error);
+  }
+}
+
+export async function getRolloverHistoryHandler(request: FastifyRequest, reply: FastifyReply) {
+  try {
+    const history = await getRolloverHistory();
+    return reply.status(200).send(successResponse(history));
   } catch (error) {
     return handleAdminError(request, reply, error);
   }

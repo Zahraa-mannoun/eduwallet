@@ -1,7 +1,8 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { AppError } from '../../utils/AppError';
 import { errorResponse, successResponse } from '../../utils/apiResponse';
-import { sendAgentMessageSchema } from './agent.schema';
+import { dispenseSavingsWithdrawal, getAgentSavingsWithdrawals } from '../savings/savings.service';
+import { savingsWithdrawalIdParamsSchema, sendAgentMessageSchema } from './agent.schema';
 import { getAgentStats, getMyAgentMessages, sendAgentMessage } from './agent.service';
 
 function handleAgentError(request: FastifyRequest, reply: FastifyReply, error: unknown) {
@@ -53,6 +54,32 @@ export async function getMyAgentMessagesHandler(request: FastifyRequest, reply: 
     const authUser = requireAuthUser(request);
     const messages = await getMyAgentMessages(authUser.id);
     return reply.status(200).send(successResponse(messages));
+  } catch (error) {
+    return handleAgentError(request, reply, error);
+  }
+}
+
+export async function getAgentSavingsWithdrawalsHandler(request: FastifyRequest, reply: FastifyReply) {
+  try {
+    const withdrawals = await getAgentSavingsWithdrawals();
+    return reply.status(200).send(successResponse(withdrawals));
+  } catch (error) {
+    return handleAgentError(request, reply, error);
+  }
+}
+
+export async function dispenseSavingsWithdrawalHandler(request: FastifyRequest, reply: FastifyReply) {
+  const parsed = savingsWithdrawalIdParamsSchema.safeParse(request.params);
+  if (!parsed.success) {
+    return reply
+      .status(400)
+      .send(errorResponse(parsed.error.issues[0]?.message ?? 'Invalid input', 'VALIDATION_ERROR'));
+  }
+
+  try {
+    const authUser = requireAuthUser(request);
+    const withdrawal = await dispenseSavingsWithdrawal(authUser.id, parsed.data.id);
+    return reply.status(200).send(successResponse(withdrawal));
   } catch (error) {
     return handleAgentError(request, reply, error);
   }

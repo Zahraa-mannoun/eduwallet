@@ -7,6 +7,7 @@ import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { ProcessWithdrawal } from './pages/ProcessWithdrawal';
 import { WithdrawalHistory } from './pages/WithdrawalHistory';
+import { SavingsWithdrawals } from './pages/SavingsWithdrawals';
 import { Profile } from './pages/Profile';
 import { Messages } from './pages/Messages';
 
@@ -44,6 +45,14 @@ export function App() {
           element={
             <ProtectedPage>
               <WithdrawalHistory />
+            </ProtectedPage>
+          }
+        />
+        <Route
+          path="/savings-withdrawals"
+          element={
+            <ProtectedPage>
+              <SavingsWithdrawals />
             </ProtectedPage>
           }
         />

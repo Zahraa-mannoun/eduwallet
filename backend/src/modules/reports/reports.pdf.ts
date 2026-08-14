@@ -12,7 +12,18 @@ const PAGE_MARGIN = 50;
 const COLOR_HEADING = '#0F172A';
 const COLOR_MUTED = '#64748B';
 const COLOR_PRIMARY = '#2E5FAC';
+const COLOR_PRIMARY_LIGHT = '#4A7FD4';
 const COLOR_BORDER = '#E2E8F0';
+const COLOR_ROW_ALT = '#F8FAFC';
+const COLOR_HEADER_BG = '#E4EDFB';
+const COLOR_HIGHLIGHT_BG = '#EFF6FF';
+const COLOR_WHITE = '#FFFFFF';
+
+const HEADER_BAR_HEIGHT = 80;
+const SECTION_TITLE_HEIGHT = 24;
+const TABLE_HEADER_HEIGHT = 20;
+const CELL_PADDING = 6;
+const FOOTER_HEIGHT = 40;
 
 export const PERIOD_LABELS: Record<ReportPeriod, string> = {
   LAST_WEEK: 'Last Week',
@@ -83,13 +94,45 @@ const SAVINGS_STATUS_LABELS: Record<string, string> = {
   REJECTED: 'Rejected',
 };
 
-function savingsStatusLabel(status: string): string {
-  return SAVINGS_STATUS_LABELS[status] ?? titleCaseEnum(status);
+// A ROLLOVER row's status is always the schema default 'APPROVED' (see runRollover() in
+// savings.service.ts) — but "Approved" implies a parent had to sign off on it, when a rollover
+// is really an automatic monthly sweep. "Completed" reads correctly for that case without
+// touching the underlying status value or any other status-driven logic.
+function savingsRowStatusLabel(entry: PersonalSavingsHistory): string {
+  if (entry.type === 'ROLLOVER') {
+    return 'Completed';
+  }
+  return SAVINGS_STATUS_LABELS[entry.status] ?? titleCaseEnum(entry.status);
 }
+
+// A ROLLOVER row's categoryBreakdown is a {category: amount} snapshot captured at rollover time
+// (see the field comment on PersonalSavingsHistory in schema.prisma) — turns it into "Books
+// $205.00 · Food $267.01" instead of the caller having to show just the pre-summed total.
+function formatCategoryBreakdown(breakdown: unknown): string {
+  if (!breakdown || typeof breakdown !== 'object') {
+    return '—';
+  }
+  const entries = Object.entries(breakdown as Record<string, number>);
+  if (entries.length === 0) {
+    return '—';
+  }
+  return entries.map(([category, amount]) => `${titleCaseEnum(category)} ${formatMoney(amount)}`).join(' · ');
+}
+
+export type LockedFundBreakdownRow = {
+  category: string;
+  totalReceived: number;
+  totalSpent: number;
+  remaining: number;
+  status: string;
+};
 
 export type ReportData = {
   studentName: string;
+  studentEmail: string;
   parentName: string;
+  enrollmentNumber: string | null;
+  university: string | null;
   period: ReportPeriod;
   generatedAt: Date;
   cardPurchases: CardHistory[] | null;
@@ -98,6 +141,7 @@ export type ReportData = {
   flagged: (TransactionWithParties & { fraudAlerts: FraudAlert[] })[] | null;
   pending: TransactionWithParties[] | null;
   savings: PersonalSavingsHistory[] | null;
+  lockedFunds: LockedFundBreakdownRow[];
   summary: {
     byCategory: Array<{ category: string; total: number }>;
     totalSpent: number;
@@ -108,29 +152,42 @@ export type ReportData = {
 
 type Column = { label: string; width: number };
 
-function drawTableHeader(doc: PDFKit.PDFDocument, columns: Column[], x: number, y: number): number {
-  doc.font('Helvetica-Bold').fontSize(9).fillColor(COLOR_MUTED);
-  let cx = x;
-  for (const col of columns) {
-    doc.text(col.label.toUpperCase(), cx, y, { width: col.width });
-    cx += col.width;
-  }
-  const rowBottom = y + 14;
-  doc
-    .moveTo(x, rowBottom)
-    .lineTo(x + columns.reduce((sum, c) => sum + c.width, 0), rowBottom)
-    .strokeColor(COLOR_BORDER)
-    .stroke();
-  return rowBottom + 6;
+function contentWidth(doc: PDFKit.PDFDocument): number {
+  return doc.page.width - doc.page.margins.left - doc.page.margins.right;
 }
 
 function ensureSpace(doc: PDFKit.PDFDocument, y: number, rowHeight: number): number {
-  const bottom = doc.page.height - doc.page.margins.bottom;
+  const bottom = doc.page.height - doc.page.margins.bottom - FOOTER_HEIGHT;
   if (y + rowHeight > bottom) {
     doc.addPage();
     return doc.page.margins.top;
   }
   return y;
+}
+
+// The blue "SECTION TITLE" band every table (and the Summary box) sits under — the one
+// consistent landmark a reader can scan down the page for, regardless of how many rows a given
+// section has.
+function drawSectionTitle(doc: PDFKit.PDFDocument, title: string, x: number, y: number, width: number): number {
+  doc.rect(x, y, width, SECTION_TITLE_HEIGHT).fill(COLOR_PRIMARY);
+  doc
+    .font('Helvetica-Bold')
+    .fontSize(11)
+    .fillColor(COLOR_WHITE)
+    .text(title.toUpperCase(), x + 10, y + 7, { width: width - 20 });
+  return y + SECTION_TITLE_HEIGHT + 8;
+}
+
+function drawTableHeader(doc: PDFKit.PDFDocument, columns: Column[], x: number, y: number): number {
+  const width = columns.reduce((sum, c) => sum + c.width, 0);
+  doc.rect(x, y, width, TABLE_HEADER_HEIGHT).fill(COLOR_HEADER_BG);
+  doc.font('Helvetica-Bold').fontSize(8.5).fillColor(COLOR_PRIMARY);
+  let cx = x;
+  for (const col of columns) {
+    doc.text(col.label.toUpperCase(), cx + CELL_PADDING, y + 6, { width: col.width - CELL_PADDING * 2 });
+    cx += col.width;
+  }
+  return y + TABLE_HEADER_HEIGHT;
 }
 
 function drawTable(
@@ -141,60 +198,176 @@ function drawTable(
   startY: number
 ): number {
   const x = PAGE_MARGIN;
-  let y = ensureSpace(doc, startY, 40);
+  const width = columns.reduce((sum, c) => sum + c.width, 0);
 
-  doc.font('Helvetica-Bold').fontSize(12).fillColor(COLOR_HEADING).text(title, x, y);
-  y += 20;
+  // An empty section only ever needs room for its title band + one line of "No records" text —
+  // reserving as much as a populated table (title + header row) would round up to a page break
+  // more often than the section's real height ever requires.
+  const reserveHeight = rows.length === 0 ? SECTION_TITLE_HEIGHT + 24 : SECTION_TITLE_HEIGHT + TABLE_HEADER_HEIGHT + 18;
+  let y = ensureSpace(doc, startY, reserveHeight);
+
+  y = drawSectionTitle(doc, title, x, y, width);
 
   if (rows.length === 0) {
     doc.font('Helvetica').fontSize(9).fillColor(COLOR_MUTED).text('No records for this period.', x, y);
-    return y + 20;
+    return y + 24;
   }
 
   y = drawTableHeader(doc, columns, x, y);
 
-  doc.font('Helvetica').fontSize(9).fillColor(COLOR_HEADING);
-  for (const row of rows) {
-    y = ensureSpace(doc, y, 16);
+  const rowHeight = 18;
+  doc.font('Helvetica').fontSize(8.5);
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+    y = ensureSpace(doc, y, rowHeight);
     if (y === doc.page.margins.top) {
       y = drawTableHeader(doc, columns, x, y);
-      doc.font('Helvetica').fontSize(9).fillColor(COLOR_HEADING);
+      doc.font('Helvetica').fontSize(8.5);
     }
+
+    doc.rect(x, y, width, rowHeight).fill(rowIndex % 2 === 0 ? COLOR_WHITE : COLOR_ROW_ALT);
+    doc.fillColor(COLOR_HEADING);
+
+    const row = rows[rowIndex]!;
     let cx = x;
     for (let i = 0; i < columns.length; i++) {
-      doc.text(row[i] ?? '', cx, y, { width: columns[i].width });
-      cx += columns[i].width;
+      doc.text(row[i] ?? '', cx + CELL_PADDING, y + 5, { width: columns[i]!.width - CELL_PADDING * 2 });
+      cx += columns[i]!.width;
     }
-    y += 16;
+    y += rowHeight;
   }
 
-  return y + 14;
+  return y + 16;
+}
+
+function drawInfoCard(doc: PDFKit.PDFDocument, data: ReportData, y: number): number {
+  const x = PAGE_MARGIN;
+  const width = contentWidth(doc);
+  const cardPad = 18;
+  const rowHeight = 34;
+  const rows = 3;
+  const height = cardPad * 2 + rowHeight * rows;
+
+  doc.lineWidth(1).roundedRect(x, y, width, height, 8).fillAndStroke(COLOR_WHITE, COLOR_BORDER);
+
+  const colWidth = (width - cardPad * 2) / 2;
+  const fields: Array<[string, string]> = [
+    ['Student Name', data.studentName],
+    ['Email', data.studentEmail],
+    ['Student ID / Enrollment No.', data.enrollmentNumber ?? '—'],
+    ['University', data.university ?? '—'],
+    ['Report Period', PERIOD_LABELS[data.period]],
+    ['Requested By', data.parentName],
+  ];
+
+  for (let i = 0; i < fields.length; i++) {
+    const [label, value] = fields[i]!;
+    const row = Math.floor(i / 2);
+    const col = i % 2;
+    const fx = x + cardPad + col * colWidth;
+    const fy = y + cardPad + row * rowHeight;
+
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(8)
+      .fillColor(COLOR_MUTED)
+      .text(label.toUpperCase(), fx, fy, { width: colWidth - cardPad, characterSpacing: 0.3 });
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(11)
+      .fillColor(COLOR_HEADING)
+      .text(value, fx, fy + 13, { width: colWidth - cardPad });
+  }
+
+  return y + height + 20;
+}
+
+function drawSummaryBox(doc: PDFKit.PDFDocument, data: ReportData, startY: number): number {
+  const x = PAGE_MARGIN;
+  const width = contentWidth(doc);
+  const height = 92;
+  const y = ensureSpace(doc, startY, height + 8);
+
+  doc.lineWidth(1.5).roundedRect(x, y, width, height, 8).fillAndStroke(COLOR_HIGHLIGHT_BG, COLOR_PRIMARY);
+
+  doc.font('Helvetica-Bold').fontSize(12).fillColor(COLOR_PRIMARY).text('Summary', x + 18, y + 14);
+
+  const stats: Array<[string, string]> = [
+    ['Total Spent', formatMoney(data.summary.totalSpent)],
+    ['Total Withdrawn', formatMoney(data.summary.totalWithdrawn)],
+    ['Total Saved', formatMoney(data.summary.totalSaved)],
+  ];
+  const colWidth = width / 3;
+  for (let i = 0; i < stats.length; i++) {
+    const [label, value] = stats[i]!;
+    const cx = x + i * colWidth + 18;
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(8)
+      .fillColor(COLOR_MUTED)
+      .text(label.toUpperCase(), cx, y + 44, { characterSpacing: 0.3 });
+    doc.font('Helvetica-Bold').fontSize(17).fillColor(COLOR_HEADING).text(value, cx, y + 57);
+  }
+
+  return y + height + 20;
+}
+
+function drawFooters(doc: PDFKit.PDFDocument, data: ReportData): void {
+  const range = doc.bufferedPageRange();
+  const generatedLabel = `Generated by EduWallet · ${formatDate(data.generatedAt)}`;
+
+  for (let i = 0; i < range.count; i++) {
+    doc.switchToPage(range.start + i);
+    const pageWidth = doc.page.width;
+    const y = doc.page.height - FOOTER_HEIGHT + 8;
+
+    doc
+      .lineWidth(0.5)
+      .moveTo(PAGE_MARGIN, y)
+      .lineTo(pageWidth - PAGE_MARGIN, y)
+      .strokeColor(COLOR_BORDER)
+      .stroke();
+
+    // The footer sits inside the page's own bottom margin by design (y is past
+    // doc.page.maxY() = page.height - margins.bottom). PDFKit's text() checks that boundary on
+    // every call regardless of the explicit x/y given, and silently calls addPage() when it's
+    // exceeded — without this, every footer line was spawning a genuinely blank extra page (one
+    // per doc.text() call below). Zeroing the bottom margin just for these two calls disables
+    // that check without affecting anything else on the page.
+    const originalBottomMargin = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0;
+    doc.font('Helvetica').fontSize(8).fillColor(COLOR_MUTED);
+    doc.text(generatedLabel, PAGE_MARGIN, y + 8, { width: 300, lineBreak: false });
+    doc.text(`Page ${i + 1} of ${range.count}`, pageWidth - PAGE_MARGIN - 150, y + 8, {
+      width: 150,
+      align: 'right',
+      lineBreak: false,
+    });
+    doc.page.margins.bottom = originalBottomMargin;
+  }
 }
 
 export function renderReportPdf(doc: PDFKit.PDFDocument, data: ReportData): void {
-  doc
-    .font('Helvetica-Bold')
-    .fontSize(20)
-    .fillColor(COLOR_PRIMARY)
-    .text('EduWallet');
+  const pageWidth = doc.page.width;
+
+  // Header bar — full-bleed gradient, independent of the page margins used by everything below it.
+  const gradient = doc.linearGradient(0, 0, pageWidth, 0);
+  gradient.stop(0, COLOR_PRIMARY).stop(1, COLOR_PRIMARY_LIGHT);
+  doc.rect(0, 0, pageWidth, HEADER_BAR_HEIGHT).fill(gradient);
+
+  doc.font('Helvetica-Bold').fontSize(20).fillColor(COLOR_WHITE).text('EduWallet', PAGE_MARGIN, 22);
+  doc.font('Helvetica').fontSize(11).fillColor(COLOR_WHITE).text('Financial Report', PAGE_MARGIN, 46);
+
   doc
     .font('Helvetica')
-    .fontSize(10)
-    .fillColor(COLOR_MUTED)
-    .text('University-Verified Financial Access for Students in Crisis Economies');
-  doc.moveDown(1);
+    .fontSize(9)
+    .fillColor(COLOR_WHITE)
+    .text(`Generated: ${formatDate(data.generatedAt)}`, pageWidth - PAGE_MARGIN - 200, 34, {
+      width: 200,
+      align: 'right',
+    });
 
-  doc.font('Helvetica-Bold').fontSize(16).fillColor(COLOR_HEADING).text(`Report for ${data.studentName}`);
-  doc
-    .font('Helvetica')
-    .fontSize(10)
-    .fillColor(COLOR_MUTED)
-    .text(`Requested by ${data.parentName}`)
-    .text(`Period: ${PERIOD_LABELS[data.period]}`)
-    .text(`Generated: ${formatDate(data.generatedAt)}`);
-  doc.moveDown(1);
-
-  let y = doc.y;
+  let y = HEADER_BAR_HEIGHT + 20;
+  y = drawInfoCard(doc, data, y);
 
   if (data.cardPurchases) {
     y = drawTable(
@@ -205,7 +378,7 @@ export function renderReportPdf(doc: PDFKit.PDFDocument, data: ReportData): void
         { label: 'Merchant', width: 160 },
         { label: 'Category', width: 100 },
         { label: 'Amount', width: 80 },
-        { label: 'Card', width: 80 },
+        { label: 'Card', width: 75 },
       ],
       data.cardPurchases.map((entry) => [
         formatDate(entry.usedAt),
@@ -306,54 +479,69 @@ export function renderReportPdf(doc: PDFKit.PDFDocument, data: ReportData): void
     );
   }
 
+  y = drawTable(
+    doc,
+    'Locked Funds Breakdown',
+    [
+      { label: 'Category', width: 95 },
+      { label: 'Total Received', width: 100 },
+      { label: 'Total Spent', width: 100 },
+      { label: 'Remaining', width: 100 },
+      { label: 'Status', width: 100 },
+    ],
+    data.lockedFunds.map((row) => [
+      titleCaseEnum(row.category),
+      formatMoney(row.totalReceived),
+      formatMoney(row.totalSpent),
+      formatMoney(row.remaining),
+      titleCaseEnum(row.status),
+    ]),
+    y
+  );
+
   if (data.savings) {
     y = drawTable(
       doc,
       'Personal Savings',
       [
-        { label: 'Date', width: 100 },
-        { label: 'Type', width: 140 },
-        { label: 'Amount', width: 100 },
-        { label: 'Status', width: 100 },
+        { label: 'Date', width: 85 },
+        { label: 'Type', width: 110 },
+        { label: 'Amount', width: 85 },
+        { label: 'Status', width: 90 },
+        { label: 'Details', width: 125 },
       ],
       data.savings.map((entry) => [
         formatDate(entry.createdAt),
         entry.type === 'ROLLOVER' ? 'Rollover' : 'Withdrawal',
         formatMoney(entry.amount),
-        savingsStatusLabel(entry.status),
+        savingsRowStatusLabel(entry),
+        entry.type === 'ROLLOVER' ? formatCategoryBreakdown(entry.categoryBreakdown) : '—',
       ]),
       y
     );
   }
 
-  y = ensureSpace(doc, y, 100);
-  doc.font('Helvetica-Bold').fontSize(12).fillColor(COLOR_HEADING).text('Summary', PAGE_MARGIN, y);
-  y += 20;
-  doc.font('Helvetica').fontSize(10).fillColor(COLOR_HEADING);
-  doc.text(`Total Spent: ${formatMoney(data.summary.totalSpent)}`, PAGE_MARGIN, y);
-  y += 16;
-  doc.text(`Total Withdrawn: ${formatMoney(data.summary.totalWithdrawn)}`, PAGE_MARGIN, y);
-  y += 16;
-  doc.text(`Total Saved: ${formatMoney(data.summary.totalSaved)}`, PAGE_MARGIN, y);
-  y += 20;
+  y = drawSummaryBox(doc, data, y);
 
   if (data.summary.byCategory.length > 0) {
     y = drawTable(
       doc,
       'Totals by Category',
       [
-        { label: 'Category', width: 200 },
-        { label: 'Total', width: 200 },
+        { label: 'Category', width: 250 },
+        { label: 'Total', width: 245 },
       ],
       data.summary.byCategory.map((row) => [titleCaseEnum(row.category), formatMoney(row.total)]),
       y
     );
   }
+
+  drawFooters(doc, data);
 }
 
 export async function generateReportBuffer(data: ReportData): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ margin: PAGE_MARGIN, size: 'A4' });
+    const doc = new PDFDocument({ margin: PAGE_MARGIN, size: 'A4', bufferPages: true });
     const chunks: Buffer[] = [];
     doc.on('data', (chunk: Buffer) => chunks.push(chunk));
     doc.on('end', () => resolve(Buffer.concat(chunks)));

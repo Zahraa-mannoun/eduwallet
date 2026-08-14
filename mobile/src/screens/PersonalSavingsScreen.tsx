@@ -1,20 +1,10 @@
 import { useCallback, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Modal, RefreshControl, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import {
-  ActivityIndicator,
-  Button,
-  Chip,
-  Dialog,
-  IconButton,
-  Portal,
-  Snackbar,
-  Text,
-  TextInput,
-} from 'react-native-paper';
+import { ActivityIndicator, Chip, IconButton, Snackbar, Text } from 'react-native-paper';
 import type { PersonalSavingsHistory } from '../types/api';
 import { colors } from '../theme/colors';
 import * as savingsService from '../services/savingsService';
@@ -73,6 +63,8 @@ export default function PersonalSavingsScreen({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
+  const [amountFocused, setAmountFocused] = useState(false);
+  const [reasonFocused, setReasonFocused] = useState(false);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -100,6 +92,8 @@ export default function PersonalSavingsScreen({
     setAmount('');
     setReason('');
     setDialogError(null);
+    setAmountFocused(false);
+    setReasonFocused(false);
     setDialogVisible(true);
   };
 
@@ -262,47 +256,94 @@ export default function PersonalSavingsScreen({
         )}
       </ScrollView>
 
-      <Portal>
-        <Dialog visible={dialogVisible} onDismiss={closeDialog}>
-          <Dialog.Title>Request Withdrawal</Dialog.Title>
-          <Dialog.Content>
-            <Text style={styles.dialogBalance}>Available: ${Number(balance).toFixed(2)}</Text>
-            {dialogError ? <Text style={styles.errorText}>{dialogError}</Text> : null}
-            <TextInput
-              mode="outlined"
-              label="Amount"
-              value={amount}
-              onChangeText={(text: string) => setAmount(text.replace(/[^0-9.]/g, ''))}
-              keyboardType="decimal-pad"
-              outlineColor={colors.border}
-              activeOutlineColor={colors.primary}
-              style={styles.dialogInput}
-            />
-            {parsedAmount > Number(balance) ? (
-              <Text style={styles.warningText}>Amount cannot exceed your current balance.</Text>
-            ) : null}
-            <TextInput
-              mode="outlined"
-              label="Reason"
-              placeholder="What's this withdrawal for?"
-              value={reason}
-              onChangeText={setReason}
-              outlineColor={colors.border}
-              activeOutlineColor={colors.primary}
-              style={styles.dialogInput}
-              multiline
-            />
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={closeDialog} disabled={isSubmitting}>
-              Cancel
-            </Button>
-            <Button onPress={handleSubmit} disabled={!canSubmit}>
-              {isSubmitting ? <ActivityIndicator size={16} color={colors.primary} /> : 'Submit'}
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
+      <Modal visible={dialogVisible} transparent animationType="fade" onRequestClose={closeDialog}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <LinearGradient
+              colors={[SAVINGS_GRADIENT_START, SAVINGS_GRADIENT_END]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.modalHeader}
+            >
+              <View style={styles.modalHeaderIconCircle}>
+                <MaterialCommunityIcons name="piggy-bank" size={26} color={SAVINGS_GRADIENT_END} />
+              </View>
+              <Text style={styles.modalHeaderTitle}>Request Withdrawal</Text>
+            </LinearGradient>
+
+            <View style={styles.modalBody}>
+              {dialogError ? <Text style={styles.errorText}>{dialogError}</Text> : null}
+
+              <View style={styles.availableBalanceBox}>
+                <Text style={styles.availableBalanceLabel}>Available Balance</Text>
+                <Text style={styles.availableBalanceAmount}>${Number(balance).toFixed(2)}</Text>
+              </View>
+
+              <Text style={styles.modalFieldLabel}>Amount</Text>
+              <View style={[styles.amountInputCard, amountFocused && styles.amountInputCardFocused]}>
+                <Text style={styles.amountPrefix}>$</Text>
+                <TextInput
+                  style={styles.amountInputField}
+                  value={amount}
+                  onChangeText={(text) => setAmount(text.replace(/[^0-9.]/g, ''))}
+                  onFocus={() => setAmountFocused(true)}
+                  onBlur={() => setAmountFocused(false)}
+                  keyboardType="decimal-pad"
+                  placeholder="0.00"
+                  placeholderTextColor={colors.placeholder}
+                />
+              </View>
+              <Text style={styles.amountHelperText}>Maximum: ${Number(balance).toFixed(2)}</Text>
+              {parsedAmount > Number(balance) ? (
+                <Text style={styles.warningText}>Amount cannot exceed your current balance.</Text>
+              ) : null}
+
+              <Text style={[styles.modalFieldLabel, styles.reasonLabel]}>Reason</Text>
+              <TextInput
+                style={[styles.reasonInput, reasonFocused && styles.reasonInputFocused]}
+                value={reason}
+                onChangeText={setReason}
+                onFocus={() => setReasonFocused(true)}
+                onBlur={() => setReasonFocused(false)}
+                placeholder="Why are you withdrawing from savings?"
+                placeholderTextColor={colors.placeholder}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
+
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                activeOpacity={0.85}
+                onPress={closeDialog}
+                disabled={isSubmitting}
+              >
+                <Text style={styles.modalCancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalSubmitButtonWrap, !canSubmit && styles.modalSubmitButtonWrapDisabled]}
+                activeOpacity={0.85}
+                onPress={handleSubmit}
+                disabled={!canSubmit}
+              >
+                <LinearGradient
+                  colors={[SAVINGS_GRADIENT_START, SAVINGS_GRADIENT_END]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.modalSubmitButton}
+                >
+                  {isSubmitting ? (
+                    <ActivityIndicator size={16} color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.modalSubmitButtonText}>Submit</Text>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Snackbar
         visible={Boolean(snackbarMessage)}
@@ -541,13 +582,147 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     lineHeight: 18,
   },
-  dialogBalance: {
-    fontSize: 13,
-    color: colors.muted,
-    marginBottom: 12,
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15,23,42,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
   },
-  dialogInput: {
-    backgroundColor: colors.inputBackground,
-    marginBottom: 12,
+  modalCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalHeader: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+  },
+  modalHeaderIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  modalHeaderTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  modalBody: {
+    padding: 20,
+  },
+  availableBalanceBox: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  availableBalanceLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.muted,
+    marginBottom: 4,
+  },
+  availableBalanceAmount: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: SAVINGS_AMOUNT_COLOR,
+  },
+  modalFieldLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.muted,
+    marginBottom: 8,
+  },
+  reasonLabel: {
+    marginTop: 16,
+  },
+  amountInputCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  amountInputCardFocused: {
+    borderColor: SAVINGS_GRADIENT_START,
+  },
+  amountPrefix: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: colors.heading,
+    marginRight: 6,
+  },
+  amountInputField: {
+    flex: 1,
+    fontSize: 20,
+    fontWeight: '800',
+    color: colors.heading,
+    padding: 0,
+  },
+  amountHelperText: {
+    fontSize: 11,
+    color: colors.muted,
+    marginTop: 6,
+  },
+  reasonInput: {
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: colors.heading,
+    minHeight: 84,
+  },
+  reasonInputFocused: {
+    borderColor: SAVINGS_GRADIENT_START,
+  },
+  modalCancelButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingVertical: 13,
+    marginTop: 20,
+  },
+  modalCancelButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.label,
+  },
+  modalSubmitButtonWrap: {
+    width: '100%',
+    marginTop: 10,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  modalSubmitButtonWrapDisabled: {
+    opacity: 0.5,
+  },
+  modalSubmitButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 13,
+  },
+  modalSubmitButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

@@ -115,6 +115,17 @@ export type StudentLookup = {
   allowedCategories: TransactionCategory[] | null;
 };
 
+export type AgentSavingsWithdrawalRow = {
+  id: string;
+  amount: string;
+  reason: string | null;
+  requestedAt: string;
+  approvedAt: string | null;
+  dispensedAt: string | null;
+  agentId: string | null;
+  student: { id: string; fullName: string; email: string };
+};
+
 export type ProcessWithdrawalResult = {
   pending: boolean;
   request: {
