@@ -1,23 +1,37 @@
 import { useCallback, useState } from 'react';
 import {
+  LayoutAnimation,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
   TextInput as NativeTextInput,
   TouchableOpacity,
+  UIManager,
   View,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ActivityIndicator, Checkbox, Snackbar, Text } from 'react-native-paper';
 import type { UniversityStudentSummary } from '../types/api';
+import FundingBreakdownRow from '../components/FundingBreakdownRow';
+import StatusDotBadge from '../components/StatusDotBadge';
 import { colors } from '../theme/colors';
 import * as universityService from '../services/universityService';
 import { ApiError } from '../services/api';
 import { useNotificationRefetch } from '../hooks/useNotificationRefetch';
 
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
 const PARTIAL_COLOR = '#F59E0B';
 const WILL_BE_FUNDED_COLOR = '#EC4899';
+// A lighter blue-to-blue gradient than the app's usual navy send-button gradient
+// (colors.gradientStart/End) — keeps this button reading as "enabled and ready", not the
+// same visual weight as an auth-flow submit button.
+const PROCEED_GRADIENT: [string, string] = ['#2E5FAC', '#4a7fd4'];
 const NO_COVERAGE_COLOR = '#EF4444';
 
 // Per-student, not per-cost — fundingGap already nets out what this specific student's parent
@@ -28,10 +42,10 @@ const NO_COVERAGE_COLOR = '#EF4444';
 // - fundingGap <= 0: parent + institution already cover the full cost — always green, no
 //   matter what's checked/typed.
 // - Checked: the typed amount is about to be sent to THIS student, so show what disbursing it
-//   would do — pink "Fully funded" (this disbursement would close the gap) or orange "Partial"
+//   would do — pink "Fully funded" (this disbursement would close the gap) or amber "Partial"
 //   with what's still short.
-// - Unchecked: the typed amount isn't going to this student at all. Red "No coverage yet" if
-//   neither the parent nor the institution has sent anything yet, orange "Partially covered" if
+// - Unchecked: the typed amount isn't going to this student at all. Red "No coverage" if
+//   neither the parent nor the institution has sent anything yet, amber "Partially covered" if
 //   one of them has but a gap remains — distinguishing "nobody's started" from "still short".
 function fundingStatusFor(
   fundingGap: number,
@@ -39,25 +53,21 @@ function fundingStatusFor(
   amount: number,
   parentSent: number,
   received: number
-): { label: string; color: string; icon: string | null } {
+): { label: string; color: string } {
   if (fundingGap <= 0) {
-    return { label: 'Fully funded', color: colors.accent, icon: 'check-circle-outline' };
+    return { label: 'Fully Funded', color: colors.accent };
   }
   if (checked) {
     const remaining = fundingGap - amount;
     if (remaining <= 0) {
-      return { label: 'Fully funded', color: WILL_BE_FUNDED_COLOR, icon: 'check-circle-outline' };
+      return { label: 'Fully Funded', color: WILL_BE_FUNDED_COLOR };
     }
-    return {
-      label: `Partial — $${remaining.toFixed(2)} still needed`,
-      color: PARTIAL_COLOR,
-      icon: 'alert-outline',
-    };
+    return { label: `Partial — $${remaining.toFixed(2)} still needed`, color: PARTIAL_COLOR };
   }
   if (parentSent === 0 && received === 0) {
-    return { label: 'No coverage yet', color: NO_COVERAGE_COLOR, icon: null };
+    return { label: 'No Coverage', color: NO_COVERAGE_COLOR };
   }
-  return { label: 'Partially covered', color: PARTIAL_COLOR, icon: null };
+  return { label: 'Partially Covered', color: PARTIAL_COLOR };
 }
 
 export default function UniversityStudentsTab({
@@ -70,6 +80,7 @@ export default function UniversityStudentsTab({
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [amount, setAmount] = useState('');
+  const [isAmountFocused, setIsAmountFocused] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
 
@@ -116,6 +127,11 @@ export default function UniversityStudentsTab({
     });
   };
 
+  const toggleExpanded = (id: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpandedId((current) => (current === id ? null : id));
+  };
+
   const parsedAmount = Number(amount);
   const canProceed = selectedIds.size > 0 && parsedAmount > 0 && !isSubmitting;
 
@@ -151,7 +167,12 @@ export default function UniversityStudentsTab({
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
         {students.length > 0 ? (
-          <Text style={styles.universityHeader}>{students[0].universityName} — Verified Students</Text>
+          <View style={styles.universityHeaderRow}>
+            <MaterialCommunityIcons name="school-outline" size={18} color={colors.primary} />
+            <Text style={styles.universityHeader}>
+              {students[0].universityName} — Verified Students
+            </Text>
+          </View>
         ) : null}
 
         <Text style={styles.sectionLabel}>
@@ -172,8 +193,12 @@ export default function UniversityStudentsTab({
               Number(student.received)
             );
             return (
-              <View key={student.id} style={styles.studentCard}>
-                <TouchableOpacity style={styles.studentRow} onPress={() => toggleStudent(student.id)}>
+              <View key={student.id} style={[styles.studentCard, checked && styles.studentCardChecked]}>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={styles.studentRow}
+                  onPress={() => toggleStudent(student.id)}
+                >
                   <Checkbox
                     status={checked ? 'checked' : 'unchecked'}
                     onPress={() => toggleStudent(student.id)}
@@ -182,39 +207,19 @@ export default function UniversityStudentsTab({
                   <View style={styles.studentMiddle}>
                     <Text style={styles.studentName}>{student.fullName}</Text>
                     <Text style={styles.studentSubtitle}>#{student.studentNumber}</Text>
-                    <Text style={styles.studentStat}>
-                      Total Cost:{' '}
-                      <Text style={styles.studentStatValue}>
-                        ${Number(student.totalCreditCost).toFixed(2)}
-                      </Text>
-                      {'  ·  '}Parent:{' '}
-                      <Text style={styles.studentStatValue}>
-                        ${Number(student.parentSent).toFixed(2)}
-                      </Text>
-                      {'  ·  '}Institution:{' '}
-                      <Text style={styles.studentStatValue}>
-                        ${Number(student.received).toFixed(2)}
-                      </Text>
-                      {'  ·  '}Gap:{' '}
-                      <Text style={styles.studentStatValue}>
-                        ${Number(student.fundingGap).toFixed(2)}
-                      </Text>
-                    </Text>
-                    <View style={styles.statusRow}>
-                      {status.icon ? (
-                        <MaterialCommunityIcons
-                          name={status.icon as keyof typeof MaterialCommunityIcons.glyphMap}
-                          size={14}
-                          color={status.color}
-                          style={styles.statusIcon}
-                        />
-                      ) : null}
-                      <Text style={[styles.statusText, { color: status.color }]}>{status.label}</Text>
-                    </View>
+
+                    <FundingBreakdownRow
+                      totalCost={Number(student.totalCreditCost)}
+                      parentSent={Number(student.parentSent)}
+                      institutionSent={Number(student.received)}
+                      gap={Number(student.fundingGap)}
+                    />
+
+                    <StatusDotBadge label={status.label} color={status.color} style={styles.statusBadge} />
                   </View>
                   <TouchableOpacity
                     style={styles.expandButton}
-                    onPress={() => setExpandedId(expanded ? null : student.id)}
+                    onPress={() => toggleExpanded(student.id)}
                   >
                     <MaterialCommunityIcons
                       name={expanded ? 'chevron-up' : 'chevron-down'}
@@ -241,6 +246,7 @@ export default function UniversityStudentsTab({
           })
         ) : (
           <View style={styles.emptyCard}>
+            <MaterialCommunityIcons name="account-school-outline" size={40} color={colors.border} />
             <Text style={styles.emptyText}>
               No verified students available — everyone eligible is already selected or funded.
             </Text>
@@ -249,31 +255,47 @@ export default function UniversityStudentsTab({
       </ScrollView>
 
       <View style={styles.footer}>
-        <Text style={styles.fieldLabel}>Amount per Student ($)</Text>
-        <View style={styles.amountContainer}>
+        <Text style={styles.fieldLabel}>Amount per Student</Text>
+        <View style={[styles.amountContainer, isAmountFocused && styles.amountContainerFocused]}>
           <Text style={styles.currencySymbol}>$</Text>
           <NativeTextInput
             style={styles.amountInput}
             value={amount}
             onChangeText={(text: string) => setAmount(text.replace(/[^0-9.]/g, ''))}
+            onFocus={() => setIsAmountFocused(true)}
+            onBlur={() => setIsAmountFocused(false)}
             placeholder="0.00"
             placeholderTextColor={colors.placeholder}
             keyboardType="decimal-pad"
           />
         </View>
         <TouchableOpacity
-          style={[styles.proceedButton, !canProceed && styles.proceedButtonDisabled]}
+          activeOpacity={0.85}
           disabled={!canProceed}
           onPress={() => void handleNotifyAndProceed()}
+          style={styles.proceedButtonWrapper}
         >
-          {isSubmitting ? (
-            <ActivityIndicator color={colors.onPrimary} size={18} />
-          ) : (
-            <>
-              <Text style={styles.proceedButtonText}>Notify &amp; Proceed</Text>
-              <MaterialCommunityIcons name="arrow-right" size={18} color={colors.onPrimary} />
-            </>
-          )}
+          <LinearGradient
+            colors={canProceed ? PROCEED_GRADIENT : [colors.border, colors.border]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.proceedButton}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator color={colors.onPrimary} size={18} />
+            ) : (
+              <>
+                <Text style={[styles.proceedButtonText, { color: canProceed ? colors.onPrimary : colors.muted }]}>
+                  Notify &amp; Proceed
+                </Text>
+                <MaterialCommunityIcons
+                  name="arrow-right"
+                  size={18}
+                  color={canProceed ? colors.onPrimary : colors.muted}
+                />
+              </>
+            )}
+          </LinearGradient>
         </TouchableOpacity>
       </View>
 
@@ -298,39 +320,62 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 12,
   },
+  universityHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
   universityHeader: {
     fontSize: 15,
     fontWeight: '700',
     color: colors.heading,
-    marginBottom: 4,
+    marginLeft: 6,
   },
   sectionLabel: {
     fontSize: 13,
     fontWeight: '600',
     color: colors.label,
     marginBottom: 10,
+    marginTop: 6,
   },
   loading: {
     marginTop: 24,
   },
   emptyCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 20,
+    padding: 28,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 1,
   },
   emptyText: {
     color: colors.muted,
     textAlign: 'center',
+    marginTop: 12,
+    lineHeight: 19,
   },
   studentCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    marginBottom: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginBottom: 12,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.07,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  studentCardChecked: {
+    borderWidth: 1.5,
+    borderColor: colors.primary,
   },
   studentRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     padding: 12,
   },
   studentMiddle: {
@@ -347,26 +392,8 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginTop: 2,
   },
-  studentStat: {
-    fontSize: 12,
-    color: colors.muted,
-    marginTop: 8,
-  },
-  studentStatValue: {
-    fontWeight: '700',
-    color: colors.heading,
-  },
-  statusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  statusIcon: {
-    marginRight: 4,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '700',
+  statusBadge: {
+    marginTop: 10,
   },
   expandButton: {
     padding: 6,
@@ -399,50 +426,56 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    backgroundColor: colors.background,
+    backgroundColor: '#FFFFFF',
   },
   fieldLabel: {
     fontSize: 12,
     fontWeight: '600',
     color: colors.label,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   amountContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
-    marginBottom: 10,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 12,
+    marginBottom: 12,
+  },
+  amountContainerFocused: {
+    borderColor: colors.primary,
   },
   currencySymbol: {
-    fontSize: 22,
-    fontWeight: '700',
+    fontSize: 28,
+    fontWeight: '800',
     color: colors.heading,
-    marginRight: 4,
+    marginRight: 0,
   },
   amountInput: {
     fontSize: 28,
     fontWeight: '800',
     color: colors.heading,
-    minWidth: 100,
-    textAlign: 'center',
+    minWidth: 20,
+    textAlign: 'left',
     padding: 0,
+    marginLeft: 0,
+  },
+  proceedButtonWrapper: {
+    borderRadius: 14,
+    overflow: 'hidden',
   },
   proceedButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    paddingVertical: 12,
-  },
-  proceedButtonDisabled: {
-    opacity: 0.5,
+    paddingVertical: 14,
   },
   proceedButtonText: {
-    color: colors.onPrimary,
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 15,
   },
 });

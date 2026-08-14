@@ -1,10 +1,12 @@
 import { useCallback, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { ActivityIndicator, Avatar, Button, Chip, Snackbar, Text } from 'react-native-paper';
+import { LinearGradient } from 'expo-linear-gradient';
+import { ActivityIndicator, Avatar, Snackbar, Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { SelectedStudentSummary, TransactionCategory } from '../types/api';
 import CategorySelectorGrid from '../components/CategorySelectorGrid';
+import StatusDotBadge from '../components/StatusDotBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryDefinition, BudgetCategoryKey } from '../constants/budgetCategories';
 import { colors } from '../theme/colors';
@@ -20,6 +22,11 @@ const ACADEMIC_CATEGORIES = BUDGET_CATEGORIES.filter((category) =>
   ACADEMIC_CATEGORY_KEYS.has(category.key)
 );
 
+// Same gradient as UniversityStudentsTab's "Notify & Proceed" and IndividualFundingTab's
+// "Fund This Student" — every primary action button in the Institution funding flows should
+// read as the same button.
+const ACTION_GRADIENT: [string, string] = ['#2E5FAC', '#4a7fd4'];
+
 const PARTIAL_COLOR = '#D97706';
 const WILL_BE_FUNDED_COLOR = '#EC4899';
 
@@ -28,19 +35,16 @@ const WILL_BE_FUNDED_COLOR = '#EC4899';
 // do to their (received + parentSent - aware) fundingGap.
 // - fundingGap === 0: already fully covered before this disbursement — always green.
 // - remaining = fundingGap - amount <= 0: this disbursement would close the gap — pink.
-// - remaining > 0: still short after this disbursement — orange "Partial".
-function fundingBadgeFor(
-  fundingGap: number,
-  amount: number
-): { label: string; color: string; icon: string } {
+// - remaining > 0: still short after this disbursement — amber "Partial".
+function fundingBadgeFor(fundingGap: number, amount: number): { label: string; color: string } {
   if (fundingGap === 0) {
-    return { label: 'Fully funded', color: colors.accent, icon: 'check-circle-outline' };
+    return { label: 'Fully Funded', color: colors.accent };
   }
   const remaining = fundingGap - amount;
   if (remaining <= 0) {
-    return { label: 'Fully funded', color: WILL_BE_FUNDED_COLOR, icon: 'check-circle-outline' };
+    return { label: 'Fully Funded', color: WILL_BE_FUNDED_COLOR };
   }
-  return { label: 'Partial', color: PARTIAL_COLOR, icon: 'alert-outline' };
+  return { label: 'Partial', color: PARTIAL_COLOR };
 }
 
 export default function ScholarshipPortalTab() {
@@ -114,7 +118,7 @@ export default function ScholarshipPortalTab() {
             return (
               <View key={student.selectionId} style={styles.studentRow}>
                 <Avatar.Text
-                  size={36}
+                  size={40}
                   label={getInitials(student.fullName)}
                   style={styles.studentAvatar}
                   color={colors.onPrimary}
@@ -125,32 +129,17 @@ export default function ScholarshipPortalTab() {
                 </View>
                 <View style={styles.studentRight}>
                   <Text style={styles.studentAmount}>${Number(student.amount).toFixed(2)}</Text>
-                  <Chip
-                    compact
-                    // Chip's `icon` prop, given a bare string, resolves its color from the
-                    // chip's own theme — not from textStyle — which is why the icon didn't
-                    // match the label color. A render function lets us force badge.color on
-                    // both explicitly.
-                    icon={() => (
-                      <MaterialCommunityIcons
-                        name={badge.icon as keyof typeof MaterialCommunityIcons.glyphMap}
-                        size={14}
-                        color={badge.color}
-                      />
-                    )}
-                    style={[styles.statusChip, { backgroundColor: `${badge.color}1F` }]}
-                    textStyle={{ color: badge.color, fontSize: 10, fontWeight: '700' }}
-                  >
-                    {badge.label}
-                  </Chip>
+                  <StatusDotBadge label={badge.label} color={badge.color} style={styles.statusBadge} />
                 </View>
               </View>
             );
           })
         ) : (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>
-              No students selected yet. Select students in the University Students tab first.
+            <MaterialCommunityIcons name="hand-coin-outline" size={40} color={colors.border} />
+            <Text style={styles.emptyTitle}>No students selected yet</Text>
+            <Text style={styles.emptySubtitle}>
+              Select students in the University Students tab first.
             </Text>
           </View>
         )}
@@ -160,18 +149,34 @@ export default function ScholarshipPortalTab() {
             <Text style={styles.sectionLabel}>Category</Text>
             <CategorySelectorGrid value={category} onChange={setCategory} categories={ACADEMIC_CATEGORIES} />
 
-            <Button
-              mode="contained"
-              buttonColor={colors.primary}
-              icon="send-outline"
+            <TouchableOpacity
+              activeOpacity={0.85}
               disabled={!canSend}
-              loading={isSending}
-              style={styles.sendButton}
-              contentStyle={styles.sendButtonContent}
-              onPress={handleSendDisbursement}
+              onPress={() => void handleSendDisbursement()}
+              style={styles.sendButtonWrapper}
             >
-              Send Disbursement
-            </Button>
+              <LinearGradient
+                colors={canSend ? ACTION_GRADIENT : [colors.border, colors.border]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.sendButton}
+              >
+                {isSending ? (
+                  <ActivityIndicator color={colors.onPrimary} size={18} />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons
+                      name="send-outline"
+                      size={18}
+                      color={canSend ? colors.onPrimary : colors.muted}
+                    />
+                    <Text style={[styles.sendButtonText, { color: canSend ? colors.onPrimary : colors.muted }]}>
+                      Send Disbursement
+                    </Text>
+                  </>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
           </>
         ) : null}
       </ScrollView>
@@ -208,22 +213,42 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   emptyCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 20,
+    padding: 32,
+    alignItems: 'center',
     marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 1,
   },
-  emptyText: {
+  emptyTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.heading,
+    marginTop: 12,
+  },
+  emptySubtitle: {
+    fontSize: 12,
     color: colors.muted,
     textAlign: 'center',
+    marginTop: 4,
+    lineHeight: 18,
   },
   studentRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
     padding: 12,
     marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.07,
+    shadowRadius: 4,
+    elevation: 1,
   },
   studentAvatar: {
     backgroundColor: colors.primary,
@@ -251,17 +276,23 @@ const styles = StyleSheet.create({
     color: colors.heading,
     fontSize: 14,
   },
-  statusChip: {
-    height: 22,
-    marginTop: 4,
-    flexShrink: 0,
-    minWidth: 96,
+  statusBadge: {
+    marginTop: 6,
   },
-  sendButton: {
-    borderRadius: 10,
+  sendButtonWrapper: {
+    borderRadius: 14,
+    overflow: 'hidden',
     marginTop: 20,
   },
-  sendButtonContent: {
-    paddingVertical: 6,
+  sendButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+  },
+  sendButtonText: {
+    fontWeight: '700',
+    fontSize: 15,
   },
 });

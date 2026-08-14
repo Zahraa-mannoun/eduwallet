@@ -2,9 +2,11 @@ import { useCallback, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, TextInput as NativeTextInput, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { ActivityIndicator, Button, Snackbar, Text } from 'react-native-paper';
+import { LinearGradient } from 'expo-linear-gradient';
+import { ActivityIndicator, Snackbar, Text } from 'react-native-paper';
 import type { TransactionCategory, UniversityStudentSummary } from '../types/api';
 import CategorySelectorGrid from '../components/CategorySelectorGrid';
+import StatusDotBadge from '../components/StatusDotBadge';
 import { BUDGET_CATEGORIES } from '../constants/budgetCategories';
 import type { BudgetCategoryDefinition, BudgetCategoryKey } from '../constants/budgetCategories';
 import { colors } from '../theme/colors';
@@ -17,14 +19,20 @@ const ACADEMIC_CATEGORIES = BUDGET_CATEGORIES.filter((category) =>
   ACADEMIC_CATEGORY_KEYS.has(category.key)
 );
 
+// Same gradient as UniversityStudentsTab's "Notify & Proceed" — every primary action button in
+// the Institution funding flows should read as the same button, not a mix of gradients.
+const ACTION_GRADIENT: [string, string] = ['#2E5FAC', '#4a7fd4'];
+
 export default function IndividualFundingTab() {
   const [students, setStudents] = useState<UniversityStudentSummary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [selected, setSelected] = useState<UniversityStudentSummary | null>(null);
 
   const [amount, setAmount] = useState('');
+  const [isAmountFocused, setIsAmountFocused] = useState(false);
   const [category, setCategory] = useState<BudgetCategoryDefinition | null>(null);
   const [isFunding, setIsFunding] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
@@ -81,11 +89,10 @@ export default function IndividualFundingTab() {
   const fundingStatus =
     selected && parsedAmount > 0
       ? projectedTotal >= totalCreditCost
-        ? { label: 'Fully funded', color: colors.accent, icon: 'check-circle-outline' as const }
+        ? { label: 'Fully Funded', color: colors.accent }
         : {
             label: `Partial — $${(totalCreditCost - projectedTotal).toFixed(2)} still needed`,
             color: '#F59E0B',
-            icon: 'alert-outline' as const,
           }
       : null;
 
@@ -121,12 +128,18 @@ export default function IndividualFundingTab() {
         {!selected ? (
           <>
             <Text style={styles.sectionLabel}>Search Student</Text>
-            <View style={styles.searchBox}>
-              <MaterialCommunityIcons name="magnify" size={20} color={colors.muted} />
+            <View style={[styles.searchBox, isSearchFocused && styles.searchBoxFocused]}>
+              <MaterialCommunityIcons
+                name="magnify"
+                size={20}
+                color={isSearchFocused ? colors.primary : colors.muted}
+              />
               <NativeTextInput
                 style={styles.searchInput}
                 value={query}
                 onChangeText={setQuery}
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => setIsSearchFocused(false)}
                 placeholder="Name or student number"
                 placeholderTextColor={colors.placeholder}
               />
@@ -140,6 +153,7 @@ export default function IndividualFundingTab() {
               searchResults.map((student) => (
                 <TouchableOpacity
                   key={student.id}
+                  activeOpacity={0.8}
                   style={styles.resultRow}
                   onPress={() => selectStudent(student)}
                 >
@@ -156,8 +170,8 @@ export default function IndividualFundingTab() {
           </>
         ) : (
           <>
-            <TouchableOpacity style={styles.backRow} onPress={clearSelection}>
-              <MaterialCommunityIcons name="arrow-left" size={18} color={colors.primary} />
+            <TouchableOpacity style={styles.backRow} activeOpacity={0.7} onPress={clearSelection}>
+              <MaterialCommunityIcons name="arrow-left" size={16} color={colors.primary} />
               <Text style={styles.backText}>Back to search</Text>
             </TouchableOpacity>
 
@@ -180,11 +194,9 @@ export default function IndividualFundingTab() {
                   <Text style={styles.breakdownLabel}>Institution</Text>
                   <Text style={styles.breakdownValue}>${received.toFixed(2)}</Text>
                 </View>
-                <View style={[styles.breakdownRow, styles.breakdownRowLast]}>
-                  <Text style={[styles.breakdownLabel, styles.breakdownGapLabel]}>Gap</Text>
-                  <Text style={[styles.breakdownValue, styles.breakdownGapValue]}>
-                    ${Number(selected.fundingGap).toFixed(2)}
-                  </Text>
+                <View style={styles.breakdownGapRow}>
+                  <Text style={styles.breakdownGapLabel}>Gap</Text>
+                  <Text style={styles.breakdownGapValue}>${Number(selected.fundingGap).toFixed(2)}</Text>
                 </View>
               </View>
 
@@ -200,12 +212,14 @@ export default function IndividualFundingTab() {
             </View>
 
             <Text style={styles.sectionLabel}>Amount to Fund</Text>
-            <View style={styles.amountContainer}>
+            <View style={[styles.amountContainer, isAmountFocused && styles.amountContainerFocused]}>
               <Text style={styles.currencySymbol}>$</Text>
               <NativeTextInput
                 style={styles.amountInput}
                 value={amount}
                 onChangeText={(text: string) => setAmount(text.replace(/[^0-9.]/g, ''))}
+                onFocus={() => setIsAmountFocused(true)}
+                onBlur={() => setIsAmountFocused(false)}
                 placeholder="0.00"
                 placeholderTextColor={colors.placeholder}
                 keyboardType="decimal-pad"
@@ -213,28 +227,46 @@ export default function IndividualFundingTab() {
             </View>
             {fundingStatus ? (
               <View style={styles.statusRow}>
-                <MaterialCommunityIcons name={fundingStatus.icon} size={14} color={fundingStatus.color} />
-                <Text style={[styles.statusText, { color: fundingStatus.color }]}>
-                  {fundingStatus.label}
-                </Text>
+                <StatusDotBadge label={fundingStatus.label} color={fundingStatus.color} />
               </View>
             ) : null}
 
             <Text style={styles.sectionLabel}>Category</Text>
-            <CategorySelectorGrid value={category} onChange={setCategory} categories={ACADEMIC_CATEGORIES} />
+            <CategorySelectorGrid
+              value={category}
+              onChange={setCategory}
+              categories={ACADEMIC_CATEGORIES}
+              variant="primary"
+            />
 
-            <Button
-              mode="contained"
-              buttonColor={colors.primary}
-              icon="send-outline"
+            <TouchableOpacity
+              activeOpacity={0.85}
               disabled={!canFund}
-              loading={isFunding}
-              style={styles.fundButton}
-              contentStyle={styles.fundButtonContent}
-              onPress={handleFund}
+              onPress={() => void handleFund()}
+              style={styles.fundButtonWrapper}
             >
-              Fund This Student
-            </Button>
+              <LinearGradient
+                colors={canFund ? ACTION_GRADIENT : [colors.border, colors.border]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.fundButton}
+              >
+                {isFunding ? (
+                  <ActivityIndicator color={colors.onPrimary} size={18} />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons
+                      name="send-outline"
+                      size={18}
+                      color={canFund ? colors.onPrimary : colors.muted}
+                    />
+                    <Text style={[styles.fundButtonText, { color: canFund ? colors.onPrimary : colors.muted }]}>
+                      Fund This Student
+                    </Text>
+                  </>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
           </>
         )}
       </ScrollView>
@@ -270,12 +302,20 @@ const styles = StyleSheet.create({
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.inputBackground,
-    borderRadius: 12,
-    borderWidth: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 999,
+    borderWidth: 1.5,
     borderColor: colors.border,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  searchBoxFocused: {
+    borderColor: colors.primary,
   },
   searchInput: {
     flex: 1,
@@ -296,20 +336,30 @@ const styles = StyleSheet.create({
   resultRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    padding: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 14,
     marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 1,
   },
   backRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    alignSelf: 'flex-start',
+    backgroundColor: `${colors.primary}14`,
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginBottom: 14,
   },
   backText: {
     color: colors.primary,
-    fontWeight: '600',
-    fontSize: 13,
+    fontWeight: '700',
+    fontSize: 12,
     marginLeft: 6,
   },
   studentMiddle: {
@@ -326,10 +376,15 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   profileCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 16,
     marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.07,
+    shadowRadius: 4,
+    elevation: 1,
   },
   fundingBreakdown: {
     marginTop: 14,
@@ -339,12 +394,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-  },
-  breakdownRowLast: {
-    borderBottomWidth: 0,
   },
   breakdownLabel: {
     fontSize: 12,
@@ -355,13 +407,25 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.heading,
   },
+  breakdownGapRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: `${colors.primary}12`,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginTop: 6,
+  },
   breakdownGapLabel: {
+    fontSize: 12,
     fontWeight: '700',
-    color: colors.heading,
+    color: colors.primary,
   },
   breakdownGapValue: {
+    fontSize: 15,
+    fontWeight: '800',
     color: colors.primary,
-    marginTop: 2,
   },
   coursesLabel: {
     fontSize: 12,
@@ -392,38 +456,50 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 12,
+  },
+  amountContainerFocused: {
+    borderColor: colors.primary,
   },
   currencySymbol: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: colors.heading,
-    marginRight: 4,
-  },
-  amountInput: {
-    fontSize: 32,
+    fontSize: 30,
     fontWeight: '800',
     color: colors.heading,
-    minWidth: 100,
-    textAlign: 'center',
+    marginRight: 0,
+  },
+  amountInput: {
+    fontSize: 30,
+    fontWeight: '800',
+    color: colors.heading,
+    minWidth: 20,
+    textAlign: 'left',
     padding: 0,
+    marginLeft: 0,
   },
   statusRow: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  fundButtonWrapper: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    marginTop: 20,
+  },
+  fundButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
-    gap: 4,
+    gap: 8,
+    paddingVertical: 14,
   },
-  statusText: {
-    fontSize: 12,
+  fundButtonText: {
     fontWeight: '700',
-  },
-  fundButton: {
-    borderRadius: 10,
-    marginTop: 20,
-  },
-  fundButtonContent: {
-    paddingVertical: 6,
+    fontSize: 15,
   },
 });

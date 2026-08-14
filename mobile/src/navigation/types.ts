@@ -19,7 +19,11 @@ export type ParentTabParamList = {
 };
 
 export type InstitutionTabParamList = {
-  Portal: undefined;
+  Overview: undefined;
+  // initialTab lets other screens deep-link straight into one of Portal's 3 internal tabs
+  // (e.g. Overview's "Fund a Student" / "Bulk Scholarship" quick actions) instead of always
+  // landing on the default "University Students" internal tab.
+  Portal: { initialTab?: 'students' | 'portal' | 'individual' } | undefined;
   Students: undefined;
   Profile: undefined;
 };

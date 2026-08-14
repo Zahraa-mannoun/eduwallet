@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Badge, IconButton, Text, TouchableRipple } from 'react-native-paper';
@@ -8,6 +8,8 @@ import UniversityStudentsTab from './UniversityStudentsTab';
 import ScholarshipPortalTab from './ScholarshipPortalTab';
 import IndividualFundingTab from './IndividualFundingTab';
 import type { InstitutionTabScreenProps } from '../navigation/types';
+
+const SCREEN_BACKGROUND = '#F8FAFC';
 
 type DashboardTab = 'students' | 'portal' | 'individual';
 
@@ -24,16 +26,24 @@ const TABS: ReadonlyArray<{ key: DashboardTab; label: string }> = [
 // data load correct without any extra cross-tab refresh wiring.
 export default function ScholarshipPortalScreen({
   navigation,
+  route,
 }: Readonly<InstitutionTabScreenProps<'Portal'>>) {
-  const [activeTab, setActiveTab] = useState<DashboardTab>('students');
+  const [activeTab, setActiveTab] = useState<DashboardTab>(route.params?.initialTab ?? 'students');
   const { unreadCount } = useNotifications();
+
+  // The Overview tab's "Fund a Student" / "Bulk Scholarship" quick actions navigate here with
+  // an initialTab param — since this screen stays mounted as a bottom tab, a second visit with a
+  // different param needs to actually switch the internal tab, not just be ignored.
+  useEffect(() => {
+    if (route.params?.initialTab) {
+      setActiveTab(route.params.initialTab);
+    }
+  }, [route.params?.initialTab]);
 
   return (
     <SafeAreaView style={styles.flex} edges={['top']}>
       <View style={styles.header}>
-        <Text variant="headlineSmall" style={styles.headerTitle}>
-          Institution Dashboard
-        </Text>
+        <Text style={styles.headerTitle}>Institution Dashboard</Text>
         <View style={styles.bellWrapper}>
           <IconButton
             icon="bell-outline"
@@ -54,6 +64,7 @@ export default function ScholarshipPortalScreen({
               key={tab.key}
               onPress={() => setActiveTab(tab.key)}
               style={[styles.tabItem, active && styles.tabItemActive]}
+              borderless
             >
               <Text
                 style={[styles.tabLabel, active && styles.tabLabelActive]}
@@ -78,7 +89,7 @@ export default function ScholarshipPortalScreen({
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: SCREEN_BACKGROUND,
   },
   header: {
     flexDirection: 'row',
@@ -89,7 +100,8 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   headerTitle: {
-    fontWeight: '700',
+    fontSize: 22,
+    fontWeight: '800',
     color: colors.heading,
     flexShrink: 1,
   },
@@ -108,15 +120,20 @@ const styles = StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
     marginHorizontal: 20,
-    marginTop: 12,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
+    marginTop: 14,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 999,
     padding: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 1,
   },
   tabItem: {
     flex: 1,
-    borderRadius: 9,
-    paddingVertical: 8,
+    borderRadius: 999,
+    paddingVertical: 9,
     alignItems: 'center',
     justifyContent: 'center',
   },

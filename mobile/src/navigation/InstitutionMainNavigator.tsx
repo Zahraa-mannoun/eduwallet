@@ -3,6 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import type { BottomTabNavigationOptions } from '@react-navigation/bottom-tabs';
 import type { RouteProp } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import InstitutionOverviewScreen from '../screens/InstitutionOverviewScreen';
 import ScholarshipPortalScreen from '../screens/ScholarshipPortalScreen';
 import InstitutionStudentsScreen from '../screens/InstitutionStudentsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
@@ -12,6 +13,7 @@ import type { InstitutionTabParamList } from './types';
 const Tab = createBottomTabNavigator<InstitutionTabParamList>();
 
 const TAB_ICONS: Record<keyof InstitutionTabParamList, keyof typeof MaterialCommunityIcons.glyphMap> = {
+  Overview: 'home-outline',
   Portal: 'school-outline',
   Students: 'account-school-outline',
   Profile: 'account-circle-outline',
@@ -35,6 +37,7 @@ export default function InstitutionMainNavigator() {
         tabBarLabelStyle: styles.tabBarLabel,
       })}
     >
+      <Tab.Screen name="Overview" component={InstitutionOverviewScreen} />
       <Tab.Screen name="Portal" component={ScholarshipPortalScreen} />
       <Tab.Screen name="Students" component={InstitutionStudentsScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />

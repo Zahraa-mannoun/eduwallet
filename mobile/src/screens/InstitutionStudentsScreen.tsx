@@ -1,13 +1,30 @@
 import { useCallback, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import {
+  LayoutAnimation,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  UIManager,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ActivityIndicator, Text } from 'react-native-paper';
 import type { UniversityStudentSummary } from '../types/api';
+import FundingBreakdownRow from '../components/FundingBreakdownRow';
+import StatusDotBadge from '../components/StatusDotBadge';
 import { colors } from '../theme/colors';
 import * as universityService from '../services/universityService';
 import { ApiError } from '../services/api';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+const SCREEN_BACKGROUND = '#F8FAFC';
 
 const PARTIAL_COLOR = '#F59E0B';
 const NO_COVERAGE_COLOR = '#EF4444';
@@ -17,23 +34,15 @@ const NO_COVERAGE_COLOR = '#EF4444';
 // UniversityStudentsTab.tsx / ScholarshipPortalTab.tsx.
 // - fundingGap <= 0: institution + parent together met totalCreditCost — always green.
 // - Otherwise, distinguish "nobody's sent anything yet" (red) from "something's been sent but
-//   there's still a gap" (orange) using parentSent/received, not just the gap amount alone.
-function fundingBadgeFor(
-  fundingGap: number,
-  parentSent: number,
-  received: number
-): { label: string; color: string; icon: string } {
+//   there's still a gap" (amber) using parentSent/received, not just the gap amount alone.
+function fundingBadgeFor(fundingGap: number, parentSent: number, received: number): { label: string; color: string } {
   if (fundingGap <= 0) {
-    return { label: 'Fully funded', color: colors.accent, icon: 'check-circle-outline' };
+    return { label: 'Fully Funded', color: colors.accent };
   }
   if (parentSent === 0 && received === 0) {
-    return { label: 'No coverage yet', color: NO_COVERAGE_COLOR, icon: 'alert-circle-outline' };
+    return { label: 'No Coverage', color: NO_COVERAGE_COLOR };
   }
-  return {
-    label: 'Partially covered',
-    color: PARTIAL_COLOR,
-    icon: 'alert-outline',
-  };
+  return { label: 'Partially Covered', color: PARTIAL_COLOR };
 }
 
 export default function InstitutionStudentsScreen() {
@@ -61,12 +70,15 @@ export default function InstitutionStudentsScreen() {
     }, [load])
   );
 
+  const toggleExpanded = (id: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpandedId((current) => (current === id ? null : id));
+  };
+
   return (
     <SafeAreaView style={styles.flex} edges={['top']}>
       <View style={styles.header}>
-        <Text variant="headlineSmall" style={styles.headerTitle}>
-          Students
-        </Text>
+        <Text style={styles.headerTitle}>Students</Text>
         {students.length > 0 ? (
           <Text style={styles.headerSubtitle}>{students[0].universityName}</Text>
         ) : null}
@@ -91,39 +103,22 @@ export default function InstitutionStudentsScreen() {
             return (
               <View key={student.id} style={styles.studentCard}>
                 <TouchableOpacity
+                  activeOpacity={0.8}
                   style={styles.studentRow}
-                  onPress={() => setExpandedId(expanded ? null : student.id)}
+                  onPress={() => toggleExpanded(student.id)}
                 >
                   <View style={styles.studentMiddle}>
                     <Text style={styles.studentName}>{student.fullName}</Text>
                     <Text style={styles.studentSubtitle}>#{student.studentNumber}</Text>
-                    <Text style={styles.studentStat}>
-                      Total Cost:{' '}
-                      <Text style={styles.studentStatValue}>
-                        ${Number(student.totalCreditCost).toFixed(2)}
-                      </Text>
-                      {'  ·  '}Parent:{' '}
-                      <Text style={styles.studentStatValue}>
-                        ${Number(student.parentSent).toFixed(2)}
-                      </Text>
-                      {'  ·  '}Institution:{' '}
-                      <Text style={styles.studentStatValue}>
-                        ${Number(student.received).toFixed(2)}
-                      </Text>
-                      {'  ·  '}Gap:{' '}
-                      <Text style={styles.studentStatValue}>
-                        ${Number(student.fundingGap).toFixed(2)}
-                      </Text>
-                    </Text>
-                    <View style={styles.statusRow}>
-                      <MaterialCommunityIcons
-                        name={badge.icon as keyof typeof MaterialCommunityIcons.glyphMap}
-                        size={14}
-                        color={badge.color}
-                        style={styles.statusIcon}
-                      />
-                      <Text style={[styles.statusText, { color: badge.color }]}>{badge.label}</Text>
-                    </View>
+
+                    <FundingBreakdownRow
+                      totalCost={Number(student.totalCreditCost)}
+                      parentSent={Number(student.parentSent)}
+                      institutionSent={Number(student.received)}
+                      gap={Number(student.fundingGap)}
+                    />
+
+                    <StatusDotBadge label={badge.label} color={badge.color} style={styles.statusBadge} />
                   </View>
                   <MaterialCommunityIcons
                     name={expanded ? 'chevron-up' : 'chevron-down'}
@@ -150,6 +145,7 @@ export default function InstitutionStudentsScreen() {
           })
         ) : (
           <View style={styles.emptyCard}>
+            <MaterialCommunityIcons name="account-school-outline" size={40} color={colors.border} />
             <Text style={styles.emptyText}>No verified students yet.</Text>
           </View>
         )}
@@ -161,7 +157,7 @@ export default function InstitutionStudentsScreen() {
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: SCREEN_BACKGROUND,
   },
   header: {
     paddingHorizontal: 20,
@@ -169,12 +165,14 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   headerTitle: {
-    fontWeight: '700',
+    fontSize: 22,
+    fontWeight: '800',
     color: colors.heading,
   },
   headerSubtitle: {
     fontSize: 13,
-    color: colors.muted,
+    fontWeight: '600',
+    color: colors.primary,
     marginTop: 2,
   },
   content: {
@@ -191,24 +189,36 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   emptyCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 20,
+    padding: 28,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 1,
   },
   emptyText: {
     color: colors.muted,
     textAlign: 'center',
+    marginTop: 12,
   },
   studentCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    marginBottom: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginBottom: 12,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.07,
+    shadowRadius: 4,
+    elevation: 1,
   },
   studentRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
+    alignItems: 'flex-start',
+    padding: 14,
   },
   studentMiddle: {
     flex: 1,
@@ -223,26 +233,8 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginTop: 2,
   },
-  studentStat: {
-    fontSize: 12,
-    color: colors.muted,
-    marginTop: 8,
-  },
-  studentStatValue: {
-    fontWeight: '700',
-    color: colors.heading,
-  },
-  statusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  statusIcon: {
-    marginRight: 4,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '700',
+  statusBadge: {
+    marginTop: 10,
   },
   expandIcon: {
     padding: 6,
@@ -250,7 +242,7 @@ const styles = StyleSheet.create({
   coursesList: {
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 8,
   },
   courseRow: {
