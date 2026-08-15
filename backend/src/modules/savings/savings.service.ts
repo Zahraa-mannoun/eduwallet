@@ -311,8 +311,12 @@ export async function runRollover(): Promise<RolloverResult> {
 
   const processed: RolloverResult['processed'] = [];
 
-  for (const wallet of studentWallets) {
-    const totalRolledOver = await prisma.$transaction(async (tx) => {
+  // Wrapped in one outer transaction (rather than one $transaction per wallet) so a crash
+  // partway through a rollover run can't leave some wallets rolled over and others not — the
+  // whole cohort commits or rolls back together. For a very large student population this would
+  // be a throughput/lock-duration concern, but that's out of scope for this demo's data volume.
+  await prisma.$transaction(async (tx) => {
+    for (const wallet of studentWallets) {
       // The actual remaining unspent money is the current LockedFund balance — not the
       // student's own BudgetCategory.monthlyLimit, which is an independent, self-set goal
       // that has nothing to do with how much locked money a parent actually sent. This sum
@@ -361,39 +365,44 @@ export async function runRollover(): Promise<RolloverResult> {
         await tx.budgetCategory.deleteMany({ where: { walletId: wallet.id, month } });
       }
 
-      if (totalUnspent > 0) {
+      // Snapshot + reset every category that was actually locked this cycle (totalLocked > 0),
+      // independent of whether the wallet's overall totalUnspent nets to 0 — a student who fully
+      // spent a category shouldn't leave that category's totalLocked stale, and its cycle should
+      // still be archived to LockedFundHistory even though there's nothing left to sweep.
+      const lockedThisCycle = lockedFunds.filter((fund) => Number(fund.totalLocked) > 0);
+      if (lockedThisCycle.length > 0) {
         // Snapshot this cycle's per-category totals into LockedFundHistory before the updateMany
         // below zeroes them — otherwise "how much was locked/spent in Books last month" becomes
         // unanswerable the moment this transaction commits (LockedFund only ever reflects the
-        // current cycle). getSpentByCategory() is called via the plain client rather than `tx`:
-        // it's a pure read with nothing else concurrently writing Transaction rows for this
-        // wallet at this instant, the same "reads outside the transaction, writes inside it"
-        // split this function already uses for notifications below.
+        // current cycle).
         const spentThisMonth = await getSpentByCategory(wallet.id, month);
-        const historyRows = lockedFunds
-          .filter((fund) => Number(fund.totalLocked) > 0)
-          .map((fund) => ({
-            walletId: wallet.id,
-            category: fund.category,
-            totalLocked: fund.totalLocked,
-            totalSpent: spentThisMonth.get(fund.category) ?? 0,
-            rolledOver: fund.amount,
-            month,
-          }));
-        if (historyRows.length > 0) {
-          await tx.lockedFundHistory.createMany({ data: historyRows });
-        }
+        const historyRows = lockedThisCycle.map((fund) => ({
+          walletId: wallet.id,
+          category: fund.category,
+          totalLocked: fund.totalLocked,
+          totalSpent: spentThisMonth.get(fund.category) ?? 0,
+          rolledOver: fund.amount,
+          month,
+        }));
+        await tx.lockedFundHistory.createMany({ data: historyRows });
 
         // Funds have been rolled over — zero out both the remaining balance AND totalLocked, so
         // next month's locked-funds tracking starts completely fresh per category rather than
         // totalLocked accumulating forever across rollover cycles (a parent locking $200 next
         // month should show "$200 of $200", not "$200 of $500" stacked on top of money that's
-        // already been swept to savings).
+        // already been swept to savings). Scoped to just the categories locked this cycle, not
+        // every non-excluded category, so an untouched category with totalLocked already at 0
+        // isn't needlessly rewritten.
         await tx.lockedFund.updateMany({
-          where: { walletId: wallet.id, category: { notIn: ROLLOVER_EXCLUDED_CATEGORIES_LIST } },
+          where: {
+            walletId: wallet.id,
+            category: { in: lockedThisCycle.map((fund) => fund.category) },
+          },
           data: { amount: 0, totalLocked: 0 },
         });
+      }
 
+      if (totalUnspent > 0) {
         // The locked-fund balance being rolled over was still counted in Wallet.balance (locked
         // funds are a ring-fenced portion of the wallet, not a separate pot) — without this
         // decrement, the same money would exist in both Wallet.balance and
@@ -418,39 +427,35 @@ export async function runRollover(): Promise<RolloverResult> {
             categoryBreakdown,
           },
         });
+
+        const student = await tx.user.findUnique({
+          where: { id: wallet.userId },
+          select: { fullName: true },
+        });
+        const monthLabel = formatMonthLabel(month);
+
+        await createNotification(
+          wallet.userId,
+          'Personal Savings Updated',
+          `Your $${formatMoney(totalUnspent)} unspent funds from ${monthLabel} have been added to your Personal Savings`,
+          'SAVINGS_ROLLOVER'
+        );
+
+        await notifyLinkedParents(
+          wallet.userId,
+          'Personal Savings Update',
+          `${student?.fullName ?? 'Your child'} saved $${formatMoney(totalUnspent)} this month in Personal Savings`,
+          'SAVINGS_ROLLOVER'
+        );
+
+        processed.push({
+          walletId: wallet.id,
+          userId: wallet.userId,
+          amountSaved: formatMoney(totalUnspent),
+        });
       }
-
-      return totalUnspent;
-    });
-
-    if (totalRolledOver > 0) {
-      const student = await prisma.user.findUnique({
-        where: { id: wallet.userId },
-        select: { fullName: true },
-      });
-      const monthLabel = formatMonthLabel(month);
-
-      await createNotification(
-        wallet.userId,
-        'Personal Savings Updated',
-        `Your $${formatMoney(totalRolledOver)} unspent funds from ${monthLabel} have been added to your Personal Savings`,
-        'SAVINGS_ROLLOVER'
-      );
-
-      await notifyLinkedParents(
-        wallet.userId,
-        'Personal Savings Update',
-        `${student?.fullName ?? 'Your child'} saved $${formatMoney(totalRolledOver)} this month in Personal Savings`,
-        'SAVINGS_ROLLOVER'
-      );
-
-      processed.push({
-        walletId: wallet.id,
-        userId: wallet.userId,
-        amountSaved: formatMoney(totalRolledOver),
-      });
     }
-  }
+  });
 
   return { month, processed };
 }

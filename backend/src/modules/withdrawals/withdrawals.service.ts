@@ -361,6 +361,12 @@ async function disburse(
       },
     });
 
+    // Same as every other spend path (cards.service.ts useCard(), wallet.service.ts transfer())
+    // — cash withdrawn from a category is spending against that category's monthly budget just
+    // as much as a card payment is. Without this, BudgetCategory.spent (and GET /budget) only
+    // ever reflected card payments, undercounting anyone who withdrew cash instead.
+    await updateSpent(wallet.id, category, amount, tx);
+
     const updatedWallet = await tx.wallet.findUniqueOrThrow({ where: { id: wallet.id } });
     return {
       request: completedRequest,
@@ -368,12 +374,6 @@ async function disburse(
       transaction: createdTransaction,
     };
   });
-
-  // Same as every other spend path (cards.service.ts useCard(), wallet.service.ts transfer())
-  // — cash withdrawn from a category is spending against that category's monthly budget just
-  // as much as a card payment is. Without this, BudgetCategory.spent (and GET /budget) only
-  // ever reflected card payments, undercounting anyone who withdrew cash instead.
-  await updateSpent(wallet.id, category, amount);
 
   await runAllChecks(transaction);
 

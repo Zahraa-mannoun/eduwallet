@@ -261,10 +261,10 @@ export async function useCard(input: UseCardInput): Promise<{ transaction: Trans
       },
     });
 
+    await updateSpent(wallet.id, createdTransaction.category, Number(createdTransaction.amount), tx);
+
     return createdTransaction;
   });
-
-  await updateSpent(wallet.id, transaction.category, Number(transaction.amount));
 
   await createNotification(
     wallet.userId,

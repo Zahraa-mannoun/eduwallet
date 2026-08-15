@@ -1,4 +1,4 @@
-import type { BudgetCategory, TransactionCategory } from '@prisma/client';
+import type { BudgetCategory, Prisma, TransactionCategory } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
 import type { SetBudgetInput, UpdateBudgetInput } from './budget.schema';
@@ -92,13 +92,15 @@ export async function deleteBudget(
 export async function updateSpent(
   walletId: string,
   category: TransactionCategory,
-  amount: number
+  amount: number,
+  tx?: Prisma.TransactionClient
 ): Promise<void> {
   const month = getCurrentMonth();
+  const client = tx ?? prisma;
   // Upsert rather than updateMany: spending must be tracked even for a category the
   // student never set a personal monthly limit for (monthlyLimit 0 = "no limit"), so
   // screens that show spend against locked funds have real numbers to work with.
-  await prisma.budgetCategory.upsert({
+  await client.budgetCategory.upsert({
     where: { walletId_category_month: { walletId, category, month } },
     create: { walletId, category, month, monthlyLimit: 0, spent: amount },
     update: { spent: { increment: amount } },

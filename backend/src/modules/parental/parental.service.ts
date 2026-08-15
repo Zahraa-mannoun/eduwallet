@@ -207,13 +207,15 @@ export async function approveTransaction(
       data: { balance: { increment: transaction.amount } },
     });
 
-    return tx.transaction.update({
+    const updated = await tx.transaction.update({
       where: { id: transaction.id },
       data: { status: 'APPROVED' },
     });
-  });
 
-  await updateSpent(fromWallet.id, transaction.category, Number(transaction.amount));
+    await updateSpent(fromWallet.id, updated.category, Number(updated.amount), tx);
+
+    return updated;
+  });
 
   await runAllChecks(updatedTransaction);
 

@@ -281,7 +281,7 @@ export async function transfer(
         });
       }
 
-      return tx.transaction.create({
+      const createdTransaction = await tx.transaction.create({
         data: {
           fromWalletId: fromWallet.id,
           toWalletId: toWallet.id,
@@ -292,9 +292,11 @@ export async function transfer(
           note: input.note,
         },
       });
-    });
 
-    await updateSpent(fromWallet.id, transaction.category, Number(transaction.amount));
+      await updateSpent(fromWallet.id, createdTransaction.category, Number(createdTransaction.amount), tx);
+
+      return createdTransaction;
+    });
 
     await createNotification(
       toWallet.userId,
