@@ -14,11 +14,11 @@ export type ReceiptBadgeMeta = {
 // StudentReceiptStatus which already folds "nothing uploaded" into NOT_UPLOADED) so the two
 // screens can never drift on wording again.
 export const RECEIPT_STATUS_META: Record<StudentReceiptStatus, ReceiptBadgeMeta> = {
-  AUTO_VERIFIED: { label: 'Verified', icon: 'check-circle', bg: '#D1FAE5', fg: '#065F46' },
-  MANUALLY_VERIFIED: { label: 'Verified', icon: 'check-circle', bg: '#D1FAE5', fg: '#065F46' },
-  FLAGGED: { label: 'Flagged for Review', icon: 'alert', bg: '#FEE2E2', fg: '#991B1B' },
-  PENDING: { label: 'Pending Review', icon: 'clock-outline', bg: '#FEF3C7', fg: '#92400E' },
-  PROCESSING: { label: 'Verifying...', icon: 'sync', bg: '#DBEAFE', fg: '#1E40AF' },
+  AUTO_VERIFIED: { label: 'Auto Verified', icon: 'check-circle', bg: '#D1FAE5', fg: '#065F46' },
+  MANUALLY_VERIFIED: { label: 'Manually Verified', icon: 'check-decagram', bg: '#D1FAE5', fg: '#065F46' },
+  FLAGGED: { label: 'Flagged — Under Review', icon: 'alert', bg: '#FEF3C7', fg: '#92400E' },
+  PENDING: { label: 'Pending', icon: 'clock-outline', bg: '#F3F4F6', fg: '#6B7280' },
+  PROCESSING: { label: 'Processing...', icon: 'loading', bg: '#DBEAFE', fg: '#1E40AF' },
   REJECTED: { label: 'Rejected', icon: 'close-circle', bg: '#FCA5A5', fg: '#7F1D1D' },
   NOT_UPLOADED: { label: 'No Receipt', icon: 'file-outline', bg: '#F3F4F6', fg: '#6B7280' },
 };

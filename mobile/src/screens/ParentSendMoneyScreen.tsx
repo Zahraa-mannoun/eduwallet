@@ -88,6 +88,12 @@ export default function ParentSendMoneyScreen({ navigation }: Readonly<ParentTab
     try {
       const result = await parentalService.getLinkedStudents();
       setStudents(result);
+      // Re-sync the already-selected student (if any) against the freshly fetched list, so an
+      // edit made elsewhere (e.g. on the Students tab, changing allowed categories) is reflected
+      // here immediately instead of only after the student is re-tapped.
+      setSelectedStudent((prev) =>
+        prev ? (result.find((candidate) => candidate.student.id === prev.student.id) ?? prev) : prev
+      );
     } catch (err) {
       setLoadError(err instanceof ApiError ? err.message : 'Failed to load your students.');
     } finally {
@@ -95,7 +101,10 @@ export default function ParentSendMoneyScreen({ navigation }: Readonly<ParentTab
     }
   }, []);
 
-  useThrottledFocusEffect(load);
+  // No throttle here (unlike most useThrottledFocusEffect callers) — this is a bottom-tab
+  // screen that stays mounted, so switching Students -> Send within the default 30s throttle
+  // window would silently skip the refetch and show stale "Education Lock" categories.
+  useThrottledFocusEffect(load, 0);
 
   const parsedAmount = Number(amount);
   const canSend = Boolean(selectedStudent) && parsedAmount > 0 && Boolean(category) && !isSending;

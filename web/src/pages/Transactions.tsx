@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeftRight } from 'lucide-react';
+import { ArrowLeftRight, Calendar, Flag } from 'lucide-react';
 import type { ApiResponse, TransactionCategory, TransactionStatus } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Avatar } from '../components/Avatar';
 import { Badge } from '../components/Badge';
+import { CustomSelect } from '../components/CustomSelect';
 import { DotBadge } from '../components/DotBadge';
 import { EmptyState } from '../components/EmptyState';
 import { PageHeader } from '../components/PageHeader';
@@ -30,9 +31,6 @@ const TABS: { kind: TransactionKind; label: string }[] = [
   { kind: 'FUNDING', label: 'Funding' },
   { kind: 'WITHDRAWAL', label: 'Cash Withdrawals' },
 ];
-
-const selectClass =
-  'rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary';
 
 function partyLabel(tx: TransactionRow): string {
   if (tx.fromWallet) return tx.fromWallet.user.fullName;
@@ -61,6 +59,12 @@ export function Transactions() {
   const [dateTo, setDateTo] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // CustomSelect manages its own trigger's focus/open state internally — only the date inputs
+  // (still native <input type="date">) need the border color tracked here, for the same reason
+  // as before: a single inline `border` shorthand can't respond to a CSS :focus class.
+  const [dateFromFocused, setDateFromFocused] = useState(false);
+  const [dateToFocused, setDateToFocused] = useState(false);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -112,8 +116,14 @@ export function Transactions() {
     () =>
       transactions.filter((tx) => {
         if (bucketTransaction(tx) !== activeTab) return false;
-        if (dateFrom && tx.createdAt < dateFrom) return false;
-        if (dateTo && tx.createdAt.slice(0, 10) > dateTo) return false;
+        // tx.createdAt is a UTC ISO timestamp; dateFrom/dateTo are local calendar dates from the
+        // <input type="date"> pickers — slicing the raw UTC string reads the UTC calendar date,
+        // which drifts from the local one whenever local time crosses a day boundary UTC doesn't
+        // (e.g. Lebanon UTC+3). toLocaleDateString('en-CA') resolves to the browser's local date
+        // in the same YYYY-MM-DD shape the date inputs already use, so the two compare correctly.
+        const txDate = new Date(tx.createdAt).toLocaleDateString('en-CA');
+        if (dateFrom && txDate < dateFrom) return false;
+        if (dateTo && txDate > dateTo) return false;
         return true;
       }),
     [transactions, activeTab, dateFrom, dateTo]
@@ -152,90 +162,163 @@ export function Transactions() {
             </button>
           ))}
         </div>
+      </div>
 
-        <div className="flex flex-wrap items-end gap-3 p-4">
-          <div>
-            <label htmlFor="status-filter" className="mb-1 block text-xs font-medium text-slate-600">
+      <div
+        style={{
+          background: 'white',
+          borderRadius: '12px',
+          padding: '16px 20px',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+        }}
+      >
+        <div style={{ display: 'flex', flexWrap: 'nowrap', alignItems: 'flex-end', gap: '12px', overflowX: 'auto' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label htmlFor="status-filter" style={{ fontSize: '12px', fontWeight: 500, color: '#64748B' }}>
               Status
             </label>
-            <select
+            <CustomSelect
               id="status-filter"
               value={status}
-              onChange={(event) => {
-                setStatus(event.target.value as TransactionStatus | 'PENDING_PARENT_APPROVAL' | 'ALL');
+              onChange={(value) => {
+                setStatus(value as TransactionStatus | 'PENDING_PARENT_APPROVAL' | 'ALL');
                 setPage(1);
               }}
-              className={selectClass}
-            >
-              <option value="ALL">All statuses</option>
-              {TRANSACTION_STATUSES.filter((s) => s !== 'EMERGENCY' && s !== 'PENDING').map((s) => (
-                <option key={s} value={s}>
-                  {TRANSACTION_STATUS_LABELS[s] ?? humanizeEnum(s)}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: 'ALL', label: 'All statuses' },
+                ...TRANSACTION_STATUSES.filter((s) => s !== 'EMERGENCY' && s !== 'PENDING').map((s) => ({
+                  value: s,
+                  label: TRANSACTION_STATUS_LABELS[s] ?? humanizeEnum(s),
+                })),
+              ]}
+            />
           </div>
 
-          <div>
-            <label htmlFor="category-filter" className="mb-1 block text-xs font-medium text-slate-600">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label htmlFor="category-filter" style={{ fontSize: '12px', fontWeight: 500, color: '#64748B' }}>
               Category
             </label>
-            <select
+            <CustomSelect
               id="category-filter"
               value={category}
-              onChange={(event) => {
-                setCategory(event.target.value as TransactionCategory | 'ALL');
+              onChange={(value) => {
+                setCategory(value as TransactionCategory | 'ALL');
                 setPage(1);
               }}
-              className={selectClass}
-            >
-              <option value="ALL">All categories</option>
-              {TRANSACTION_CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {humanizeEnum(c)}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: 'ALL', label: 'All categories' },
+                ...TRANSACTION_CATEGORIES.map((c) => ({ value: c, label: humanizeEnum(c) })),
+              ]}
+            />
           </div>
 
-          <div>
-            <label htmlFor="date-from" className="mb-1 block text-xs font-medium text-slate-600">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label htmlFor="date-from" style={{ fontSize: '12px', fontWeight: 500, color: '#64748B' }}>
               From
             </label>
-            <input
-              id="date-from"
-              type="date"
-              value={dateFrom}
-              onChange={(event) => setDateFrom(event.target.value)}
-              className={selectClass}
-            />
+            <div style={{ position: 'relative' }}>
+              <Calendar
+                size={16}
+                style={{
+                  pointerEvents: 'none',
+                  position: 'absolute',
+                  left: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: '#94A3B8',
+                }}
+              />
+              <input
+                id="date-from"
+                type="date"
+                value={dateFrom}
+                onChange={(event) => setDateFrom(event.target.value)}
+                onFocus={() => setDateFromFocused(true)}
+                onBlur={() => setDateFromFocused(false)}
+                className="[&::-webkit-calendar-picker-indicator]:opacity-0"
+                style={{
+                  border: dateFromFocused ? '1.5px solid #6D28D9' : '1.5px solid #E2E8F0',
+                  borderRadius: '10px',
+                  padding: '8px 14px 8px 36px',
+                  fontSize: '14px',
+                  color: '#1E293B',
+                  backgroundColor: 'white',
+                  outline: 'none',
+                }}
+              />
+            </div>
           </div>
 
-          <div>
-            <label htmlFor="date-to" className="mb-1 block text-xs font-medium text-slate-600">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label htmlFor="date-to" style={{ fontSize: '12px', fontWeight: 500, color: '#64748B' }}>
               To
             </label>
-            <input
-              id="date-to"
-              type="date"
-              value={dateTo}
-              onChange={(event) => setDateTo(event.target.value)}
-              className={selectClass}
-            />
+            <div style={{ position: 'relative' }}>
+              <Calendar
+                size={16}
+                style={{
+                  pointerEvents: 'none',
+                  position: 'absolute',
+                  left: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: '#94A3B8',
+                }}
+              />
+              <input
+                id="date-to"
+                type="date"
+                value={dateTo}
+                onChange={(event) => setDateTo(event.target.value)}
+                onFocus={() => setDateToFocused(true)}
+                onBlur={() => setDateToFocused(false)}
+                className="[&::-webkit-calendar-picker-indicator]:opacity-0"
+                style={{
+                  border: dateToFocused ? '1.5px solid #6D28D9' : '1.5px solid #E2E8F0',
+                  borderRadius: '10px',
+                  padding: '8px 14px 8px 36px',
+                  fontSize: '14px',
+                  color: '#1E293B',
+                  backgroundColor: 'white',
+                  outline: 'none',
+                }}
+              />
+            </div>
           </div>
 
-          <label className="flex items-center gap-2 pb-2 text-sm text-slate-600">
-            <input
-              type="checkbox"
-              checked={flaggedOnly}
-              onChange={(event) => {
-                setFlaggedOnly(event.target.checked);
+          <div
+            role="button"
+            tabIndex={0}
+            aria-pressed={flaggedOnly}
+            onClick={() => {
+              setFlaggedOnly((value) => !value);
+              setPage(1);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                setFlaggedOnly((value) => !value);
                 setPage(1);
-              }}
-              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-            />
+              }
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              borderRadius: '999px',
+              padding: '8px 16px',
+              fontSize: '14px',
+              fontWeight: 500,
+              cursor: 'pointer',
+              userSelect: 'none',
+              border: '1.5px solid #F59E0B',
+              background: flaggedOnly ? '#F59E0B' : 'white',
+              color: flaggedOnly ? '#FFFFFF' : '#F59E0B',
+            }}
+          >
+            <Flag size={14} />
             Flagged only
-          </label>
+          </div>
         </div>
       </div>
 

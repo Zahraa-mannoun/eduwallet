@@ -11,6 +11,7 @@ import {
   getPendingApprovalsHandler,
   getReceiptFileHandler,
   getWithdrawalsForParentHandler,
+  listVerifiedStudentsHandler,
   lookupStudentHandler,
   processWithdrawalHandler,
   rejectWithdrawalHandler,
@@ -93,6 +94,11 @@ export default async function withdrawalsRoutes(fastify: FastifyInstance): Promi
       '/lookup-student',
       { config: { rateLimit: READ_RATE_LIMIT } },
       lookupStudentHandler
+    );
+    agentScope.get(
+      '/verified-students',
+      { config: { rateLimit: READ_RATE_LIMIT } },
+      listVerifiedStudentsHandler
     );
     agentScope.post(
       '/process',

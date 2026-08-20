@@ -31,6 +31,31 @@ function formatMoney(amount: number | string | { toString(): string }): string {
   return Number(amount.toString()).toFixed(2);
 }
 
+// KYC submissions notify every admin (see kyc.service.ts submitKYC()) so an admin's
+// already-open list auto-refreshes over the shared notification socket — receipt status
+// changes need the exact same fan-out, since AgentWithdrawals.tsx's socket hook only reacts
+// to notifications the viewing admin themself receives.
+async function notifyAdminsOfReceiptStatus(
+  studentName: string,
+  amount: number | string | { toString(): string },
+  status: 'AUTO_VERIFIED' | 'MANUALLY_VERIFIED' | 'FLAGGED',
+  note: string | null
+): Promise<void> {
+  const admins = await prisma.user.findMany({ where: { userType: 'ADMIN' }, select: { id: true } });
+  const label =
+    status === 'AUTO_VERIFIED' ? 'auto-verified' : status === 'FLAGGED' ? 'flagged for review' : 'manually verified';
+  await Promise.all(
+    admins.map((admin) =>
+      createNotification(
+        admin.id,
+        'Withdrawal Receipt Update',
+        `${studentName}'s withdrawal receipt ($${formatMoney(amount)}) was ${label}.${note ? ` ${note}` : ''}`,
+        'WITHDRAWAL_RECEIPT_STATUS_CHANGED'
+      )
+    )
+  );
+}
+
 async function getPrimaryWallet(userId: string): Promise<Wallet> {
   const wallet = await prisma.wallet.findFirst({
     where: { userId },
@@ -75,11 +100,42 @@ async function findStudentUser(query: { studentEmail?: string; studentNumber?: s
 }
 
 // Resolves a free-text search string (typed into the agent portal's search field) to a
-// student — '@' means it's an email, otherwise it's treated as a university student number.
+// student — '@' means it's an email; otherwise it's tried as a university student number
+// first, falling back to a name search if no student number matches.
 async function findStudentByQuery(query: string): Promise<User> {
-  return query.includes('@')
-    ? findStudentUser({ studentEmail: query })
-    : findStudentUser({ studentNumber: query });
+  if (query.includes('@')) {
+    return findStudentUser({ studentEmail: query });
+  }
+
+  try {
+    return await findStudentUser({ studentNumber: query });
+  } catch (err) {
+    if (!(err instanceof AppError) || err.code !== 'STUDENT_NOT_FOUND') throw err;
+  }
+
+  return findStudentByName(query);
+}
+
+// Case-insensitive "contains" match on the student's full name. Requires exactly one match,
+// since the withdrawal flow needs a single unambiguous student — "Browse Students"
+// (GET /withdrawals/verified-students) is the escape hatch when a name is too common or
+// matches nobody.
+async function findStudentByName(query: string): Promise<User> {
+  const matches = await prisma.user.findMany({
+    where: { userType: 'STUDENT', fullName: { contains: query, mode: 'insensitive' } },
+    take: 6,
+  });
+  if (matches.length === 0) {
+    throw new AppError(404, 'STUDENT_NOT_FOUND', 'No student found matching that name');
+  }
+  if (matches.length > 1) {
+    throw new AppError(
+      400,
+      'STUDENT_NAME_AMBIGUOUS',
+      `${matches.length} students match "${query}" — use Browse Students, or search by email or student number instead`
+    );
+  }
+  return matches[0];
 }
 
 export type WithdrawalRequestWithStudent = WithdrawalRequest & {
@@ -251,6 +307,36 @@ export async function lookupStudent(query: string): Promise<StudentLookup> {
     approvalThreshold: parentalControl ? formatMoney(parentalControl.approvalThreshold) : null,
     allowedCategories: parentalControl ? parentalControl.categories : null,
   };
+}
+
+export type VerifiedStudentSummary = {
+  id: string;
+  fullName: string;
+  email: string;
+  studentNumber: string | null;
+};
+
+// The agent portal's "Browse Students" modal — every KYC-verified student, so an agent can pick
+// one visually instead of needing an exact email/student-number/name match via lookupStudent.
+export async function listVerifiedStudents(): Promise<VerifiedStudentSummary[]> {
+  const students = await prisma.user.findMany({
+    where: { userType: 'STUDENT', kycStatus: 'VERIFIED' },
+    select: { id: true, fullName: true, email: true },
+    orderBy: { fullName: 'asc' },
+  });
+
+  const enrollments = await prisma.universityStudent.findMany({
+    where: { userId: { in: students.map((student) => student.id) } },
+    select: { userId: true, studentNumber: true },
+  });
+  const studentNumberByUserId = new Map(
+    enrollments.map((enrollment) => [enrollment.userId as string, enrollment.studentNumber])
+  );
+
+  return students.map((student) => ({
+    ...student,
+    studentNumber: studentNumberByUserId.get(student.id) ?? null,
+  }));
 }
 
 // Shared by the immediate agent-initiated dispense (processWithdrawal, below) and by
@@ -870,19 +956,29 @@ export async function uploadReceipt(
     data: { receiptVerificationStatus, merchantName },
   });
 
-  if (receiptVerificationStatus === 'FLAGGED') {
-    const parentalControl = await prisma.parentalControl.findFirst({ where: { studentUserId } });
-    if (parentalControl) {
-      const student = await prisma.user.findUnique({
-        where: { id: studentUserId },
-        select: { fullName: true },
-      });
-      await createNotification(
-        parentalControl.parentUserId,
-        'Withdrawal Receipt Flagged',
-        `Your student ${student?.fullName ?? ''}'s withdrawal receipt was flagged for review. Amount: $${formatMoney(request.amount)}, Category: ${request.category.toLowerCase()}`,
-        'WITHDRAWAL_RECEIPT_FLAGGED'
-      );
+  if (receiptVerificationStatus === 'AUTO_VERIFIED' || receiptVerificationStatus === 'FLAGGED') {
+    const student = await prisma.user.findUnique({
+      where: { id: studentUserId },
+      select: { fullName: true },
+    });
+
+    await notifyAdminsOfReceiptStatus(
+      student?.fullName ?? 'A student',
+      request.amount,
+      receiptVerificationStatus,
+      receiptVerificationNote
+    );
+
+    if (receiptVerificationStatus === 'FLAGGED') {
+      const parentalControl = await prisma.parentalControl.findFirst({ where: { studentUserId } });
+      if (parentalControl) {
+        await createNotification(
+          parentalControl.parentUserId,
+          'Withdrawal Receipt Flagged',
+          `Your student ${student?.fullName ?? ''}'s withdrawal receipt was flagged for review. Amount: $${formatMoney(request.amount)}, Category: ${request.category.toLowerCase()}`,
+          'WITHDRAWAL_RECEIPT_FLAGGED'
+        );
+      }
     }
   }
 
@@ -1025,19 +1121,29 @@ export async function verifyReceipt(
       'WITHDRAWAL_RECEIPT_REVIEWED'
     );
 
-    if (decision === 'FLAGGED') {
-      const parentalControl = await prisma.parentalControl.findFirst({ where: { studentUserId: wallet.userId } });
-      if (parentalControl) {
-        const student = await prisma.user.findUnique({
-          where: { id: wallet.userId },
-          select: { fullName: true },
-        });
-        await createNotification(
-          parentalControl.parentUserId,
-          'Withdrawal Receipt Flagged',
-          `Your student ${student?.fullName ?? ''}'s withdrawal receipt was flagged for review. Amount: $${formatMoney(request.amount)}, Category: ${request.category.toLowerCase()}`,
-          'WITHDRAWAL_RECEIPT_FLAGGED'
-        );
+    if (receiptVerificationStatus === 'MANUALLY_VERIFIED' || receiptVerificationStatus === 'FLAGGED') {
+      const student = await prisma.user.findUnique({
+        where: { id: wallet.userId },
+        select: { fullName: true },
+      });
+
+      await notifyAdminsOfReceiptStatus(
+        student?.fullName ?? 'A student',
+        request.amount,
+        receiptVerificationStatus,
+        receiptVerificationNote
+      );
+
+      if (decision === 'FLAGGED') {
+        const parentalControl = await prisma.parentalControl.findFirst({ where: { studentUserId: wallet.userId } });
+        if (parentalControl) {
+          await createNotification(
+            parentalControl.parentUserId,
+            'Withdrawal Receipt Flagged',
+            `Your student ${student?.fullName ?? ''}'s withdrawal receipt was flagged for review. Amount: $${formatMoney(request.amount)}, Category: ${request.category.toLowerCase()}`,
+            'WITHDRAWAL_RECEIPT_FLAGGED'
+          );
+        }
       }
     }
   }

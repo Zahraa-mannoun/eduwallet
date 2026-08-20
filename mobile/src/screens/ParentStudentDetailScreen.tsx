@@ -1,17 +1,25 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator as RNActivityIndicator, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator as RNActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, Avatar, IconButton, Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { StudentWithdrawalForParent, TransactionCategory } from '../types/api';
 import IconBadge from '../components/IconBadge';
+import ImagePreviewModal from '../components/ImagePreviewModal';
 import { categoryColors, colors } from '../theme/colors';
 import { getInitials } from '../utils/getInitials';
 import { RECEIPT_STATUS_META } from '../utils/receiptStatus';
 import type { ReceiptBadgeMeta } from '../utils/receiptStatus';
 import * as withdrawalService from '../services/withdrawalService';
-import { ApiError } from '../services/api';
+import { API_BASE_URL, ApiError, getAccessToken } from '../services/api';
 import { useNotificationRefetch } from '../hooks/useNotificationRefetch';
 import type { RootStackScreenProps } from '../navigation/types';
 
@@ -72,6 +80,9 @@ export default function ParentStudentDetailScreen({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [previewTarget, setPreviewTarget] = useState<StudentWithdrawalForParent | null>(null);
+  const [previewToken, setPreviewToken] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -93,6 +104,11 @@ export default function ParentStudentDetailScreen({
 
   useNotificationRefetch(load);
 
+  const openReceiptPreview = async (withdrawal: StudentWithdrawalForParent) => {
+    setPreviewToken(await getAccessToken());
+    setPreviewTarget(withdrawal);
+  };
+
   const renderWithdrawalItem = (withdrawal: StudentWithdrawalForParent) => {
     const categoryMeta = CATEGORY_META[withdrawal.category];
     // GENERAL withdrawals never require a receipt, so a perpetually-empty receiptStatus of
@@ -102,10 +118,15 @@ export default function ParentStudentDetailScreen({
     const receiptMeta = RECEIPT_STATUS_META[withdrawal.receiptStatus];
     const note = receiptRequired ? RECEIPT_STATUS_NOTE[withdrawal.receiptStatus] : undefined;
     const isProcessing = withdrawal.receiptStatus === 'PROCESSING';
+    const hasReceipt = withdrawal.receiptStatus !== 'NOT_UPLOADED' && Boolean(withdrawal.receiptUrl);
+
+    const CardWrapper = hasReceipt ? TouchableOpacity : View;
 
     return (
-      <View
+      <CardWrapper
         key={withdrawal.id}
+        activeOpacity={hasReceipt ? 0.85 : undefined}
+        onPress={hasReceipt ? () => void openReceiptPreview(withdrawal) : undefined}
         style={[styles.card, { borderLeftColor: receiptRequired ? receiptMeta.fg : colors.border }]}
       >
         <View style={styles.cardTopRow}>
@@ -130,7 +151,14 @@ export default function ParentStudentDetailScreen({
             <Text style={[styles.noteText, { color: receiptMeta.fg }]}>{note}</Text>
           </View>
         ) : null}
-      </View>
+
+        {hasReceipt ? (
+          <View style={styles.viewReceiptRow}>
+            <MaterialCommunityIcons name="magnify-plus-outline" size={13} color={colors.primary} />
+            <Text style={styles.viewReceiptText}>View Receipt</Text>
+          </View>
+        ) : null}
+      </CardWrapper>
     );
   };
 
@@ -171,6 +199,14 @@ export default function ParentStudentDetailScreen({
           </View>
         )}
       </ScrollView>
+
+      <ImagePreviewModal
+        visible={Boolean(previewTarget)}
+        uri={previewTarget?.receiptUrl ? `${API_BASE_URL}${previewTarget.receiptUrl}` : null}
+        authToken={previewToken}
+        title="Receipt"
+        onClose={() => setPreviewTarget(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -310,5 +346,16 @@ const styles = StyleSheet.create({
   noteText: {
     fontSize: 12,
     lineHeight: 17,
+  },
+  viewReceiptRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  viewReceiptText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
+    marginLeft: 5,
   },
 });

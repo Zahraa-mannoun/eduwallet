@@ -189,15 +189,21 @@ export function SavingsWithdrawals() {
         <StatTile label="Dispensed This Month" value={String(dispensedThisMonth)} />
       </div>
 
+      <div
+        style={{
+          background: 'white',
+          borderRadius: '12px',
+          padding: '16px 20px',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+        }}
+      >
+        <SearchInput value={search} onChange={setSearch} placeholder="Search by student name or email…" />
+      </div>
+
       <TableCard
         title="Withdrawals"
         subtitle={`${visibleRows.length} shown`}
-        actions={
-          <>
-            <SearchInput value={search} onChange={setSearch} placeholder="Search by student name or email…" />
-            <FilterTabs tabs={TABS} value={tab} onChange={setTab} />
-          </>
-        }
+        actions={<FilterTabs tabs={TABS} value={tab} onChange={setTab} />}
       >
         <table className="min-w-full divide-y divide-slate-100 text-sm">
           <thead className={TABLE_HEAD_ROW_CLASS}>

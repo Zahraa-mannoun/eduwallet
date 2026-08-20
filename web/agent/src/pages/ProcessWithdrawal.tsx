@@ -1,11 +1,21 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Banknote, CheckCircle2, Search, ShieldCheck, UserSearch, Wallet, X } from 'lucide-react';
+import {
+  Banknote,
+  CheckCircle2,
+  Search,
+  ShieldCheck,
+  Users,
+  UserSearch,
+  Wallet,
+  X,
+} from 'lucide-react';
 import type {
   ApiResponse,
   ProcessWithdrawalResult,
   StudentLookup,
   TransactionCategory,
+  VerifiedStudentSummary,
   WithdrawalRequest,
 } from '../types';
 import { api, getErrorMessage, unwrap } from '../lib/api';
@@ -184,6 +194,112 @@ function ConfirmDispenseModal({
   );
 }
 
+function initialsFor(fullName: string): string {
+  return fullName
+    .split(/\s+/)
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+}
+
+function BrowseStudentsModal({
+  onClose,
+  onSelect,
+}: {
+  onClose: () => void;
+  onSelect: (student: VerifiedStudentSummary) => void;
+}) {
+  const [students, setStudents] = useState<VerifiedStudentSummary[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get<ApiResponse<VerifiedStudentSummary[]>>('/withdrawals/verified-students');
+        if (!cancelled) setStudents(unwrap(res.data));
+      } catch (err) {
+        if (!cancelled) setError(getErrorMessage(err));
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const filtered = useMemo(() => {
+    const trimmed = filter.trim().toLowerCase();
+    if (!trimmed) return students;
+    return students.filter(
+      (candidate) =>
+        candidate.fullName.toLowerCase().includes(trimmed) ||
+        candidate.email.toLowerCase().includes(trimmed)
+    );
+  }, [students, filter]);
+
+  return (
+    <Modal
+      title="Browse Students"
+      subtitle="Every KYC-verified student — pick one to load into the form"
+      icon={<Users className="h-6 w-6 text-white" />}
+      tone="primary"
+      onClose={onClose}
+      maxWidthClassName="max-w-lg"
+    >
+      <div className="relative mb-3">
+        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <input
+          type="text"
+          value={filter}
+          onChange={(event) => setFilter(event.target.value)}
+          placeholder="Filter by name or email"
+          autoFocus
+          className="w-full rounded-full border-2 border-slate-200 py-2.5 pl-10 pr-4 text-sm transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-100"
+        />
+      </div>
+
+      {error && (
+        <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+      )}
+
+      <div className="max-h-80 space-y-1.5 overflow-y-auto">
+        {isLoading && <p className="py-6 text-center text-sm text-slate-400">Loading students…</p>}
+        {!isLoading && filtered.length === 0 && (
+          <p className="py-6 text-center text-sm text-slate-400">No verified students match that search.</p>
+        )}
+        {!isLoading &&
+          filtered.map((candidate) => (
+            <button
+              key={candidate.id}
+              type="button"
+              onClick={() => onSelect(candidate)}
+              className="flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left transition-colors hover:border-primary-100 hover:bg-primary-50"
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-100 text-xs font-semibold text-primary">
+                {initialsFor(candidate.fullName)}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-slate-900">{candidate.fullName}</p>
+                <p className="truncate text-xs text-slate-500">{candidate.email}</p>
+              </div>
+              {candidate.studentNumber && (
+                <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">
+                  {candidate.studentNumber}
+                </span>
+              )}
+            </button>
+          ))}
+      </div>
+    </Modal>
+  );
+}
+
 export function ProcessWithdrawal() {
   const { agent } = useAuth();
   const statsRef = useRef<AgentStatsCardHandle>(null);
@@ -200,6 +316,7 @@ export function ProcessWithdrawal() {
     null
   );
   const [approvedWithdrawals, setApprovedWithdrawals] = useState<WithdrawalRequest[]>([]);
+  const [isBrowseOpen, setIsBrowseOpen] = useState(false);
 
   const loadApprovedWithdrawals = useCallback(async () => {
     try {
@@ -231,9 +348,12 @@ export function ProcessWithdrawal() {
     return () => clearTimeout(timer);
   }, [resultMessage]);
 
-  const handleSearch = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!query.trim()) return;
+  // Shared by the search form, the "Browse Students" modal's row click, and the post-dispense
+  // refresh — all three end up wanting the exact same "resolve this query to a StudentLookup"
+  // round trip, just with a different source for the query string.
+  const performLookup = useCallback(async (rawQuery: string) => {
+    const trimmed = rawQuery.trim();
+    if (!trimmed) return;
     setIsSearching(true);
     setSearchError(null);
     setStudent(null);
@@ -241,7 +361,7 @@ export function ProcessWithdrawal() {
     setHasSearched(true);
     try {
       const res = await api.get<ApiResponse<StudentLookup>>('/withdrawals/lookup-student', {
-        params: { query: query.trim() },
+        params: { query: trimmed },
       });
       const found = unwrap(res.data);
       setStudent(found);
@@ -252,6 +372,17 @@ export function ProcessWithdrawal() {
     } finally {
       setIsSearching(false);
     }
+  }, []);
+
+  const handleSearch = (event: FormEvent) => {
+    event.preventDefault();
+    void performLookup(query);
+  };
+
+  const handleBrowseSelect = (candidate: VerifiedStudentSummary) => {
+    setIsBrowseOpen(false);
+    setQuery(candidate.email);
+    void performLookup(candidate.email);
   };
 
   // GENERAL is always selectable (it draws from the free/unlocked wallet balance, not a
@@ -280,6 +411,15 @@ export function ProcessWithdrawal() {
 
   const handleProcessed = (result: ProcessWithdrawalResult) => {
     setConfirmVisible(false);
+
+    // Re-run the same lookup for the student just dispensed to, instead of clearing the panel —
+    // so the displayed wallet balance and per-category amounts reflect the dispense immediately,
+    // with no manual refresh needed. Fired before the result banner below so its own
+    // setResultMessage(null) doesn't wipe the message we're about to show.
+    if (student) {
+      void performLookup(student.user.email);
+    }
+
     if (result.pending) {
       setResultMessage({
         text: `Withdrawal request for ${result.studentName} needs parent approval before it can be dispensed (GENERAL over their approval threshold). They'll be notified.`,
@@ -291,11 +431,8 @@ export function ProcessWithdrawal() {
         tone: 'success',
       });
     }
-    setStudent(null);
-    setQuery('');
     setCategory(null);
     setAmount('');
-    setHasSearched(false);
     statsRef.current?.refresh();
     void loadApprovedWithdrawals();
   };
@@ -352,7 +489,7 @@ export function ProcessWithdrawal() {
               type="text"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Student email or student number"
+              placeholder="Student name, email, or student number"
               className="w-full rounded-full border-2 border-slate-200 py-2.5 pl-10 pr-4 text-sm transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-100"
             />
           </div>
@@ -362,6 +499,14 @@ export function ProcessWithdrawal() {
             className="rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:scale-[1.02] hover:bg-primary-600 disabled:opacity-60 disabled:hover:scale-100"
           >
             {isSearching ? 'Searching…' : 'Search'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsBrowseOpen(true)}
+            className="flex items-center gap-1.5 rounded-full border-2 border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition-all duration-200 hover:border-primary-200 hover:bg-primary-50 hover:text-primary"
+          >
+            <Users className="h-4 w-4" />
+            Browse Students
           </button>
         </form>
 
@@ -490,6 +635,10 @@ export function ProcessWithdrawal() {
           onClose={() => setConfirmVisible(false)}
           onProcessed={handleProcessed}
         />
+      )}
+
+      {isBrowseOpen && (
+        <BrowseStudentsModal onClose={() => setIsBrowseOpen(false)} onSelect={handleBrowseSelect} />
       )}
     </div>
   );

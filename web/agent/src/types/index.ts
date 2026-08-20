@@ -115,6 +115,13 @@ export type StudentLookup = {
   allowedCategories: TransactionCategory[] | null;
 };
 
+export type VerifiedStudentSummary = {
+  id: string;
+  fullName: string;
+  email: string;
+  studentNumber: string | null;
+};
+
 export type AgentSavingsWithdrawalRow = {
   id: string;
   amount: string;

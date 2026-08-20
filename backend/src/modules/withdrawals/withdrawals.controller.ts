@@ -20,6 +20,7 @@ import {
   getReceiptFile,
   getWithdrawalsForParent,
   getWithdrawalsForStudent,
+  listVerifiedStudents,
   lookupStudent,
   processWithdrawal,
   rejectWithdrawal,
@@ -106,6 +107,16 @@ export async function lookupStudentHandler(request: FastifyRequest, reply: Fasti
     requireAuthUser(request);
     const result = await lookupStudent(parsed.data.query);
     return reply.status(200).send(successResponse(result));
+  } catch (error) {
+    return handleWithdrawalsError(request, reply, error);
+  }
+}
+
+export async function listVerifiedStudentsHandler(request: FastifyRequest, reply: FastifyReply) {
+  try {
+    requireAuthUser(request);
+    const students = await listVerifiedStudents();
+    return reply.status(200).send(successResponse(students));
   } catch (error) {
     return handleWithdrawalsError(request, reply, error);
   }

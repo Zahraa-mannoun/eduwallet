@@ -2,15 +2,17 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   Banknote,
-  ChevronDown,
+  Calendar,
   Eye,
   EyeOff,
+  Flag,
   Receipt,
   Store,
   Tag,
 } from 'lucide-react';
 import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
+import { CustomSelect } from '../components/CustomSelect';
 import { DotBadge } from '../components/DotBadge';
 import { EmptyState } from '../components/EmptyState';
 import { PageHeader } from '../components/PageHeader';
@@ -32,6 +34,14 @@ import type { ReceiptVerificationStatus, WithdrawalAdminRow, WithdrawalStatus } 
 type ReceiptFilterValue = ReceiptVerificationStatus | 'NOT_UPLOADED';
 
 const RECEIPT_FILTER_VALUES: ReceiptFilterValue[] = ['NOT_UPLOADED', ...RECEIPT_VERIFICATION_STATUSES];
+
+// PENDING is what "no filter" already effectively shows (it's the pre-receipt default), so it's
+// hidden from the dropdown's options without touching RECEIPT_FILTER_VALUES or the filter logic
+// itself, which still matches against every status including PENDING. PROCESSING stays — an
+// admin does want to filter down to "still being OCR'd right now."
+const VISIBLE_RECEIPT_FILTER_VALUES: ReceiptFilterValue[] = RECEIPT_FILTER_VALUES.filter(
+  (status) => status !== 'PENDING'
+);
 
 type Decision = 'VERIFIED' | 'FLAGGED' | 'REJECTED';
 
@@ -68,11 +78,6 @@ function receiptStatusLabel(status: ReceiptFilterValue): string {
   return status.charAt(0) + status.slice(1).toLowerCase();
 }
 
-const selectClass =
-  'w-full appearance-none rounded-xl border-2 border-slate-200 bg-white py-2 pl-3 pr-9 text-sm text-slate-900 transition-colors focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100';
-const dateInputClass =
-  'w-full rounded-xl border-2 border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 transition-colors focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100';
-
 function renderReceiptPreview(
   row: WithdrawalAdminRow,
   isLoading: boolean,
@@ -106,6 +111,12 @@ export function AgentWithdrawals() {
   const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+
+  // CustomSelect manages its own trigger's focus/open state internally — only the date inputs
+  // (still native <input type="date">) need the border color tracked here, for the same reason
+  // as before: a single inline `border` shorthand can't respond to a CSS :focus class.
+  const [dateFromFocused, setDateFromFocused] = useState(false);
+  const [dateToFocused, setDateToFocused] = useState(false);
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [receiptImageUrl, setReceiptImageUrl] = useState<string | null>(null);
@@ -150,8 +161,14 @@ export function AgentWithdrawals() {
       const receiptStatus = receiptStatusFor(row);
       if (flaggedOnly && receiptStatus !== 'FLAGGED') return false;
       if (receiptFilter !== 'ALL' && receiptStatus !== receiptFilter) return false;
-      if (dateFrom && row.createdAt < dateFrom) return false;
-      if (dateTo && row.createdAt.slice(0, 10) > dateTo) return false;
+      // row.createdAt is a UTC ISO timestamp; dateFrom/dateTo are local calendar dates from the
+      // <input type="date"> pickers — slicing the raw UTC string reads the UTC calendar date,
+      // which drifts from the local one whenever local time crosses a day boundary UTC doesn't
+      // (e.g. Lebanon UTC+3). toLocaleDateString('en-CA') resolves to the browser's local date
+      // in the same YYYY-MM-DD shape the date inputs already use, so the two compare correctly.
+      const rowDate = new Date(row.createdAt).toLocaleDateString('en-CA');
+      if (dateFrom && rowDate < dateFrom) return false;
+      if (dateTo && rowDate > dateTo) return false;
       return true;
     });
   }, [withdrawals, statusFilter, receiptFilter, flaggedOnly, dateFrom, dateTo]);
@@ -204,87 +221,151 @@ export function AgentWithdrawals() {
     <div className="space-y-4">
       <PageHeader title="Agent Withdrawals" subtitle="Every cash withdrawal dispensed by an agent, with receipt verification status" />
 
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="w-44">
-            <label htmlFor="status-filter" className="mb-1.5 block text-xs font-semibold text-slate-600">
+      <div
+        style={{
+          background: 'white',
+          borderRadius: '12px',
+          padding: '16px 20px',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+        }}
+      >
+        <div style={{ display: 'flex', flexWrap: 'nowrap', alignItems: 'flex-end', gap: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label htmlFor="status-filter" style={{ fontSize: '12px', fontWeight: 500, color: '#64748B' }}>
               Status
             </label>
-            <div className="relative">
-              <select
-                id="status-filter"
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value as WithdrawalStatus | 'ALL')}
-                className={selectClass}
-              >
-                <option value="ALL">All statuses</option>
-                {WITHDRAWAL_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {WITHDRAWAL_STATUS_LABELS[s] ?? humanizeEnum(s)}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            </div>
+            <CustomSelect
+              id="status-filter"
+              value={statusFilter}
+              onChange={(value) => setStatusFilter(value as WithdrawalStatus | 'ALL')}
+              options={[
+                { value: 'ALL', label: 'All statuses' },
+                ...WITHDRAWAL_STATUSES.map((s) => ({
+                  value: s,
+                  label: WITHDRAWAL_STATUS_LABELS[s] ?? humanizeEnum(s),
+                })),
+              ]}
+            />
           </div>
 
-          <div className="w-48">
-            <label htmlFor="receipt-filter" className="mb-1.5 block text-xs font-semibold text-slate-600">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label htmlFor="receipt-filter" style={{ fontSize: '12px', fontWeight: 500, color: '#64748B' }}>
               Receipt Status
             </label>
-            <div className="relative">
-              <select
-                id="receipt-filter"
-                value={receiptFilter}
-                onChange={(event) => setReceiptFilter(event.target.value as ReceiptFilterValue | 'ALL')}
-                className={selectClass}
-              >
-                <option value="ALL">All receipt statuses</option>
-                {RECEIPT_FILTER_VALUES.map((s) => (
-                  <option key={s} value={s}>
-                    {receiptStatusLabel(s)}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <CustomSelect
+              id="receipt-filter"
+              value={receiptFilter}
+              onChange={(value) => setReceiptFilter(value as ReceiptFilterValue | 'ALL')}
+              options={[
+                { value: 'ALL', label: 'All receipt statuses' },
+                ...VISIBLE_RECEIPT_FILTER_VALUES.map((s) => ({ value: s, label: receiptStatusLabel(s) })),
+              ]}
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label htmlFor="date-from" style={{ fontSize: '12px', fontWeight: 500, color: '#64748B' }}>
+              From
+            </label>
+            <div style={{ position: 'relative' }}>
+              <Calendar
+                size={16}
+                style={{
+                  pointerEvents: 'none',
+                  position: 'absolute',
+                  left: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: '#94A3B8',
+                }}
+              />
+              <input
+                id="date-from"
+                type="date"
+                value={dateFrom}
+                onChange={(event) => setDateFrom(event.target.value)}
+                onFocus={() => setDateFromFocused(true)}
+                onBlur={() => setDateFromFocused(false)}
+                className="[&::-webkit-calendar-picker-indicator]:opacity-0"
+                style={{
+                  border: dateFromFocused ? '1.5px solid #6D28D9' : '1.5px solid #E2E8F0',
+                  borderRadius: '10px',
+                  padding: '8px 14px 8px 36px',
+                  fontSize: '14px',
+                  color: '#1E293B',
+                  backgroundColor: 'white',
+                  outline: 'none',
+                }}
+              />
             </div>
           </div>
 
-          <div className="w-40">
-            <label htmlFor="date-from" className="mb-1.5 block text-xs font-semibold text-slate-600">
-              From
-            </label>
-            <input
-              id="date-from"
-              type="date"
-              value={dateFrom}
-              onChange={(event) => setDateFrom(event.target.value)}
-              className={dateInputClass}
-            />
-          </div>
-
-          <div className="w-40">
-            <label htmlFor="date-to" className="mb-1.5 block text-xs font-semibold text-slate-600">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label htmlFor="date-to" style={{ fontSize: '12px', fontWeight: 500, color: '#64748B' }}>
               To
             </label>
-            <input
-              id="date-to"
-              type="date"
-              value={dateTo}
-              onChange={(event) => setDateTo(event.target.value)}
-              className={dateInputClass}
-            />
+            <div style={{ position: 'relative' }}>
+              <Calendar
+                size={16}
+                style={{
+                  pointerEvents: 'none',
+                  position: 'absolute',
+                  left: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: '#94A3B8',
+                }}
+              />
+              <input
+                id="date-to"
+                type="date"
+                value={dateTo}
+                onChange={(event) => setDateTo(event.target.value)}
+                onFocus={() => setDateToFocused(true)}
+                onBlur={() => setDateToFocused(false)}
+                className="[&::-webkit-calendar-picker-indicator]:opacity-0"
+                style={{
+                  border: dateToFocused ? '1.5px solid #6D28D9' : '1.5px solid #E2E8F0',
+                  borderRadius: '10px',
+                  padding: '8px 14px 8px 36px',
+                  fontSize: '14px',
+                  color: '#1E293B',
+                  backgroundColor: 'white',
+                  outline: 'none',
+                }}
+              />
+            </div>
           </div>
 
-          <label className="flex items-center gap-2 pb-2.5 text-sm font-medium text-slate-600">
-            <input
-              type="checkbox"
-              checked={flaggedOnly}
-              onChange={(event) => setFlaggedOnly(event.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-            />
+          <div
+            role="button"
+            tabIndex={0}
+            aria-pressed={flaggedOnly}
+            onClick={() => setFlaggedOnly((value) => !value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                setFlaggedOnly((value) => !value);
+              }
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              borderRadius: '999px',
+              padding: '8px 16px',
+              fontSize: '14px',
+              fontWeight: 500,
+              cursor: 'pointer',
+              userSelect: 'none',
+              border: '1.5px solid #F59E0B',
+              background: flaggedOnly ? '#F59E0B' : 'white',
+              color: flaggedOnly ? '#FFFFFF' : '#F59E0B',
+            }}
+          >
+            <Flag size={14} />
             Flagged only
-          </label>
+          </div>
         </div>
       </div>
 
