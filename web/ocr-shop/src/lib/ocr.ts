@@ -25,6 +25,22 @@ export const CATEGORY_META: Record<Category, { label: string; emoji: string }> =
   GENERAL: { label: 'General', emoji: '🎒' },
 };
 
+// Storefront-only presentation metadata (badge colors, browse pill order) layered on top of
+// the detection logic above — purely cosmetic, no effect on which category a purchase resolves to.
+export const CATEGORY_BADGE_STYLES: Record<Category, { bg: string; text: string; ring: string }> = {
+  BOOKS: { bg: 'bg-primary-600', text: 'text-white', ring: 'ring-primary-200' },
+  FOOD: { bg: 'bg-emerald-500', text: 'text-white', ring: 'ring-emerald-200' },
+  TRANSPORT: { bg: 'bg-blue-500', text: 'text-white', ring: 'ring-blue-200' },
+  LIFESTYLE: { bg: 'bg-orange-500', text: 'text-white', ring: 'ring-orange-200' },
+  SOFTWARE: { bg: 'bg-sky-500', text: 'text-white', ring: 'ring-sky-200' },
+  TUITION: { bg: 'bg-rose-500', text: 'text-white', ring: 'ring-rose-200' },
+  GENERAL: { bg: 'bg-slate-500', text: 'text-white', ring: 'ring-slate-200' },
+};
+
+// The subset of categories worth browsing by on the storefront (a shopper never needs a
+// "Tuition" or "General" pill — those exist only so checkout can still label an odd cart).
+export const BROWSE_CATEGORIES: Category[] = ['BOOKS', 'FOOD', 'TRANSPORT', 'LIFESTYLE', 'SOFTWARE'];
+
 function countKeywordHits(text: string, keywords: string[]): number {
   const lower = text.toLowerCase();
   return keywords.reduce((total, keyword) => {

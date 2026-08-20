@@ -7,10 +7,12 @@ export function ProductThumbnail({
   src,
   alt,
   className,
+  fit = 'cover',
 }: {
   src: string;
   alt: string;
   className: string;
+  fit?: 'cover' | 'contain';
 }) {
   const [failed, setFailed] = useState(false);
 
@@ -20,7 +22,7 @@ export function ProductThumbnail({
         <img
           src={src}
           alt={alt}
-          className="h-full w-full object-cover"
+          className={fit === 'contain' ? 'h-full w-full object-contain' : 'h-full w-full object-cover'}
           onError={() => setFailed(true)}
         />
       )}

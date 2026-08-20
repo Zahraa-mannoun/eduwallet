@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getErrorMessage } from '../services/api';
 
@@ -30,18 +31,17 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary-50 via-white to-primary-100 px-4">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-xl">
+    <div
+      className="flex min-h-screen items-center justify-center px-4"
+      style={{ background: 'linear-gradient(135deg, #6D28D9, #8B5CF6)' }}
+    >
+      <div className="w-full max-w-[440px] rounded-3xl bg-white p-12 shadow-2xl">
         <div className="flex flex-col items-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-primary-600 text-3xl shadow">
+          <div className="flex h-[72px] w-[72px] items-center justify-center rounded-2xl bg-gradient-to-br from-primary-600 to-primary-800 text-4xl shadow-lg">
             🔍
           </div>
-          <h1 className="mt-4 text-center text-2xl font-bold text-slate-900">
-            Sign in with your EduWallet account
-          </h1>
-          <p className="mt-1 text-center text-sm text-slate-500">
-            Shop without categories — EduWallet routes each purchase automatically
-          </p>
+          <h1 className="mt-5 text-center text-2xl font-bold text-slate-900">Welcome to ScanMart</h1>
+          <p className="mt-1 text-center text-sm text-slate-500">Sign in to start shopping</p>
         </div>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-4">
@@ -55,7 +55,7 @@ export function LoginPage() {
               required
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
+              className="h-12 w-full rounded-xl border border-[#E5E7EB] px-4 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
               placeholder="you@university.edu"
             />
           </div>
@@ -70,7 +70,7 @@ export function LoginPage() {
               required
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
+              className="h-12 w-full rounded-xl border border-[#E5E7EB] px-4 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
               placeholder="••••••••"
             />
           </div>
@@ -84,23 +84,12 @@ export function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary-600 to-primary-500 px-4 text-sm font-bold text-white shadow-sm transition hover:from-primary-700 hover:to-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {loading && (
-              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                />
-              </svg>
-            )}
-            {loading ? 'Signing in...' : 'Login'}
+            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+            {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
-
-        <p className="mt-6 text-center text-xs text-slate-400">Powered by EduWallet</p>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import { StyleSheet, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Text, TouchableRipple } from 'react-native-paper';
-import IconBadge from './IconBadge';
 import { USER_TYPES } from '../constants/userTypes';
 import { colors } from '../theme/colors';
 import type { UserType } from '../context/AuthContext';
@@ -19,21 +20,25 @@ export default function UserTypeSelector({ value, onChange }: UserTypeSelectorPr
           <TouchableRipple
             key={type.key}
             onPress={() => onChange(type.key)}
-            style={[styles.typeCard, selected && styles.typeCardSelected]}
+            style={styles.typeCardWrapper}
             borderless
           >
-            <View style={styles.typeCardContent}>
-              <IconBadge
-                icon={type.icon}
-                color={selected ? colors.primary : colors.muted}
-                size={40}
-                iconSize={22}
-                style={styles.typeIconBadge}
-              />
-              <Text style={[styles.typeLabel, selected && styles.typeLabelSelected]}>
-                {type.label}
-              </Text>
-            </View>
+            {selected ? (
+              <LinearGradient
+                colors={[colors.gradientStart, colors.gradientEnd]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[styles.typeCard, styles.typeCardSelected]}
+              >
+                <MaterialCommunityIcons name={type.icon} size={22} color={colors.onPrimary} />
+                <Text style={[styles.typeLabel, styles.typeLabelSelected]}>{type.label}</Text>
+              </LinearGradient>
+            ) : (
+              <View style={styles.typeCard}>
+                <MaterialCommunityIcons name={type.icon} size={22} color={colors.muted} />
+                <Text style={styles.typeLabel}>{type.label}</Text>
+              </View>
+            )}
           </TouchableRipple>
         );
       })}
@@ -44,35 +49,37 @@ export default function UserTypeSelector({ value, onChange }: UserTypeSelectorPr
 const styles = StyleSheet.create({
   typeRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 4,
+  },
+  typeCardWrapper: {
+    flex: 1,
+    borderRadius: 14,
   },
   typeCard: {
-    flex: 1,
-    marginHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 6,
     borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.inputBackground,
   },
   typeCardSelected: {
-    borderColor: colors.primary,
-    backgroundColor: '#EAF0FA',
-  },
-  typeCardContent: {
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 6,
-  },
-  typeIconBadge: {
-    marginBottom: 8,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   typeLabel: {
     fontSize: 12,
     fontWeight: '600',
     color: colors.muted,
     textAlign: 'center',
+    marginTop: 6,
   },
   typeLabelSelected: {
-    color: colors.primary,
+    color: colors.onPrimary,
+    fontWeight: '700',
   },
 });

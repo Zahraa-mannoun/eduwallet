@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator as RNActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
+  TouchableOpacity,
   View,
 } from 'react-native';
-import { ActivityIndicator, Button, HelperText, Text, TextInput } from 'react-native-paper';
+import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Button, HelperText, Text, TextInput } from 'react-native-paper';
 import UserTypeSelector from '../components/UserTypeSelector';
 import { useAuth } from '../context/AuthContext';
 import type { UserType } from '../context/AuthContext';
@@ -62,149 +67,188 @@ export default function RegisterScreen({ navigation }: RootStackScreenProps<'Reg
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView
-        contentContainerStyle={styles.container}
-        keyboardShouldPersistTaps="handled"
+    <View style={styles.flex}>
+      <StatusBar style="light" />
+      <LinearGradient
+        colors={[colors.gradientStart, colors.gradientEnd]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+
+      <View style={styles.blobTop} pointerEvents="none" />
+      <View style={styles.blobBottom} pointerEvents="none" />
+
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <Text variant="headlineMedium" style={styles.appName}>
-          Create Account
-        </Text>
-        <Text style={styles.tagline}>Financial Access for Lebanese Students</Text>
+        <ScrollView
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.card}>
+            <View style={styles.logoGradientWrapper}>
+              <LinearGradient
+                colors={[colors.gradientStart, colors.gradientEnd]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.logoGradient}
+              >
+                <MaterialCommunityIcons name="wallet-outline" size={38} color={colors.onPrimary} />
+              </LinearGradient>
+            </View>
 
-        <View style={styles.form}>
-          <Text style={styles.sectionLabel}>I am a...</Text>
-          <View style={styles.selectorWrapper}>
-            <UserTypeSelector value={userType} onChange={setUserType} />
+            <Text variant="headlineMedium" style={styles.appName}>
+              Create Account
+            </Text>
+            <Text style={styles.tagline}>Financial Access for Lebanese Students</Text>
+
+            <View style={styles.form}>
+              <Text style={styles.sectionLabel}>I am a...</Text>
+              <View style={styles.selectorWrapper}>
+                <UserTypeSelector value={userType} onChange={setUserType} />
+              </View>
+
+              <TextInput
+                mode="outlined"
+                label="Full Name"
+                placeholder="Your full name"
+                value={fullName}
+                onChangeText={(text: string) => {
+                  setFullName(text);
+                  clearError();
+                }}
+                autoCapitalize="none"
+                autoComplete="off"
+                autoCorrect={false}
+                importantForAutofill="no"
+                left={<TextInput.Icon icon="account-outline" color={colors.primary} />}
+                outlineColor={colors.border}
+                activeOutlineColor={colors.primary}
+                style={styles.input}
+                theme={{ roundness: 14 }}
+              />
+
+              <TextInput
+                mode="outlined"
+                label="Email"
+                placeholder="you@example.com"
+                defaultValue=""
+                value={email}
+                onChangeText={(text: string) => {
+                  setEmail(text);
+                  clearError();
+                }}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="off"
+                textContentType="none"
+                keyboardType="email-address"
+                left={<TextInput.Icon icon="email-outline" color={colors.primary} />}
+                outlineColor={colors.border}
+                activeOutlineColor={colors.primary}
+                style={styles.input}
+                theme={{ roundness: 14 }}
+              />
+
+              <TextInput
+                mode="outlined"
+                label="Password"
+                placeholder="Create a password"
+                defaultValue=""
+                value={password}
+                onChangeText={(text: string) => {
+                  setPassword(text);
+                  clearError();
+                }}
+                secureTextEntry={secure}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="new-password"
+                textContentType="newPassword"
+                left={<TextInput.Icon icon="lock-outline" color={colors.primary} />}
+                right={
+                  <TextInput.Icon
+                    icon={secure ? 'eye-off-outline' : 'eye-outline'}
+                    color={colors.muted}
+                    onPress={() => setSecure((v) => !v)}
+                  />
+                }
+                outlineColor={colors.border}
+                activeOutlineColor={colors.primary}
+                style={styles.input}
+                theme={{ roundness: 14 }}
+              />
+
+              <TextInput
+                mode="outlined"
+                label="Confirm Password"
+                placeholder="Re-enter your password"
+                defaultValue=""
+                value={confirmPassword}
+                onChangeText={(text: string) => {
+                  setConfirmPassword(text);
+                  clearError();
+                }}
+                secureTextEntry={secure}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="new-password"
+                textContentType="newPassword"
+                left={<TextInput.Icon icon="lock-check-outline" color={colors.primary} />}
+                right={
+                  <TextInput.Icon
+                    icon={secure ? 'eye-off-outline' : 'eye-outline'}
+                    color={colors.muted}
+                    onPress={() => setSecure((v) => !v)}
+                  />
+                }
+                outlineColor={colors.border}
+                activeOutlineColor={colors.primary}
+                style={styles.input}
+                theme={{ roundness: 14 }}
+              />
+
+              <HelperText type="error" visible={Boolean(formError || error)}>
+                {formError ?? error}
+              </HelperText>
+
+              <TouchableOpacity
+                activeOpacity={0.85}
+                disabled={isSubmitting}
+                onPress={handleCreateAccount}
+                style={styles.registerButtonWrapper}
+              >
+                <LinearGradient
+                  colors={[colors.gradientStart, colors.gradientEnd]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.registerButtonContent}
+                >
+                  {isSubmitting ? (
+                    <RNActivityIndicator size={18} color={colors.onPrimary} />
+                  ) : (
+                    <Text style={styles.registerButtonLabel}>Create Account</Text>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <Button
+                mode="text"
+                textColor={colors.primary}
+                style={styles.loginLink}
+                labelStyle={styles.loginLinkLabel}
+                onPress={() => navigation.navigate('Login')}
+                disabled={isSubmitting}
+              >
+                Already have an account? Log In
+              </Button>
+            </View>
           </View>
-
-          <TextInput
-            mode="outlined"
-            label="Full Name"
-            placeholder="Your full name"
-            value={fullName}
-            onChangeText={(text: string) => {
-              setFullName(text);
-              clearError();
-            }}
-            autoCapitalize="none"
-            autoComplete="off"
-            autoCorrect={false}
-            importantForAutofill="no"
-            left={<TextInput.Icon icon="account-outline" />}
-            outlineColor={colors.border}
-            activeOutlineColor={colors.primary}
-            style={styles.input}
-          />
-
-          <TextInput
-            mode="outlined"
-            label="University Email"
-            placeholder="you@university.edu.lb"
-            value={email}
-            onChangeText={(text: string) => {
-              setEmail(text);
-              clearError();
-            }}
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoComplete="off"
-            importantForAutofill="no"
-            keyboardType="email-address"
-            left={<TextInput.Icon icon="email-outline" />}
-            outlineColor={colors.border}
-            activeOutlineColor={colors.primary}
-            style={styles.input}
-          />
-
-          <TextInput
-            mode="outlined"
-            label="Password"
-            placeholder="Create a password"
-            value={password}
-            onChangeText={(text: string) => {
-              setPassword(text);
-              clearError();
-            }}
-            secureTextEntry={secure}
-            autoCapitalize="none"
-            autoComplete="off"
-            autoCorrect={false}
-            importantForAutofill="no"
-            textContentType="oneTimeCode"
-            left={<TextInput.Icon icon="lock-outline" />}
-            right={
-              <TextInput.Icon
-                icon={secure ? 'eye-off-outline' : 'eye-outline'}
-                onPress={() => setSecure((v) => !v)}
-              />
-            }
-            outlineColor={colors.border}
-            activeOutlineColor={colors.primary}
-            style={styles.input}
-          />
-
-          <TextInput
-            mode="outlined"
-            label="Confirm Password"
-            placeholder="Re-enter your password"
-            value={confirmPassword}
-            onChangeText={(text: string) => {
-              setConfirmPassword(text);
-              clearError();
-            }}
-            secureTextEntry={secure}
-            autoCapitalize="none"
-            autoComplete="off"
-            autoCorrect={false}
-            importantForAutofill="no"
-            textContentType="oneTimeCode"
-            left={<TextInput.Icon icon="lock-check-outline" />}
-            right={
-              <TextInput.Icon
-                icon={secure ? 'eye-off-outline' : 'eye-outline'}
-                onPress={() => setSecure((v) => !v)}
-              />
-            }
-            outlineColor={colors.border}
-            activeOutlineColor={colors.primary}
-            style={styles.input}
-          />
-
-          <HelperText type="error" visible={Boolean(formError || error)}>
-            {formError ?? error}
-          </HelperText>
-
-          <Button
-            mode="contained"
-            buttonColor={colors.primary}
-            style={styles.registerButton}
-            contentStyle={styles.registerButtonContent}
-            onPress={handleCreateAccount}
-            disabled={!canSubmit}
-          >
-            {isSubmitting ? (
-              <ActivityIndicator size={18} color={colors.onPrimary} />
-            ) : (
-              'Create Account'
-            )}
-          </Button>
-
-          <Button
-            mode="text"
-            textColor={colors.primary}
-            style={styles.loginLink}
-            onPress={() => navigation.navigate('Login')}
-            disabled={isSubmitting}
-          >
-            Already have an account? Log In
-          </Button>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -214,14 +258,59 @@ const styles = StyleSheet.create({
   },
   container: {
     flexGrow: 1,
-    backgroundColor: colors.background,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
     paddingVertical: 48,
   },
+  blobTop: {
+    position: 'absolute',
+    top: -70,
+    left: -60,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  blobBottom: {
+    position: 'absolute',
+    bottom: -80,
+    right: -70,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  card: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    paddingHorizontal: 24,
+    paddingVertical: 32,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    elevation: 10,
+  },
+  logoGradientWrapper: {
+    marginBottom: 16,
+  },
+  logoGradient: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
+  },
   appName: {
-    fontWeight: '700',
+    fontWeight: '800',
     color: colors.heading,
   },
   tagline: {
@@ -245,16 +334,33 @@ const styles = StyleSheet.create({
   },
   input: {
     marginBottom: 16,
-    backgroundColor: colors.inputBackground,
+    backgroundColor: '#FFFFFF',
   },
-  registerButton: {
-    borderRadius: 10,
+  registerButtonWrapper: {
+    borderRadius: 14,
     marginTop: 8,
+    overflow: 'hidden',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
+    elevation: 5,
   },
   registerButtonContent: {
-    paddingVertical: 6,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  registerButtonLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.onPrimary,
   },
   loginLink: {
     marginTop: 12,
+  },
+  loginLinkLabel: {
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

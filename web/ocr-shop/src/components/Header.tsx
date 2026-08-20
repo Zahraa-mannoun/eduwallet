@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
+import { LogOut, ShoppingBag } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
-import { useSearch } from '../context/SearchContext';
 
 interface HeaderProps {
   onCartClick: () => void;
@@ -10,7 +10,6 @@ interface HeaderProps {
 export function Header({ onCartClick }: Readonly<HeaderProps>) {
   const { user, isAuthenticated, logout } = useAuth();
   const { itemCount } = useCart();
-  const { query, setQuery } = useSearch();
   const navigate = useNavigate();
 
   function handleLogout() {
@@ -19,61 +18,20 @@ export function Header({ onCartClick }: Readonly<HeaderProps>) {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
+    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white shadow-[0_2px_12px_rgba(0,0,0,0.05)]">
       <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
-        <Link to="/home" className="flex shrink-0 items-center gap-2.5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary-600 to-primary-800 text-xl shadow-sm">
-            🔍
-          </div>
-          <span className="flex flex-col leading-tight">
-            <span className="text-xl font-extrabold tracking-tight text-primary-700">ScanMart</span>
-            <span className="hidden text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:block">
-              Powered by EduWallet
-            </span>
-          </span>
+        <Link to="/home" className="shrink-0">
+          <span className="text-xl font-extrabold tracking-tight text-primary-700">ScanMart</span>
         </Link>
 
-        <div className="mx-4 hidden flex-1 md:block">
-          <div className="relative">
-            <input
-              type="text"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search products..."
-              aria-label="Search products"
-              className="w-full rounded-full border border-slate-200 bg-slate-50 py-2 pl-4 pr-10 text-sm outline-none transition focus:border-primary-400 focus:bg-white focus:ring-2 focus:ring-primary-100"
-            />
-            <svg
-              className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"
-              />
-            </svg>
-          </div>
-        </div>
-
-        <div className="ml-auto flex items-center gap-4">
+        <div className="ml-auto flex items-center gap-3">
           <button
             type="button"
             onClick={onCartClick}
             className="relative flex items-center gap-1.5 rounded-lg px-2 py-2 text-slate-700 transition hover:bg-slate-100"
             aria-label="Open cart"
           >
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"
-              />
-            </svg>
+            <ShoppingBag className="h-6 w-6" />
             {itemCount > 0 && (
               <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary-600 text-xs font-bold text-white">
                 {itemCount}
@@ -92,8 +50,9 @@ export function Header({ onCartClick }: Readonly<HeaderProps>) {
               <button
                 type="button"
                 onClick={handleLogout}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:border-red-300 hover:bg-red-50 hover:text-red-600"
               >
+                <LogOut className="h-3.5 w-3.5" />
                 Logout
               </button>
             </div>

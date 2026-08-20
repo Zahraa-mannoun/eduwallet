@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
+import { PartyPopper } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { OcrPaymentPanel } from '../components/OcrPaymentPanel';
-import { CATEGORY_META, detectCategoryForItems } from '../lib/ocr';
+import { CategoryBadge } from '../components/CategoryBadge';
+import { detectCategoryForItems } from '../lib/ocr';
 import type { Category, CartItem } from '../types';
 
 interface CategoryGroup {
@@ -67,14 +69,6 @@ function groupByDetectedCategory(items: CartItem[]): CategoryGroup[] {
   }));
 }
 
-function EduWalletBadge() {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-xs font-semibold text-primary-700">
-      🔍 Powered by EduWallet
-    </span>
-  );
-}
-
 export function CheckoutPage() {
   const { items, clearCart } = useCart();
   // Snapshot the cart at entry so clearing it on final success doesn't blank this page mid-flow.
@@ -109,22 +103,20 @@ export function CheckoutPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-slate-900">Checkout</h1>
-        <EduWalletBadge />
-      </div>
+      <h1 className="text-2xl font-bold text-slate-900">Checkout</h1>
 
       {groups.length > 1 && (
         <div className="mt-4 rounded-lg border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-primary-800">
-          Your cart spans {groups.length} categories. Because EduWallet funds can be
-          education-locked per category, you&apos;ll need to pay for each one separately with
-          its own virtual card.
+          Your cart spans {groups.length} categories, so you&apos;ll need to pay for each one
+          separately with its own virtual card.
         </div>
       )}
 
       {allPaid && (
         <div className="mt-4 flex flex-col items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-6 text-center">
-          <p className="text-lg font-bold text-emerald-700">All payments completed! 🎉</p>
+          <p className="flex items-center gap-2 text-lg font-bold text-emerald-700">
+            <PartyPopper className="h-5 w-5" /> All payments completed!
+          </p>
           <Link
             to="/home"
             className="rounded-lg bg-primary-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700"
@@ -136,34 +128,31 @@ export function CheckoutPage() {
 
       <div className="mt-6 grid gap-8 lg:grid-cols-3">
         <div className="space-y-4 lg:sticky lg:top-20 lg:col-span-1 lg:self-start">
-          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl bg-white p-6 shadow-[0_2px_12px_rgba(0,0,0,0.07)]">
             <h2 className="text-lg font-bold text-slate-900">Order Summary</h2>
             <div className="mt-4 space-y-4">
-              {groups.map((group) => {
-                const meta = CATEGORY_META[group.category];
-                return (
-                  <div key={group.category}>
-                    <div className="flex items-center justify-between text-sm font-semibold text-slate-700">
-                      <span>
-                        {meta.emoji} Detected: {meta.label}
-                      </span>
-                      <span>${group.subtotal.toFixed(2)}</span>
-                    </div>
-                    <ul className="mt-1 space-y-1">
-                      {group.items.map((item) => (
-                        <li key={item.id} className="flex justify-between text-xs text-slate-500">
-                          <span>
-                            {item.name} × {item.quantity}
-                          </span>
-                          <span>${(item.price * item.quantity).toFixed(2)}</span>
-                        </li>
-                      ))}
-                    </ul>
+              {groups.map((group) => (
+                <div key={group.category}>
+                  <div className="flex items-center justify-between gap-2">
+                    <CategoryBadge category={group.category} size="md" />
+                    <span className="text-sm font-semibold text-slate-700">
+                      ${group.subtotal.toFixed(2)}
+                    </span>
                   </div>
-                );
-              })}
+                  <ul className="mt-1.5 space-y-1">
+                    {group.items.map((item) => (
+                      <li key={item.id} className="flex justify-between text-xs text-slate-500">
+                        <span>
+                          {item.name} × {item.quantity}
+                        </span>
+                        <span>${(item.price * item.quantity).toFixed(2)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </div>
-            <div className="mt-4 flex justify-between border-t border-slate-200 pt-4 text-base font-bold text-slate-900">
+            <div className="mt-4 flex justify-between border-t border-slate-200 pt-4 text-lg font-bold text-slate-900">
               <span>Total</span>
               <span>${grandTotal.toFixed(2)}</span>
             </div>
@@ -177,6 +166,7 @@ export function CheckoutPage() {
               category={group.category}
               amount={group.subtotal}
               index={i + 1}
+              totalPanels={groups.length}
               onSuccess={() => handleGroupSuccess(group.category)}
               initiallyPaid={paidCategories.has(group.category)}
             />

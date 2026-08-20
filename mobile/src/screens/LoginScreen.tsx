@@ -6,8 +6,11 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  TouchableOpacity,
   View,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, Button, HelperText, Text, TextInput } from 'react-native-paper';
 import IconBadge from '../components/IconBadge';
 import { useAuth } from '../context/AuthContext';
@@ -66,127 +69,197 @@ export default function LoginScreen({ navigation }: RootStackScreenProps<'Login'
   if (effectiveSuspensionReason !== null) {
     return (
       <View style={styles.flex}>
+        <StatusBar style="light" />
+        <LinearGradient
+          colors={[colors.gradientStart, colors.gradientEnd]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
         <ScrollView contentContainerStyle={styles.suspendedContainer}>
-          <IconBadge icon="lock-alert-outline" color={colors.danger} size={80} iconSize={40} />
-          <Text variant="titleLarge" style={styles.suspendedTitle}>
-            Your account has been suspended.
-          </Text>
-          <Text style={styles.suspendedReason}>Reason: {effectiveSuspensionReason}</Text>
+          <View style={styles.card}>
+            <IconBadge icon="lock-alert-outline" color={colors.danger} size={80} iconSize={40} />
+            <Text variant="titleLarge" style={styles.suspendedTitle}>
+              Your account has been suspended.
+            </Text>
+            <Text style={styles.suspendedReason}>Reason: {effectiveSuspensionReason}</Text>
 
-          <Button
-            mode="contained"
-            buttonColor={colors.primary}
-            style={styles.suspendedButton}
-            contentStyle={styles.suspendedButtonContent}
-            onPress={() => navigation.navigate('SupportMessage', { email: email.trim() })}
-          >
-            Send Message
-          </Button>
-          <Button
-            mode="outlined"
-            textColor={colors.primary}
-            style={styles.suspendedButton}
-            contentStyle={styles.suspendedButtonContent}
-            onPress={() => void Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}
-          >
-            Email Us
-          </Button>
-          <Button mode="text" textColor={colors.muted} onPress={handleBackToLogin}>
-            Back to Login
-          </Button>
+            <Button
+              mode="contained"
+              buttonColor={colors.primary}
+              style={styles.suspendedButton}
+              contentStyle={styles.suspendedButtonContent}
+              onPress={() => navigation.navigate('SupportMessage', { email: email.trim() })}
+            >
+              Send Message
+            </Button>
+            <Button
+              mode="outlined"
+              textColor={colors.primary}
+              style={styles.suspendedButton}
+              contentStyle={styles.suspendedButtonContent}
+              onPress={() => void Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}
+            >
+              Email Us
+            </Button>
+            <Button mode="text" textColor={colors.muted} onPress={handleBackToLogin}>
+              Back to Login
+            </Button>
+          </View>
         </ScrollView>
       </View>
     );
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView
-        contentContainerStyle={styles.container}
-        keyboardShouldPersistTaps="handled"
+    <View style={styles.flex}>
+      <StatusBar style="light" />
+      <LinearGradient
+        colors={[colors.gradientStart, colors.gradientEnd]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+
+      <View style={styles.blobTop} pointerEvents="none" />
+      <View style={styles.blobTopSmall} pointerEvents="none" />
+      <View style={styles.blobBottom} pointerEvents="none" />
+      <View style={styles.blobBottomSmall} pointerEvents="none" />
+
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <Image
-          source={require('../../assets/icon.png')}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-
-        <Text variant="headlineMedium" style={styles.appName}>
-          EduWallet
-        </Text>
-        <Text style={styles.tagline}>Financial Access for Lebanese Students</Text>
-
-        <View style={styles.form}>
-          <TextInput
-            mode="outlined"
-            label="Email"
-            placeholder="you@university.edu.lb"
-            value={email}
-            onChangeText={(text: string) => {
-              setEmail(text);
-              clearError();
-            }}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-            left={<TextInput.Icon icon="email-outline" />}
-            outlineColor={colors.border}
-            activeOutlineColor={colors.primary}
-            style={styles.input}
-          />
-
-          <TextInput
-            mode="outlined"
-            label="Password"
-            placeholder="Enter your password"
-            value={password}
-            onChangeText={(text: string) => {
-              setPassword(text);
-              clearError();
-            }}
-            secureTextEntry={secure}
-            left={<TextInput.Icon icon="lock-outline" />}
-            right={
-              <TextInput.Icon
-                icon={secure ? 'eye-off-outline' : 'eye-outline'}
-                onPress={() => setSecure((v) => !v)}
+        <ScrollView
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.card}>
+            <LinearGradient
+              colors={[colors.gradientStart, colors.gradientEnd]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.logoGradient}
+            >
+              <Image
+                source={require('../../assets/icon.png')}
+                style={styles.logo}
+                resizeMode="contain"
               />
-            }
-            outlineColor={colors.border}
-            activeOutlineColor={colors.primary}
-            style={styles.input}
-          />
+            </LinearGradient>
 
-          <HelperText type="error" visible={Boolean(error)}>
-            {error}
-          </HelperText>
+            <Text variant="headlineMedium" style={styles.appName}>
+              EduWallet
+            </Text>
+            <Text style={styles.tagline}>Financial Access for Lebanese Students</Text>
 
-          <Button
-            mode="contained"
-            buttonColor={colors.primary}
-            style={styles.loginButton}
-            contentStyle={styles.loginButtonContent}
-            onPress={handleLogin}
-            disabled={!canSubmit}
-          >
-            {isSubmitting ? <ActivityIndicator size={18} color={colors.onPrimary} /> : 'Log In'}
-          </Button>
+            <View style={styles.form}>
+              <TextInput
+                mode="outlined"
+                label="Email"
+                placeholder="you@example.com"
+                value={email}
+                onChangeText={(text: string) => {
+                  setEmail(text);
+                  clearError();
+                }}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="email"
+                textContentType="emailAddress"
+                keyboardType="email-address"
+                left={<TextInput.Icon icon="email-outline" color={colors.primary} />}
+                outlineColor={colors.border}
+                activeOutlineColor={colors.primary}
+                style={styles.input}
+                theme={{ roundness: 14 }}
+              />
 
-          <Button
-            mode="text"
-            textColor={colors.primary}
-            style={styles.createAccountLink}
-            onPress={() => navigation.navigate('Register')}
-            disabled={isSubmitting}
-          >
-            Don&apos;t have an account? Create Account
-          </Button>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+              <TextInput
+                mode="outlined"
+                label="Password"
+                placeholder="Enter your password"
+                value={password}
+                onChangeText={(text: string) => {
+                  setPassword(text);
+                  clearError();
+                }}
+                secureTextEntry={secure}
+                autoComplete="password"
+                textContentType="password"
+                left={<TextInput.Icon icon="lock-outline" color={colors.primary} />}
+                right={
+                  <TextInput.Icon
+                    icon={secure ? 'eye-off-outline' : 'eye-outline'}
+                    color={colors.muted}
+                    onPress={() => setSecure((v) => !v)}
+                  />
+                }
+                outlineColor={colors.border}
+                activeOutlineColor={colors.primary}
+                style={styles.input}
+                theme={{ roundness: 14 }}
+              />
+
+              <HelperText type="error" visible={Boolean(error)}>
+                {error}
+              </HelperText>
+
+              <TouchableGradientButton
+                label="Log In"
+                loading={isSubmitting}
+                disabled={!canSubmit}
+                onPress={handleLogin}
+              />
+
+              <Button
+                mode="text"
+                textColor={colors.primary}
+                style={styles.createAccountLink}
+                labelStyle={styles.createAccountLinkLabel}
+                onPress={() => navigation.navigate('Register')}
+                disabled={isSubmitting}
+              >
+                Don&apos;t have an account? Create Account
+              </Button>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
+  );
+}
+
+type TouchableGradientButtonProps = Readonly<{
+  label: string;
+  loading: boolean;
+  disabled: boolean;
+  onPress: () => void;
+}>;
+
+function TouchableGradientButton({ label, loading, disabled, onPress }: TouchableGradientButtonProps) {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.85}
+      disabled={disabled}
+      onPress={onPress}
+      style={styles.loginButtonWrapper}
+    >
+      <LinearGradient
+        colors={disabled ? [colors.border, colors.border] : [colors.gradientStart, colors.gradientEnd]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={styles.loginButtonContent}
+      >
+        {loading ? (
+          <ActivityIndicator size={18} color={colors.onPrimary} />
+        ) : (
+          <Text style={[styles.loginButtonLabel, { color: disabled ? colors.muted : colors.onPrimary }]}>
+            {label}
+          </Text>
+        )}
+      </LinearGradient>
+    </TouchableOpacity>
   );
 }
 
@@ -196,27 +269,87 @@ const styles = StyleSheet.create({
   },
   container: {
     flexGrow: 1,
-    backgroundColor: colors.background,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
     paddingVertical: 48,
   },
+  blobTop: {
+    position: 'absolute',
+    top: -70,
+    left: -60,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  blobTopSmall: {
+    position: 'absolute',
+    top: 60,
+    right: -40,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  blobBottom: {
+    position: 'absolute',
+    bottom: -80,
+    right: -70,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  blobBottomSmall: {
+    position: 'absolute',
+    bottom: 40,
+    left: -50,
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  card: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    paddingHorizontal: 24,
+    paddingVertical: 32,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    elevation: 10,
+  },
+  logoGradient: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
+  },
   logo: {
-    width: 72,
-    height: 72,
-    borderRadius: 16,
-    marginBottom: 8,
+    width: 52,
+    height: 52,
+    borderRadius: 12,
   },
   appName: {
-    fontWeight: '700',
+    fontWeight: '800',
     color: colors.heading,
   },
   tagline: {
     fontSize: 14,
     color: colors.muted,
     marginTop: 4,
-    marginBottom: 24,
+    marginBottom: 28,
     textAlign: 'center',
   },
   form: {
@@ -224,24 +357,40 @@ const styles = StyleSheet.create({
   },
   input: {
     marginBottom: 16,
-    backgroundColor: colors.inputBackground,
+    backgroundColor: '#FFFFFF',
   },
-  loginButton: {
-    borderRadius: 10,
+  loginButtonWrapper: {
+    borderRadius: 14,
     marginTop: 8,
+    overflow: 'hidden',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
+    elevation: 5,
   },
   loginButtonContent: {
-    paddingVertical: 6,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loginButtonLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.onPrimary,
   },
   createAccountLink: {
     marginTop: 12,
   },
+  createAccountLinkLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
   suspendedContainer: {
     flexGrow: 1,
-    backgroundColor: colors.background,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 32,
+    paddingHorizontal: 24,
     paddingVertical: 48,
   },
   suspendedTitle: {

@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { Loader2, ScanLine } from 'lucide-react';
 import type { Category, UseCardResponseData } from '../types';
 import { payWithCard } from '../services/cards';
 import { getErrorMessage } from '../services/api';
@@ -10,6 +11,7 @@ import {
 } from '../lib/format';
 import { CATEGORY_META } from '../lib/ocr';
 import { transactionStatusLabel } from '../lib/transactionStatus';
+import { CategoryBadge } from './CategoryBadge';
 
 type PaymentStatus = 'idle' | 'processing' | 'success' | 'failed';
 
@@ -17,6 +19,7 @@ interface OcrPaymentPanelProps {
   category: Category;
   amount: number;
   index: number;
+  totalPanels: number;
   onSuccess: () => void;
   // True when this category was already paid earlier in the same checkout session (restored
   // from sessionStorage by CheckoutPage) — the original transaction details aren't persisted,
@@ -25,14 +28,17 @@ interface OcrPaymentPanelProps {
 }
 
 const GENERIC_PAYMENT_ERROR = 'Payment failed. Please check your card details and try again.';
+const CARD_INPUT_CLASS =
+  'w-full rounded-xl border border-[#E5E7EB] px-3 py-2.5 text-sm font-mono tracking-wide outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100';
 
 export function OcrPaymentPanel({
   category,
   amount,
   index,
+  totalPanels,
   onSuccess,
   initiallyPaid = false,
-}: OcrPaymentPanelProps) {
+}: Readonly<OcrPaymentPanelProps>) {
   const [cardNumber, setCardNumber] = useState('');
   const [cvv, setCvv] = useState('');
   const [expiry, setExpiry] = useState('');
@@ -75,7 +81,7 @@ export function OcrPaymentPanel({
 
   if (status === 'success') {
     return (
-      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center">
+      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-center">
         <h3 className="text-lg font-bold text-emerald-700">Payment Approved!</h3>
         {transaction ? (
           <dl className="mx-auto mt-3 max-w-xs space-y-1 text-left text-sm text-emerald-900">
@@ -83,10 +89,10 @@ export function OcrPaymentPanel({
               <dt className="text-emerald-600">Amount Paid</dt>
               <dd className="font-medium">${Number(transaction.amount).toFixed(2)}</dd>
             </div>
-            <div className="flex justify-between">
+            <div className="flex items-center justify-between">
               <dt className="text-emerald-600">Detected Category</dt>
-              <dd className="font-medium">
-                {meta.emoji} {meta.label}
+              <dd>
+                <CategoryBadge category={category} />
               </dd>
             </div>
             <div className="flex justify-between">
@@ -112,21 +118,27 @@ export function OcrPaymentPanel({
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="rounded-2xl bg-white p-6 shadow-[0_2px_12px_rgba(0,0,0,0.07)]">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-bold text-slate-900">Payment {index}</h3>
+        <div>
+          <h3 className="text-lg font-bold text-slate-900">Virtual Card</h3>
+          {totalPanels > 1 && (
+            <p className="text-xs font-medium text-slate-400">
+              Payment {index} of {totalPanels}
+            </p>
+          )}
+        </div>
         <span className="rounded-full bg-primary-50 px-3 py-1 text-sm font-bold text-primary-700">
           ${amount.toFixed(2)}
         </span>
       </div>
 
-      <div className="mt-3 rounded-lg border border-primary-200 bg-primary-50 px-4 py-3">
+      <div className="mt-3 flex items-start gap-2 rounded-xl border border-primary-200 bg-primary-50 px-4 py-3">
+        <ScanLine className="mt-0.5 h-4 w-4 shrink-0 text-primary-700" />
         <p className="text-sm font-medium text-primary-800">
-          We detected your purchase is for: {meta.emoji} {meta.label}
+          We detected your purchase is for: <CategoryBadge category={category} className="ml-1 align-middle" />
         </p>
       </div>
-
-      <p className="mt-3 text-sm text-slate-500">Pay with EduWallet Virtual Card</p>
 
       <form onSubmit={handleSubmit} className="mt-4 space-y-3">
         <div>
@@ -137,7 +149,7 @@ export function OcrPaymentPanel({
             value={cardNumber}
             onChange={(event) => setCardNumber(formatCardNumberInput(event.target.value))}
             placeholder="XXXX-XXXX-XXXX-XXXX"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
+            className={CARD_INPUT_CLASS}
             required
           />
         </div>
@@ -150,7 +162,7 @@ export function OcrPaymentPanel({
               value={expiry}
               onChange={(event) => setExpiry(formatExpiryInput(event.target.value))}
               placeholder="MM/YY"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
+              className={CARD_INPUT_CLASS}
               required
             />
           </div>
@@ -162,7 +174,7 @@ export function OcrPaymentPanel({
               value={cvv}
               onChange={(event) => setCvv(formatCvvInput(event.target.value))}
               placeholder="123"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
+              className={CARD_INPUT_CLASS}
               required
             />
           </div>
@@ -178,14 +190,9 @@ export function OcrPaymentPanel({
         <button
           type="submit"
           disabled={!canSubmit}
-          className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary-600 to-primary-500 px-4 text-sm font-bold text-white shadow-sm transition hover:from-primary-700 hover:to-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {status === 'processing' && (
-            <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-            </svg>
-          )}
+          {status === 'processing' && <Loader2 className="h-4 w-4 animate-spin" />}
           {status === 'processing' ? 'Processing...' : `Pay $${amount.toFixed(2)}`}
         </button>
       </form>

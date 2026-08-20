@@ -1,37 +1,126 @@
+import { useState } from 'react';
+import { Check, ShoppingCart } from 'lucide-react';
 import type { Product } from '../types';
 import { useCart } from '../context/CartContext';
 import { useToast } from '../context/ToastContext';
-import { ProductThumbnail } from './ProductThumbnail';
 
-export function ProductCard({ product }: { product: Product }) {
+// "✓ Added" is a purely cosmetic confirmation on the button itself — the toast (already
+// covering the "it worked" signal) keeps firing exactly as before.
+const ADDED_FLASH_MS = 1200;
+const CARD_BACKGROUND = '#F0EEFF';
+
+export function ProductCard({ product }: Readonly<{ product: Product }>) {
   const { addToCart } = useCart();
   const { showToast } = useToast();
+  const [justAdded, setJustAdded] = useState(false);
+  // Local fallback state — this card renders its own <img> (rather than going through
+  // ProductThumbnail) so every piece of the card can carry exact inline styles with no
+  // Tailwind classes in the mix.
+  const [imageFailed, setImageFailed] = useState(false);
 
   function handleAdd() {
     addToCart(product);
     showToast(`${product.name} added to cart`);
+    setJustAdded(true);
+    setTimeout(() => setJustAdded(false), ADDED_FLASH_MS);
   }
 
   return (
-    <div className="group flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition duration-200 hover:-translate-y-1 hover:border-primary-200 hover:shadow-lg">
-      <ProductThumbnail
-        src={product.image}
-        alt={product.name}
-        className="flex aspect-square items-center justify-center overflow-hidden bg-gradient-to-br from-primary-100 to-primary-50 text-5xl"
-      />
-      <div className="flex flex-1 flex-col p-4">
-        <h3 className="line-clamp-1 font-semibold text-slate-900">{product.name}</h3>
-        <p className="mt-1 line-clamp-2 flex-1 text-sm text-slate-500">{product.description}</p>
-        <div className="mt-3 flex items-center justify-between gap-2">
-          <span className="text-lg font-bold text-primary-700">${product.price.toFixed(2)}</span>
-          <button
-            type="button"
-            onClick={handleAdd}
-            className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 hover:shadow active:scale-95"
-          >
-            Add to Cart
-          </button>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        background: CARD_BACKGROUND,
+        borderRadius: '12px',
+        overflow: 'hidden',
+        cursor: 'pointer',
+      }}
+    >
+      <div
+        style={{
+          background: CARD_BACKGROUND,
+          height: '160px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '12px',
+        }}
+      >
+        {imageFailed ? (
+          <span style={{ fontSize: '40px' }}>📦</span>
+        ) : (
+          <img
+            src={product.image}
+            alt={product.name}
+            style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }}
+            onError={() => setImageFailed(true)}
+          />
+        )}
+      </div>
+
+      <div style={{ background: CARD_BACKGROUND, padding: '12px 16px' }}>
+        <h3
+          style={{
+            fontWeight: 700,
+            color: '#0F172A',
+            fontSize: '14px',
+            marginBottom: '4px',
+          }}
+        >
+          {product.name}
+        </h3>
+        <p
+          style={{
+            color: '#64748B',
+            fontSize: '12px',
+            marginBottom: '8px',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }}
+        >
+          {product.description}
+        </p>
+        <div
+          style={{
+            fontWeight: 700,
+            color: '#7C3AED',
+            fontSize: '16px',
+            marginBottom: '10px',
+          }}
+        >
+          ${product.price.toFixed(2)}
         </div>
+        <button
+          type="button"
+          onClick={handleAdd}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            width: '100%',
+            borderRadius: '8px',
+            fontSize: '13px',
+            padding: '8px',
+            fontWeight: 700,
+            color: '#FFFFFF',
+            border: 'none',
+            cursor: 'pointer',
+            background: justAdded ? '#10B981' : 'linear-gradient(to right, #7C3AED, #8B5CF6)',
+          }}
+        >
+          {justAdded ? (
+            <>
+              <Check size={14} /> Added
+            </>
+          ) : (
+            <>
+              <ShoppingCart size={14} /> Add to Cart
+            </>
+          )}
+        </button>
       </div>
     </div>
   );

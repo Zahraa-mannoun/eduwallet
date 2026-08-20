@@ -1,8 +1,11 @@
 import { useMemo } from 'react';
+import { SearchX, ShoppingBag } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSearch } from '../context/SearchContext';
 import { ProductCard } from '../components/ProductCard';
 import { PRODUCTS } from '../data/products';
+
+const HERO_IMAGE_URL = 'https://images.unsplash.com/photo-1573855619003-97b4799dcd8b?w=1600&q=80&auto=format&fit=crop';
 
 export function HomePage() {
   const { user } = useAuth();
@@ -23,9 +26,16 @@ export function HomePage() {
     : `${filteredProducts.length} products available`;
 
   return (
-    <div>
-      <section className="relative overflow-hidden bg-gradient-to-br from-primary-900 via-primary-700 to-primary-500">
-        <div className="pointer-events-none absolute inset-0 opacity-20 [background-image:radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] [background-size:24px_24px]" />
+    <div className="bg-[#FAFAFA]">
+      <section
+        className="relative flex min-h-[420px] items-center overflow-hidden bg-cover bg-center"
+        style={{ backgroundImage: `url(${HERO_IMAGE_URL})` }}
+      >
+        <div
+          className="absolute inset-0"
+          style={{ backgroundColor: 'rgba(109, 40, 217, 0.75)' }}
+        />
+
         <div className="relative mx-auto w-full max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
           <p className="text-lg font-medium text-white/90 sm:text-xl">
             Welcome back, {user?.fullName ?? 'student'}!
@@ -34,23 +44,35 @@ export function HomePage() {
             Everything a student needs, in one place
           </h1>
           <p className="mt-4 max-w-xl text-sm text-white/80 sm:text-base">
-            Shop freely — ScanMart automatically routes each purchase to the right EduWallet
-            card at checkout, so your education-locked funds always land where they should.
+            Books, food, transport, and lifestyle essentials — curated for campus life and
+            ready to ship to your door.
           </p>
+          <a
+            href="#product-grid"
+            className="mt-7 inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-bold text-primary-700 shadow-lg transition hover:bg-white/90"
+          >
+            <ShoppingBag className="h-4 w-4" />
+            Shop Now
+          </a>
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+      <section id="product-grid" className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="text-xl font-bold text-slate-900">All Products</h2>
+            <div className="flex items-center gap-2.5">
+              <h2 className="text-xl font-bold text-slate-900">All Products</h2>
+              <span className="rounded-full bg-primary-100 px-2.5 py-0.5 text-xs font-bold text-primary-700">
+                {filteredProducts.length}
+              </span>
+            </div>
             <p className="mt-0.5 text-sm text-slate-500">{resultsSummary}</p>
           </div>
         </div>
 
         {filteredProducts.length === 0 ? (
-          <div className="mt-10 flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 py-16 text-center">
-            <span className="text-4xl">🔍</span>
+          <div className="mt-10 flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-300 bg-white py-16 text-center">
+            <SearchX className="h-10 w-10 text-slate-300" />
             <p className="font-semibold text-slate-900">No products found</p>
             <p className="text-sm text-slate-500">
               We couldn&apos;t find anything matching &ldquo;{query.trim()}&rdquo;.
@@ -64,7 +86,17 @@ export function HomePage() {
             </button>
           </div>
         ) : (
-          <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          <div
+            className="mt-4 grid"
+            style={{
+              width: '100%',
+              maxWidth: '100%',
+              padding: '0 24px',
+              boxSizing: 'border-box',
+              gridTemplateColumns: 'repeat(4, 1fr)',
+              gap: '20px',
+            }}
+          >
             {filteredProducts.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
