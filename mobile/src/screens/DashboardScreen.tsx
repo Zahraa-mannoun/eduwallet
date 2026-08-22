@@ -252,25 +252,27 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
           </View>
         )}
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.quickActionsRow}
-        >
-          {quickActions.map((action) => (
-            <TouchableOpacity
-              key={action.key}
-              style={styles.quickActionCard}
-              activeOpacity={0.7}
-              onPress={action.onPress}
-            >
-              <View style={styles.quickActionIconCircle}>
-                <MaterialCommunityIcons name={action.icon} size={22} color={colors.primary} />
-              </View>
-              <Text style={styles.quickActionLabel}>{action.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        <View style={styles.quickActionsWrapper}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.quickActionsRow}
+          >
+            {quickActions.map((action) => (
+              <TouchableOpacity
+                key={action.key}
+                style={styles.quickActionCard}
+                activeOpacity={0.7}
+                onPress={action.onPress}
+              >
+                <View style={styles.quickActionIconCircle}>
+                  <MaterialCommunityIcons name={action.icon} size={26} color={colors.primary} />
+                </View>
+                <Text style={styles.quickActionLabel}>{action.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
 
         {wallet ? (
           <>
@@ -572,17 +574,23 @@ const styles = StyleSheet.create({
   kycBannerTextRejected: {
     color: colors.danger,
   },
-  quickActionsRow: {
-    paddingBottom: 4,
+  quickActionsWrapper: {
     marginBottom: 24,
   },
+  quickActionsRow: {
+    paddingBottom: 4,
+    justifyContent: 'center',
+    flexGrow: 1,
+  },
   quickActionCard: {
-    width: 76,
+    width: 90,
+    justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    paddingVertical: 14,
-    marginRight: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    marginRight: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
@@ -590,15 +598,15 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   quickActionIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: `${colors.primary}1F`,
     alignItems: 'center',
     justifyContent: 'center',
   },
   quickActionLabel: {
-    fontSize: 12,
+    fontSize: 13,
     color: colors.heading,
     fontWeight: '700',
     marginTop: 8,
@@ -610,7 +618,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   balanceBreakdownTitle: {
-    marginTop: 16,
+    marginTop: 24,
   },
   sectionTitleRow: {
     flexDirection: 'row',
