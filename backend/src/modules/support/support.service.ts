@@ -120,10 +120,26 @@ export async function markSupportMessageRead(messageId: string): Promise<Support
     throw new AppError(404, 'SUPPORT_MESSAGE_NOT_FOUND', 'Support message not found');
   }
 
-  return prisma.supportMessage.update({
+  const updated = await prisma.supportMessage.update({
     where: { id: messageId },
     data: { status: 'READ' },
   });
+
+  // Same mechanism every other "something changed" refetch in the app relies on: creating a
+  // notification also emits notification:new over the sender's socket room (see
+  // notifications.service's createNotification / notifications.socket's emitNotification), which
+  // is exactly what the agent portal's useSocketRefetch(load) on Messages.tsx is already
+  // listening for. Without this, marking a message read only updated the DB — nothing told the
+  // sender's already-open tab to refetch, so their own message list kept showing "Unread" until
+  // a manual reload.
+  await createNotification(
+    updated.userId,
+    'Message Read',
+    'Your message has been read by the admin team.',
+    'SUPPORT_MESSAGE_READ'
+  );
+
+  return updated;
 }
 
 // Replying doesn't persist a reply on the SupportMessage row itself (there's no thread/reply
