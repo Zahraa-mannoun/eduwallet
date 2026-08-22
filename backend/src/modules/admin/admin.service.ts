@@ -168,16 +168,25 @@ export async function getUsers(filters: GetUsersInput): Promise<{
   }
 
   // Drives the 💬 icon next to a suspended user's name (Students/Parents/Institutions
-  // pages) — only ever meaningful for suspended users, so skip the query otherwise.
+  // pages) — only ever meaningful for suspended users, so skip the query otherwise. A user
+  // suspended, unsuspended, then suspended again must not surface a message sent during the
+  // PRIOR suspension cycle, so a message only counts if it's strictly newer than suspendedAt
+  // (see suspendUser() above, which stamps suspendedAt fresh on every suspension).
   let userIdsWithSupportMessages = new Set<string>();
-  const suspendedUserIds = usersWithWallets.filter((user) => user.suspended).map((user) => user.id);
-  if (suspendedUserIds.length > 0) {
-    const messageOwners = await prisma.supportMessage.findMany({
-      where: { userId: { in: suspendedUserIds } },
-      select: { userId: true },
-      distinct: ['userId'],
+  const suspendedUsersById = new Map(
+    usersWithWallets.filter((user) => user.suspended).map((user) => [user.id, user])
+  );
+  if (suspendedUsersById.size > 0) {
+    const messages = await prisma.supportMessage.findMany({
+      where: { userId: { in: [...suspendedUsersById.keys()] } },
+      select: { userId: true, createdAt: true },
     });
-    userIdsWithSupportMessages = new Set(messageOwners.map((message) => message.userId));
+    for (const message of messages) {
+      const suspendedAt = suspendedUsersById.get(message.userId)?.suspendedAt;
+      if (suspendedAt && new Date(message.createdAt) > new Date(suspendedAt)) {
+        userIdsWithSupportMessages.add(message.userId);
+      }
+    }
   }
 
   const users = usersWithWallets.map((userWithWallets) => {
@@ -243,7 +252,7 @@ export async function suspendUser(
 
   const updated = await prisma.user.update({
     where: { id: userId },
-    data: { suspended: true, suspensionReason: reason },
+    data: { suspended: true, suspensionReason: reason, suspendedAt: new Date() },
   });
 
   await createNotification(
@@ -266,7 +275,7 @@ export async function unsuspendUser(adminId: string, userId: string): Promise<Sa
 
   const updated = await prisma.user.update({
     where: { id: userId },
-    data: { suspended: false, suspensionReason: null },
+    data: { suspended: false, suspensionReason: null, suspendedAt: null },
   });
 
   await createNotification(
@@ -969,7 +978,7 @@ export async function deactivateAgent(
 
   const updated = await prisma.user.update({
     where: { id: agentId },
-    data: { suspended: true, suspensionReason: reason },
+    data: { suspended: true, suspensionReason: reason, suspendedAt: new Date() },
   });
 
   // Kills their refresh token immediately (blocks /auth/refresh once the short-lived access
@@ -1149,7 +1158,7 @@ export async function reactivateAgent(adminId: string, agentId: string): Promise
 
   const updated = await prisma.user.update({
     where: { id: agentId },
-    data: { suspended: false, suspensionReason: null },
+    data: { suspended: false, suspensionReason: null, suspendedAt: null },
   });
 
   await logAdminAction(adminId, 'REACTIVATE_AGENT', agentId);

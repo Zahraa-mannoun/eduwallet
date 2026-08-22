@@ -154,6 +154,10 @@ model User {
   // Set on suspend, cleared on unsuspend — describes the CURRENT suspension only (unlike
   // kycRejectionReason above, this is not a permanent history field).
   suspensionReason   String?
+  // Same lifecycle as suspensionReason above. Lets a support message be matched against the
+  // CURRENT suspension only — a message sent during a prior suspension cycle must not be
+  // shown as if it were about this one (see getUsers()'s hasSupportMessage computation).
+  suspendedAt        DateTime?
   // Global card-payment setting (Profile > Account Settings > Card Settings), read at
   // card-use time in cards.service.ts — not a per-card field.
   cardAutoRenew      Boolean   @default(false)
