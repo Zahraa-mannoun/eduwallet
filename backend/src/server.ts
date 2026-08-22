@@ -7,6 +7,7 @@ import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import { prisma } from './config/database';
 import { redis } from './config/redis';
+import aiRoutes from './modules/ai/ai.routes';
 import authRoutes from './modules/auth/auth.routes';
 import walletRoutes from './modules/wallet/wallet.routes';
 import parentalRoutes from './modules/parental/parental.routes';
@@ -97,6 +98,7 @@ async function buildServer() {
   await app.register(universityRoutes, { prefix: '/university' });
   await app.register(reportsRoutes, { prefix: '/reports' });
   await app.register(emailChangeRoutes, { prefix: '/email-change' });
+  await app.register(aiRoutes, { prefix: '/ai' });
 
   return app;
 }

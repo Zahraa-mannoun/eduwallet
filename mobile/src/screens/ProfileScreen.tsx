@@ -192,14 +192,16 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
             color: '#EAB308',
             onPress: () => navigation.navigate('PersonalSavings'),
           },
+          // Hidden per product decision — kept (not deleted) in case Blockchain Vault needs to
+          // come back.
+          // {
+          //   title: 'Blockchain Vault',
+          //   icon: 'cube-outline' as const,
+          //   color: '#4338CA',
+          //   onPress: () => navigation.navigate('BlockchainVault'),
+          // },
           {
-            title: 'Blockchain Vault',
-            icon: 'cube-outline' as const,
-            color: '#4338CA',
-            onPress: () => navigation.navigate('BlockchainVault'),
-          },
-          {
-            title: 'AI Assistant',
+            title: 'Financial Insights',
             icon: 'robot-outline' as const,
             color: '#14B8A6',
             onPress: () => navigation.navigate('AIAssistant'),
@@ -215,11 +217,12 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
       color: '#64748B',
       onPress: () => navigation.navigate('AccountSettings'),
     },
-    {
-      title: 'Security & 2FA',
-      icon: 'shield-check-outline',
-      color: '#10B981',
-    },
+    // Hidden per product decision — kept (not deleted) in case Security & 2FA needs to come back.
+    // {
+    //   title: 'Security & 2FA',
+    //   icon: 'shield-check-outline',
+    //   color: '#10B981',
+    // },
     {
       title: 'Help & Support',
       icon: 'help-circle-outline',

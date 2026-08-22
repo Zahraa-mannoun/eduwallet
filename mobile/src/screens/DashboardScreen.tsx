@@ -127,8 +127,10 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
 
   const quickActions: QuickAction[] = [
     { key: 'send', label: 'Send', icon: 'arrow-up-circle-outline', onPress: () => navigation.navigate('SendMoney') },
-    { key: 'receive', label: 'Receive', icon: 'arrow-down-circle-outline', onPress: () => navigation.navigate('ReceiveMoney') },
-    { key: 'qr', label: 'QR Pay', icon: 'qrcode-scan', onPress: () => navigation.navigate('QRPay') },
+    // Hidden per product decision — kept (not deleted) in case Receive needs to come back.
+    // { key: 'receive', label: 'Receive', icon: 'arrow-down-circle-outline', onPress: () => navigation.navigate('ReceiveMoney') },
+    // Hidden per product decision — kept (not deleted) in case QR Pay needs to come back.
+    // { key: 'qr', label: 'QR Pay', icon: 'qrcode-scan', onPress: () => navigation.navigate('QRPay') },
     { key: 'cards', label: 'Cards', icon: 'credit-card-outline', onPress: () => navigation.navigate('Cards') },
     { key: 'withdraw', label: 'Withdraw', icon: 'cash-multiple', onPress: () => navigation.navigate('Withdrawal') },
   ];
@@ -272,7 +274,7 @@ export default function DashboardScreen({ navigation }: Readonly<StudentTabScree
 
         {wallet ? (
           <>
-            <Text style={styles.sectionTitle}>Balance Breakdown</Text>
+            <Text style={[styles.sectionTitle, styles.balanceBreakdownTitle]}>Balance Breakdown</Text>
 
             <View style={[styles.breakdownItemCard, styles.freeToUseCard]}>
               <View style={styles.breakdownItemHeader}>
@@ -572,7 +574,7 @@ const styles = StyleSheet.create({
   },
   quickActionsRow: {
     paddingBottom: 4,
-    marginBottom: 8,
+    marginBottom: 24,
   },
   quickActionCard: {
     width: 76,
@@ -606,6 +608,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.heading,
     marginBottom: 10,
+  },
+  balanceBreakdownTitle: {
+    marginTop: 16,
   },
   sectionTitleRow: {
     flexDirection: 'row',
