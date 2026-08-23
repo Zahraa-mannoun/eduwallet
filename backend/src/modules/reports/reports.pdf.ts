@@ -146,6 +146,9 @@ function withdrawalMerchantLabel(withdrawal: {
   if (withdrawal.receiptVerificationStatus === 'PENDING' && !withdrawal.merchantName) {
     return '—';
   }
+  if (withdrawal.receiptVerificationStatus === 'MANUALLY_VERIFIED' && !withdrawal.merchantName) {
+    return 'Verified by Admin';
+  }
   return withdrawal.merchantName ?? '—';
 }
 
@@ -573,11 +576,11 @@ export function renderReportPdf(doc: PDFKit.PDFDocument, data: ReportData): void
       doc,
       'Personal Savings',
       [
-        { label: 'Date', width: 85 },
-        { label: 'Type', width: 110 },
-        { label: 'Amount', width: 85 },
-        { label: 'Status', width: 90 },
-        { label: 'Details', width: 125 },
+        { label: 'Date', width: 70 },
+        { label: 'Type', width: 95 },
+        { label: 'Amount', width: 70 },
+        { label: 'Status', width: 80 },
+        { label: 'Details', width: 180 },
       ],
       data.savings.map((entry) => [
         formatDate(entry.createdAt),

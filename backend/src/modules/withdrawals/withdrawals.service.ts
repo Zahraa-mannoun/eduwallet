@@ -829,6 +829,41 @@ async function extractReceiptText(absoluteFilePath: string): Promise<string> {
   }
 }
 
+const MERCHANT_NAME_MIN_LENGTH = 3;
+const MERCHANT_NAME_MAX_LENGTH = 50;
+// Everything except letters (any script — receipts aren't always English/French), digits,
+// whitespace, apostrophes, and hyphens — keeps "Nabil's Corner Shop" and "Le Burger Montréal"
+// intact while stripping receipt noise like "***", "#", or currency symbols a raw OCR line
+// picks up around a merchant's name/logo.
+const MERCHANT_LINE_DISALLOWED_CHARS = /[^\p{L}\p{N}\s'-]/gu;
+
+function cleanMerchantLine(line: string): string {
+  return line.replace(MERCHANT_LINE_DISALLOWED_CHARS, '').replace(/\s+/g, ' ').trim();
+}
+
+// Best-effort free-text merchant name, independent of the known-Merchant-table matching
+// detectMerchant() below does — a receipt from a business that isn't registered as a Merchant
+// still usually has its name across the top of the OCR text. Works on the RAW (pre-
+// normalizeForMatch) text, since normalization lowercases and strips punctuation in a way meant
+// for substring matching, not for a name fit to display. Tries the first non-empty line, then
+// the second, each independently checked against the length bounds — a too-short line (a stray
+// character Tesseract misread) or too-long one (a run-on line of merged text) is rejected
+// rather than accepted as a name.
+function extractMerchantNameFromRawText(rawText: string): string | null {
+  const lines = rawText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  for (const line of lines.slice(0, 2)) {
+    const cleaned = cleanMerchantLine(line);
+    if (cleaned.length >= MERCHANT_NAME_MIN_LENGTH && cleaned.length <= MERCHANT_NAME_MAX_LENGTH) {
+      return cleaned;
+    }
+  }
+  return null;
+}
+
 async function detectMerchant(
   text: string
 ): Promise<{ name: string; category: TransactionCategory } | null> {
@@ -917,24 +952,34 @@ export async function uploadReceipt(
       receiptVerificationStatus: 'PROCESSING',
       receiptVerificationNote: null,
       merchantName: null,
+      extractedMerchantName: null,
       detectedCategory: null,
     },
   });
 
-  const extractedText = (await extractReceiptText(absoluteFilePath)).trim();
+  const rawText = await extractReceiptText(absoluteFilePath);
+  const extractedText = rawText.trim();
   const merchantMatch = extractedText ? await detectMerchant(extractedText) : null;
+  // Free-text fallback, independent of the known-Merchant-table match above — a receipt from a
+  // business that isn't registered as a Merchant still usually has its name across the top.
+  const extractedMerchantName = extractMerchantNameFromRawText(rawText);
   // Only ever informational once the merchant lookup below decides the status — a keyword hit
   // alone (e.g. "cafe" in the filename) is not a merchant match and must never AUTO_VERIFY or
   // FLAG a receipt for an unregistered business.
   const detectedCategory = merchantMatch?.category ?? (extractedText ? detectCategoryFromText(extractedText) : null);
-  const merchantName = merchantMatch?.name ?? providedMerchantName ?? null;
+  // extractedMerchantName (read straight off the receipt image) is preferred over
+  // providedMerchantName (what the student typed) once there's no confirmed Merchant match —
+  // so merchantName always holds the best available name, verified or not.
+  const merchantName = merchantMatch?.name ?? extractedMerchantName ?? providedMerchantName ?? null;
 
   let receiptVerificationStatus: ReceiptVerificationStatus;
   let receiptVerificationNote: string | null = null;
 
   if (!merchantMatch) {
     receiptVerificationStatus = 'PENDING';
-    receiptVerificationNote = 'Merchant could not be matched to a known business — manual review needed.';
+    receiptVerificationNote = extractedMerchantName
+      ? `Receipt appears to be from "${extractedMerchantName}" (unverified — not matched to a known business). Manual review needed.`
+      : 'Merchant could not be matched to a known business — manual review needed.';
   } else if (merchantMatch.category === request.category) {
     receiptVerificationStatus = 'AUTO_VERIFIED';
   } else {
@@ -949,6 +994,7 @@ export async function uploadReceipt(
       receiptVerificationStatus,
       receiptVerificationNote,
       merchantName,
+      extractedMerchantName,
       detectedCategory,
     },
   });
@@ -1027,6 +1073,7 @@ export async function deleteReceipt(
       receiptVerificationStatus: 'PENDING',
       receiptVerificationNote: null,
       merchantName: null,
+      extractedMerchantName: null,
       detectedCategory: null,
     },
   });

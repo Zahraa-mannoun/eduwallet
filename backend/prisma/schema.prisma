@@ -535,6 +535,12 @@ model WithdrawalRequest {
   receiptVerificationStatus ReceiptVerificationStatus @default(PENDING)
   receiptVerificationNote   String?
   merchantName              String?
+  // Best-effort free-text merchant name read from the first (or second) non-empty line of the
+  // raw OCR text, independent of whether it matched a known Merchant row — see
+  // extractMerchantNameFromRawText() in withdrawals.service.ts. Kept separate from merchantName
+  // (which is the field every UI actually displays) so the origin of an unverified name is
+  // always recoverable even after merchantName gets overwritten by a real merchant match.
+  extractedMerchantName     String?
   detectedCategory          TransactionCategory?
   agentId                   String?
   createdAt                 DateTime                  @default(now())
