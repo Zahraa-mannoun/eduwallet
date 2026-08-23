@@ -77,7 +77,7 @@ const RECEIPT_STATUS_LABELS: Record<string, string> = {
   MANUALLY_VERIFIED: 'Manually Verified',
   FLAGGED: 'Flagged',
   REJECTED: 'Rejected',
-  PENDING: 'Pending',
+  PENDING: 'Pending Review',
 };
 
 function receiptStatusLabel(status: string): string {
@@ -94,11 +94,43 @@ function withdrawalReceiptLabel(withdrawal: { category: string; receiptVerificat
   return receiptStatusLabel(withdrawal.receiptVerificationStatus);
 }
 
-// receiptVerificationStatus is never actually the literal string 'NOT_UPLOADED' in the DB — it
-// defaults to PENDING before a receipt exists (see withdrawals.service.ts) — so "not uploaded"
-// is derived from receiptPath being null, the same way every other surface in this app
-// (AgentWithdrawals.tsx's receiptStatusFor, ParentStudentDetailScreen's StudentReceiptStatus)
-// already distinguishes "nothing uploaded yet" from "uploaded but still PENDING review".
+// PARENT/INSTITUTION senders are always funding a student's wallet, never a peer-to-peer
+// payment — checked before the STUDENT-to-STUDENT case since a parent's own userType is never
+// STUDENT, so the two checks can't overlap.
+function transferTypeLabel(tx: {
+  fromWallet: { user: { userType: string } } | null;
+  toWallet: { user: { userType: string } } | null;
+}): string {
+  const fromType = tx.fromWallet?.user.userType;
+  const toType = tx.toWallet?.user.userType;
+  if (fromType === 'PARENT' || fromType === 'INSTITUTION') {
+    return 'Funding';
+  }
+  if (fromType === 'STUDENT' && toType === 'STUDENT') {
+    return 'P2P Transfer';
+  }
+  return 'Transfer';
+}
+
+// This report is scoped to one student and their parent — a sender who is any OTHER student
+// must not have their name printed in someone else's report. PARENT/INSTITUTION senders (and
+// the report's own student) are always safe to name; email (unique, unlike fullName) is what
+// identifies "the report's own student" here since fromWallet.user has no direct link back to
+// the ReportRequest itself.
+function transferSenderLabel(
+  tx: { fromWallet: { user: { email: string; fullName: string; userType: string } } | null },
+  studentEmail: string
+): string {
+  const sender = tx.fromWallet?.user;
+  if (!sender) return '—';
+  if (sender.email === studentEmail) return sender.fullName;
+  if (sender.userType === 'STUDENT') return 'Student Transfer';
+  return sender.fullName;
+}
+
+// Merchant column shows ONLY an actual merchant name or "—" — every status-related case
+// (no receipt required, not uploaded, still pending review) is already covered by the Receipt
+// Status column and must not be repeated here.
 function withdrawalMerchantLabel(withdrawal: {
   category: string;
   receiptPath: string | null;
@@ -106,13 +138,13 @@ function withdrawalMerchantLabel(withdrawal: {
   merchantName: string | null;
 }): string {
   if (withdrawal.category === 'GENERAL') {
-    return 'No receipt required';
+    return '—';
   }
   if (!withdrawal.receiptPath) {
-    return 'Not Uploaded';
+    return '—';
   }
-  if (withdrawal.receiptVerificationStatus === 'PENDING') {
-    return 'Pending Review';
+  if (withdrawal.receiptVerificationStatus === 'PENDING' && !withdrawal.merchantName) {
+    return '—';
   }
   return withdrawal.merchantName ?? '—';
 }
@@ -430,14 +462,16 @@ export function renderReportPdf(doc: PDFKit.PDFDocument, data: ReportData): void
       'Transfers',
       [
         { label: 'Date', width: 75 },
-        { label: 'Sender', width: 130 },
-        { label: 'Category', width: 90 },
-        { label: 'Amount', width: 70 },
-        { label: 'Status', width: 90 },
+        { label: 'Type', width: 70 },
+        { label: 'Sender', width: 110 },
+        { label: 'Category', width: 75 },
+        { label: 'Amount', width: 60 },
+        { label: 'Status', width: 80 },
       ],
       data.transfers.map((tx) => [
         formatDate(tx.createdAt),
-        tx.fromWallet?.user.fullName ?? '—',
+        transferTypeLabel(tx),
+        transferSenderLabel(tx, data.studentEmail),
         titleCaseEnum(tx.category),
         formatMoney(tx.amount),
         transactionStatusLabel(tx.status),
@@ -451,12 +485,12 @@ export function renderReportPdf(doc: PDFKit.PDFDocument, data: ReportData): void
       doc,
       'Cash Withdrawals',
       [
-        { label: 'Date', width: 60 },
-        { label: 'Category', width: 65 },
-        { label: 'Amount', width: 55 },
-        { label: 'Agent', width: 80 },
-        { label: 'Merchant', width: 115 },
-        { label: 'Receipt Status', width: 115 },
+        { label: 'Date', width: 85 },
+        { label: 'Category', width: 60 },
+        { label: 'Amount', width: 50 },
+        { label: 'Agent', width: 75 },
+        { label: 'Merchant', width: 80 },
+        { label: 'Receipt Status', width: 100 },
       ],
       data.withdrawals.map((w) => [
         formatDate(w.createdAt),
