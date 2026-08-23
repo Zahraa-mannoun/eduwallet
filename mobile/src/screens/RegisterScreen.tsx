@@ -134,7 +134,6 @@ export default function RegisterScreen({ navigation }: RootStackScreenProps<'Reg
                 mode="outlined"
                 label="Email"
                 placeholder="you@example.com"
-                defaultValue=""
                 value={email}
                 onChangeText={(text: string) => {
                   setEmail(text);
@@ -156,7 +155,6 @@ export default function RegisterScreen({ navigation }: RootStackScreenProps<'Reg
                 mode="outlined"
                 label="Password"
                 placeholder="Create a password"
-                defaultValue=""
                 value={password}
                 onChangeText={(text: string) => {
                   setPassword(text);
@@ -185,7 +183,6 @@ export default function RegisterScreen({ navigation }: RootStackScreenProps<'Reg
                 mode="outlined"
                 label="Confirm Password"
                 placeholder="Re-enter your password"
-                defaultValue=""
                 value={confirmPassword}
                 onChangeText={(text: string) => {
                   setConfirmPassword(text);

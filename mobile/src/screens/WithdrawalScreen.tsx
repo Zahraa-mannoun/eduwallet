@@ -494,8 +494,9 @@ export default function WithdrawalScreen({
           </Dialog.Content>
           <Dialog.Actions style={styles.dialogActions}>
             {dialogMode === 'CONFIRM_DELETE' ? (
-              <>
+              [
                 <Button
+                  key="cancel"
                   mode="outlined"
                   textColor={colors.muted}
                   style={styles.dialogCancelButton}
@@ -503,8 +504,9 @@ export default function WithdrawalScreen({
                   onPress={cancelDeleteReceipt}
                 >
                   Cancel
-                </Button>
+                </Button>,
                 <Button
+                  key="remove"
                   mode="contained"
                   buttonColor={colors.danger}
                   style={styles.dialogCancelButton}
@@ -513,11 +515,12 @@ export default function WithdrawalScreen({
                   onPress={confirmDeleteReceipt}
                 >
                   Remove
-                </Button>
-              </>
+                </Button>,
+              ]
             ) : dialogMode === 'UPLOAD' ? (
-              <>
+              [
                 <Button
+                  key="cancel"
                   mode="outlined"
                   textColor={colors.muted}
                   style={styles.dialogCancelButton}
@@ -525,8 +528,9 @@ export default function WithdrawalScreen({
                   onPress={closeDetail}
                 >
                   Cancel
-                </Button>
+                </Button>,
                 <TouchableOpacity
+                  key="upload"
                   activeOpacity={0.85}
                   disabled={!pendingReceipt || isUploadingReceipt}
                   onPress={handleSubmitReceipt}
@@ -551,8 +555,8 @@ export default function WithdrawalScreen({
                       Upload
                     </Text>
                   </LinearGradient>
-                </TouchableOpacity>
-              </>
+                </TouchableOpacity>,
+              ]
             ) : (
               <Button
                 mode="outlined"
