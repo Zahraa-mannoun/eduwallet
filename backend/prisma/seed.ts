@@ -50,10 +50,11 @@ async function seedUserWithWallet(
 async function seedMerchants(): Promise<void> {
   const merchants: Array<{
     name: string;
-    category: 'FOOD' | 'LIFESTYLE' | 'SOFTWARE' | 'BOOKS' | 'TRANSPORT';
+    category: 'FOOD' | 'LIFESTYLE' | 'SOFTWARE' | 'BOOKS' | 'TRANSPORT' | 'TUITION';
     city: string;
     country: string;
-    type: 'RESTAURANT' | 'SHOPPING_CENTER' | 'SOFTWARE_STORE' | 'BOOKSTORE' | 'TRANSPORT';
+    type: 'RESTAURANT' | 'SHOPPING_CENTER' | 'SOFTWARE_STORE' | 'BOOKSTORE' | 'TRANSPORT' | 'UNIVERSITY';
+    isActive?: boolean;
   }> = [
     { name: 'Le Burger Montréal', category: 'FOOD', city: 'Montreal', country: 'Canada', type: 'RESTAURANT' },
     { name: 'Café Vienne', category: 'FOOD', city: 'Montreal', country: 'Canada', type: 'RESTAURANT' },
@@ -68,6 +69,14 @@ async function seedMerchants(): Promise<void> {
     { name: 'Paragraphe Bookstore', category: 'BOOKS', city: 'Montreal', country: 'Canada', type: 'BOOKSTORE' },
     { name: 'STM Montreal', category: 'TRANSPORT', city: 'Montreal', country: 'Canada', type: 'TRANSPORT' },
     { name: 'Via Rail Canada', category: 'TRANSPORT', city: 'Montreal', country: 'Canada', type: 'TRANSPORT' },
+    {
+      name: 'Université de Montréal',
+      category: 'TUITION',
+      city: 'Montreal',
+      country: 'Canada',
+      type: 'UNIVERSITY',
+      isActive: true,
+    },
   ];
 
   // Merchant.name has no DB-level unique constraint, so this upserts by name in application

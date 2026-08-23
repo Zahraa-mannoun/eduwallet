@@ -135,6 +135,7 @@ enum MerchantType {
   BOOKSTORE
   PHARMACY
   TRANSPORT
+  UNIVERSITY
 }
 
 model User {
