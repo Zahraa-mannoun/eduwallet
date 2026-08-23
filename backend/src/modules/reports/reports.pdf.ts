@@ -485,12 +485,12 @@ export function renderReportPdf(doc: PDFKit.PDFDocument, data: ReportData): void
       doc,
       'Cash Withdrawals',
       [
-        { label: 'Date', width: 85 },
+        { label: 'Date', width: 75 },
         { label: 'Category', width: 60 },
         { label: 'Amount', width: 50 },
-        { label: 'Agent', width: 75 },
-        { label: 'Merchant', width: 80 },
-        { label: 'Receipt Status', width: 100 },
+        { label: 'Agent', width: 70 },
+        { label: 'Merchant', width: 130 },
+        { label: 'Receipt Status', width: 95 },
       ],
       data.withdrawals.map((w) => [
         formatDate(w.createdAt),
