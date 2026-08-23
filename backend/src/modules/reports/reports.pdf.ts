@@ -600,11 +600,11 @@ export function renderReportPdf(doc: PDFKit.PDFDocument, data: ReportData): void
       doc,
       'Personal Savings',
       [
-        { label: 'Date', width: 70 },
-        { label: 'Type', width: 95 },
-        { label: 'Amount', width: 70 },
-        { label: 'Status', width: 80 },
-        { label: 'Details', width: 180 },
+        { label: 'Date', width: 65 },
+        { label: 'Type', width: 80 },
+        { label: 'Amount', width: 60 },
+        { label: 'Status', width: 70 },
+        { label: 'Details', width: 200 },
       ],
       data.savings.map((entry) => [
         formatDate(entry.createdAt),
