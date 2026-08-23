@@ -299,6 +299,28 @@ export async function generateReport(reportId: string): Promise<ReportRequest> {
     getLockedFundsBreakdown(walletIds, start),
   ]);
 
+  // WithdrawalRequest.agentId has no Prisma relation to User (same as everywhere else this
+  // field is used — see withdrawals.service.ts's getAllWithdrawalsForAdmin), so the agent's
+  // name for the PDF's Cash Withdrawals table is resolved with a second batched lookup instead
+  // of an `include`.
+  const withdrawalAgentIds = [
+    ...new Set((withdrawals ?? []).map((w) => w.agentId).filter((id): id is string => id !== null)),
+  ];
+  const withdrawalAgents =
+    withdrawalAgentIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: withdrawalAgentIds } },
+          select: { id: true, fullName: true },
+        })
+      : [];
+  const withdrawalAgentById = new Map(withdrawalAgents.map((agent) => [agent.id, agent]));
+  const withdrawalsWithAgent = withdrawals
+    ? withdrawals.map((w) => ({
+        ...w,
+        agent: w.agentId ? (withdrawalAgentById.get(w.agentId) ?? null) : null,
+      }))
+    : null;
+
   const byCategoryMap = new Map<string, number>();
   const addToCategory = (category: string, amount: number) => {
     byCategoryMap.set(category, (byCategoryMap.get(category) ?? 0) + amount);
@@ -339,7 +361,7 @@ export async function generateReport(reportId: string): Promise<ReportRequest> {
     generatedAt: new Date(),
     cardPurchases,
     transfers,
-    withdrawals,
+    withdrawals: withdrawalsWithAgent,
     flagged: flagged as (TransactionWithParties & { fraudAlerts: FraudAlert[] })[] | null,
     pending,
     savings,

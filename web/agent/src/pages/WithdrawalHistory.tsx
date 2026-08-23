@@ -22,6 +22,11 @@ const STATUS_META: Record<WithdrawalStatus, { label: string; tone: BadgeTone }> 
   COMPLETED: { label: 'Completed', tone: 'green' },
 };
 
+function receiptStatusLabel(status: string): string {
+  if (status === 'PENDING') return 'Pending Review';
+  return humanizeEnum(status);
+}
+
 const STATUS_FILTERS: Array<{ key: WithdrawalStatus | 'ALL'; label: string }> = [
   { key: 'ALL', label: 'All' },
   { key: 'COMPLETED', label: 'Completed' },
@@ -124,7 +129,7 @@ export function WithdrawalHistory() {
                     </td>
                     <td className={TABLE_TD_CLASS}>
                       {request.receiptPath ? (
-                        <DotBadge tone={receiptTone}>{humanizeEnum(request.receiptVerificationStatus)}</DotBadge>
+                        <DotBadge tone={receiptTone}>{receiptStatusLabel(request.receiptVerificationStatus)}</DotBadge>
                       ) : (
                         <span className="text-slate-300">—</span>
                       )}

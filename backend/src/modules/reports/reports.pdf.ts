@@ -94,6 +94,29 @@ function withdrawalReceiptLabel(withdrawal: { category: string; receiptVerificat
   return receiptStatusLabel(withdrawal.receiptVerificationStatus);
 }
 
+// receiptVerificationStatus is never actually the literal string 'NOT_UPLOADED' in the DB — it
+// defaults to PENDING before a receipt exists (see withdrawals.service.ts) — so "not uploaded"
+// is derived from receiptPath being null, the same way every other surface in this app
+// (AgentWithdrawals.tsx's receiptStatusFor, ParentStudentDetailScreen's StudentReceiptStatus)
+// already distinguishes "nothing uploaded yet" from "uploaded but still PENDING review".
+function withdrawalMerchantLabel(withdrawal: {
+  category: string;
+  receiptPath: string | null;
+  receiptVerificationStatus: string;
+  merchantName: string | null;
+}): string {
+  if (withdrawal.category === 'GENERAL') {
+    return 'No receipt required';
+  }
+  if (!withdrawal.receiptPath) {
+    return 'Not Uploaded';
+  }
+  if (withdrawal.receiptVerificationStatus === 'PENDING') {
+    return 'Pending Review';
+  }
+  return withdrawal.merchantName ?? '—';
+}
+
 // SavingsHistoryStatus labels — kept in lockstep with mobile's PersonalSavingsScreen.tsx
 // STATUS_META. PENDING is a parent-approval wait state here too, not a generic "Pending".
 const SAVINGS_STATUS_LABELS: Record<string, string> = {
@@ -145,7 +168,9 @@ export type ReportData = {
   generatedAt: Date;
   cardPurchases: CardHistory[] | null;
   transfers: TransactionWithParties[] | null;
-  withdrawals: WithdrawalRequest[] | null;
+  // agent is resolved separately in reports.service.ts (WithdrawalRequest.agentId has no
+  // Prisma relation to User) and merged onto each row before it reaches this type.
+  withdrawals: (WithdrawalRequest & { agent: { id: string; fullName: string } | null })[] | null;
   flagged: (TransactionWithParties & { fraudAlerts: FraudAlert[] })[] | null;
   pending: TransactionWithParties[] | null;
   savings: PersonalSavingsHistory[] | null;
@@ -404,17 +429,15 @@ export function renderReportPdf(doc: PDFKit.PDFDocument, data: ReportData): void
       doc,
       'Transfers',
       [
-        { label: 'Date', width: 65 },
-        { label: 'Sender', width: 110 },
-        { label: 'Receiver', width: 110 },
-        { label: 'Category', width: 80 },
-        { label: 'Amount', width: 60 },
-        { label: 'Status', width: 70 },
+        { label: 'Date', width: 75 },
+        { label: 'Sender', width: 130 },
+        { label: 'Category', width: 90 },
+        { label: 'Amount', width: 70 },
+        { label: 'Status', width: 90 },
       ],
       data.transfers.map((tx) => [
         formatDate(tx.createdAt),
         tx.fromWallet?.user.fullName ?? '—',
-        tx.toWallet?.user.fullName ?? '—',
         titleCaseEnum(tx.category),
         formatMoney(tx.amount),
         transactionStatusLabel(tx.status),
@@ -428,15 +451,19 @@ export function renderReportPdf(doc: PDFKit.PDFDocument, data: ReportData): void
       doc,
       'Cash Withdrawals',
       [
-        { label: 'Date', width: 100 },
-        { label: 'Category', width: 120 },
-        { label: 'Amount', width: 100 },
-        { label: 'Receipt Status', width: 130 },
+        { label: 'Date', width: 60 },
+        { label: 'Category', width: 65 },
+        { label: 'Amount', width: 55 },
+        { label: 'Agent', width: 80 },
+        { label: 'Merchant', width: 115 },
+        { label: 'Receipt Status', width: 115 },
       ],
       data.withdrawals.map((w) => [
         formatDate(w.createdAt),
         titleCaseEnum(w.category),
         formatMoney(w.amount),
+        w.agent?.fullName ?? '—',
+        withdrawalMerchantLabel(w),
         withdrawalReceiptLabel(w),
       ]),
       y
