@@ -104,3 +104,15 @@ export const notifyAgentSchema = z.object({
 });
 
 export type NotifyAgentInput = z.infer<typeof notifyAgentSchema>;
+
+export const fraudRuleKeyParamsSchema = z.object({
+  key: z.string().trim().min(1, 'key is required'),
+});
+
+export type FraudRuleKeyParams = z.infer<typeof fraudRuleKeyParamsSchema>;
+
+export const updateFraudRuleSchema = z.object({
+  value: z.number().finite().positive('value must be greater than 0'),
+});
+
+export type UpdateFraudRuleInput = z.infer<typeof updateFraudRuleSchema>;

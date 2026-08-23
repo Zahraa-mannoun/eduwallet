@@ -2,6 +2,8 @@ import 'dotenv/config';
 import bcrypt from 'bcrypt';
 import { PrismaClient } from '@prisma/client';
 import type { UserType } from '@prisma/client';
+import { FRAUD_RULE_DEFAULTS } from '../src/modules/wallet/fraud.service';
+import type { FraudRuleKey } from '../src/modules/wallet/fraud.service';
 
 const prisma = new PrismaClient();
 
@@ -125,10 +127,28 @@ async function seedUniversity(): Promise<void> {
   console.log('Seeded 1 university with 5 courses');
 }
 
+// Same defaults server.ts's ensureFraudRuleDefaults() applies on every startup — seeded here too
+// so a fresh `prisma db seed` run leaves the fraud_rules table populated without needing the
+// server to have been started first.
+async function seedFraudRules(): Promise<void> {
+  await Promise.all(
+    (Object.keys(FRAUD_RULE_DEFAULTS) as FraudRuleKey[]).map((key) => {
+      const config = FRAUD_RULE_DEFAULTS[key];
+      return prisma.fraudRule.upsert({
+        where: { key },
+        update: {},
+        create: { key, ...config },
+      });
+    })
+  );
+  console.log(`Seeded ${Object.keys(FRAUD_RULE_DEFAULTS).length} fraud rules`);
+}
+
 async function main(): Promise<void> {
   await seedUserWithWallet('admin@eduwallet.com', 'Admin@123', 'Admin User', 'ADMIN');
   await seedMerchants();
   await seedUniversity();
+  await seedFraudRules();
 }
 
 main()

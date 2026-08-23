@@ -9,12 +9,14 @@ import {
   createAgentSchema,
   deactivateAgentSchema,
   fraudAlertIdParamsSchema,
+  fraudRuleKeyParamsSchema,
   getAllTransactionsSchema,
   getFraudAlertsSchema,
   getUsersSchema,
   notifyAgentSchema,
   resolveFraudAlertSchema,
   suspendUserSchema,
+  updateFraudRuleSchema,
   userIdParamsSchema,
 } from './admin.schema';
 import {
@@ -38,6 +40,7 @@ import {
   suspendUser,
   unsuspendUser,
 } from './admin.service';
+import { getFraudRules, updateFraudRule } from './fraud-rules.service';
 
 function handleAdminError(request: FastifyRequest, reply: FastifyReply, error: unknown) {
   if (error instanceof AppError) {
@@ -378,6 +381,41 @@ export async function reactivateAgentHandler(request: FastifyRequest, reply: Fas
     const authUser = requireAuthUser(request);
     const agent = await reactivateAgent(authUser.id, parsed.data.id);
     return reply.status(200).send(successResponse(agent));
+  } catch (error) {
+    return handleAdminError(request, reply, error);
+  }
+}
+
+export async function getFraudRulesHandler(request: FastifyRequest, reply: FastifyReply) {
+  try {
+    const rules = await getFraudRules();
+    return reply.status(200).send(successResponse(rules));
+  } catch (error) {
+    return handleAdminError(request, reply, error);
+  }
+}
+
+export async function updateFraudRuleHandler(request: FastifyRequest, reply: FastifyReply) {
+  const paramsParsed = fraudRuleKeyParamsSchema.safeParse(request.params);
+  if (!paramsParsed.success) {
+    return reply
+      .status(400)
+      .send(
+        errorResponse(paramsParsed.error.issues[0]?.message ?? 'Invalid input', 'VALIDATION_ERROR')
+      );
+  }
+
+  const bodyParsed = updateFraudRuleSchema.safeParse(request.body);
+  if (!bodyParsed.success) {
+    return reply
+      .status(400)
+      .send(errorResponse(bodyParsed.error.issues[0]?.message ?? 'Invalid input', 'VALIDATION_ERROR'));
+  }
+
+  try {
+    const authUser = requireAuthUser(request);
+    const rule = await updateFraudRule(authUser.id, paramsParsed.data.key, bodyParsed.data.value);
+    return reply.status(200).send(successResponse(rule));
   } catch (error) {
     return handleAdminError(request, reply, error);
   }

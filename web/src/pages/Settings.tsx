@@ -1,12 +1,18 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, Save } from 'lucide-react';
+import { Copy, RefreshCw, Save, TrendingUp, Zap } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { ApiResponse, User } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
+import { DotBadge } from '../components/DotBadge';
 import { Modal } from '../components/Modal';
 import { PageHeader } from '../components/PageHeader';
+import { severityTone } from '../lib/badgeTones';
+import { formatDateTime } from '../lib/format';
+import { humanizeEnum } from '../lib/humanize';
 import { useAuth } from '../context/AuthContext';
+import type { AnalyticsResult, FraudRuleRow } from '../types/admin';
 
 type RolloverResult = {
   month: string;
@@ -391,6 +397,325 @@ function SystemActionsSection() {
   );
 }
 
+type FraudRuleFieldMeta = {
+  displayUnit: string;
+  min: number;
+  max: number;
+  step: number;
+  toDisplay: (raw: number) => number;
+  toRaw: (display: number) => number;
+};
+
+// value on the wire is always in the FraudRule row's native unit (milliseconds for every *_MS
+// key, matching fraud.service.ts's own hardcoded defaults before this table existed) — these
+// conversions are purely a friendlier display/edit experience, never sent to the API as-is.
+const FRAUD_RULE_FIELD_META: Record<string, FraudRuleFieldMeta> = {
+  DUPLICATE_WINDOW_MS: {
+    displayUnit: 'seconds',
+    min: 5,
+    max: 300,
+    step: 1,
+    toDisplay: (raw) => Math.round(raw / 1000),
+    toRaw: (display) => display * 1000,
+  },
+  VELOCITY_WINDOW_MS: {
+    displayUnit: 'minutes',
+    min: 1,
+    max: 120,
+    step: 1,
+    toDisplay: (raw) => Math.round(raw / 60000),
+    toRaw: (display) => display * 60000,
+  },
+  VELOCITY_THRESHOLD: {
+    displayUnit: 'transactions',
+    min: 2,
+    max: 50,
+    step: 1,
+    toDisplay: (raw) => raw,
+    toRaw: (display) => display,
+  },
+  CIRCULAR_WINDOW_MS: {
+    displayUnit: 'minutes',
+    min: 5,
+    max: 1440,
+    step: 1,
+    toDisplay: (raw) => Math.round(raw / 60000),
+    toRaw: (display) => display * 60000,
+  },
+  UNUSUAL_AMOUNT_MULTIPLIER: {
+    displayUnit: 'x average',
+    min: 1.5,
+    max: 20,
+    step: 0.5,
+    toDisplay: (raw) => raw,
+    toRaw: (display) => display,
+  },
+  UNUSUAL_AMOUNT_HISTORY_SIZE: {
+    displayUnit: 'transactions',
+    min: 5,
+    max: 200,
+    step: 1,
+    toDisplay: (raw) => raw,
+    toRaw: (display) => display,
+  },
+};
+
+type FraudRuleGroup = {
+  key: string;
+  title: string;
+  color: string;
+  icon: LucideIcon;
+  severity: 'HIGH' | 'MEDIUM' | 'LOW';
+  description: string;
+  fieldKeys: string[];
+};
+
+const FRAUD_RULE_GROUPS: FraudRuleGroup[] = [
+  {
+    key: 'DUPLICATE',
+    title: 'Duplicate Detection',
+    color: '#3B82F6',
+    icon: Copy,
+    severity: 'MEDIUM',
+    description:
+      'Flags a second payment of the exact same amount to the exact same recipient sent shortly after the first — almost always an accidental double-tap on the send button rather than a second real payment.',
+    fieldKeys: ['DUPLICATE_WINDOW_MS'],
+  },
+  {
+    key: 'VELOCITY',
+    title: 'Velocity Check',
+    color: '#F59E0B',
+    icon: Zap,
+    severity: 'MEDIUM',
+    description:
+      'Flags a wallet that sends or receives an unusually high number of transactions in a short window — a pattern typical of a compromised account or automated abuse rather than normal student spending.',
+    fieldKeys: ['VELOCITY_WINDOW_MS', 'VELOCITY_THRESHOLD'],
+  },
+  {
+    key: 'CIRCULAR',
+    title: 'Circular Transfer Detection',
+    color: '#EF4444',
+    icon: RefreshCw,
+    severity: 'HIGH',
+    description:
+      'Flags money sent right back to where it just came from — wallet A pays wallet B, and B pays A back within the window below. This pattern is often used to launder funds or artificially inflate activity.',
+    fieldKeys: ['CIRCULAR_WINDOW_MS'],
+  },
+  {
+    key: 'UNUSUAL_AMOUNT',
+    title: 'Unusual Amount Detection',
+    color: '#8B5CF6',
+    icon: TrendingUp,
+    severity: 'LOW',
+    description:
+      "Flags a payment significantly larger than a sender's own average, sent to a recipient they have no history with. A sender's normal habits — even large ones — are never flagged on their own.",
+    fieldKeys: ['UNUSUAL_AMOUNT_MULTIPLIER', 'UNUSUAL_AMOUNT_HISTORY_SIZE'],
+  },
+];
+
+function FraudRuleCard({
+  group,
+  rules,
+  onSaved,
+}: {
+  group: FraudRuleGroup;
+  rules: FraudRuleRow[];
+  onSaved: (updated: FraudRuleRow[]) => void;
+}) {
+  const fields = group.fieldKeys
+    .map((key) => rules.find((rule) => rule.key === key))
+    .filter((rule): rule is FraudRuleRow => rule !== undefined);
+
+  const serverDisplayValues = useMemo(
+    () =>
+      Object.fromEntries(
+        fields.map((rule) => [rule.key, FRAUD_RULE_FIELD_META[rule.key].toDisplay(rule.value)])
+      ),
+    [fields]
+  );
+
+  const [draft, setDraft] = useState<Record<string, number>>(serverDisplayValues);
+  const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setDraft(serverDisplayValues);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rules]);
+
+  const isDirty = fields.some((rule) => draft[rule.key] !== serverDisplayValues[rule.key]);
+  const lastUpdated = fields.reduce<string | null>(
+    (latest, rule) => (!latest || rule.updatedAt > latest ? rule.updatedAt : latest),
+    null
+  );
+
+  const handleSave = async () => {
+    setError(null);
+    setIsSaving(true);
+    try {
+      const changed = fields.filter((rule) => draft[rule.key] !== serverDisplayValues[rule.key]);
+      const updates = await Promise.all(
+        changed.map(async (rule) => {
+          const meta = FRAUD_RULE_FIELD_META[rule.key];
+          const response = await api.patch<ApiResponse<FraudRuleRow>>(`/admin/fraud-rules/${rule.key}`, {
+            value: meta.toRaw(draft[rule.key]),
+          });
+          return unwrap(response.data);
+        })
+      );
+      const updatedByKey = new Map(updates.map((rule) => [rule.key, rule]));
+      onSaved(rules.map((rule) => updatedByKey.get(rule.key) ?? rule));
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const Icon = group.icon;
+
+  return (
+    <div
+      className="overflow-hidden rounded-2xl bg-white p-5 shadow-md"
+      style={{ borderLeft: `4px solid ${group.color}` }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+            style={{ backgroundColor: `${group.color}1A`, color: group.color }}
+          >
+            <Icon className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-900">{group.title}</h3>
+            <div className="mt-0.5">
+              <DotBadge tone={severityTone[group.severity] ?? 'gray'}>{humanizeEnum(group.severity)}</DotBadge>
+            </div>
+          </div>
+        </div>
+        {isDirty && (
+          <button
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={isSaving}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-gradient-to-r from-[#16305C] to-[#4F46E5] px-3 py-1.5 text-xs font-semibold text-white transition-all duration-200 hover:scale-[1.03] disabled:opacity-60"
+          >
+            <Save className="h-3.5 w-3.5" />
+            {isSaving ? 'Saving…' : 'Save Changes'}
+          </button>
+        )}
+      </div>
+
+      <p className="mt-3 text-sm leading-relaxed text-slate-500">{group.description}</p>
+
+      {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      <div className="mt-4 flex flex-wrap gap-4">
+        {fields.map((rule) => {
+          const meta = FRAUD_RULE_FIELD_META[rule.key];
+          return (
+            <div key={rule.key} className="min-w-[150px]">
+              <label htmlFor={`fraud-rule-${rule.key}`} className="mb-1 block text-xs font-medium text-slate-600">
+                {rule.label}
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  id={`fraud-rule-${rule.key}`}
+                  type="number"
+                  min={meta.min}
+                  max={meta.max}
+                  step={meta.step}
+                  value={draft[rule.key] ?? serverDisplayValues[rule.key]}
+                  onChange={(event) => {
+                    const raw = Number(event.target.value);
+                    const clamped = Number.isNaN(raw) ? meta.min : Math.min(meta.max, Math.max(meta.min, raw));
+                    setDraft((prev) => ({ ...prev, [rule.key]: clamped }));
+                  }}
+                  className="w-24 rounded-[10px] border border-[#E2E8F0] bg-white px-2 py-2 text-sm text-slate-800 transition-colors focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                />
+                <span className="text-xs text-slate-400">{meta.displayUnit}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {lastUpdated && <p className="mt-4 text-xs text-slate-400">Last updated {formatDateTime(lastUpdated)}</p>}
+    </div>
+  );
+}
+
+function FraudRulesSection() {
+  const [rules, setRules] = useState<FraudRuleRow[]>([]);
+  const [fraudStats, setFraudStats] = useState<AnalyticsResult['fraud'] | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const [rulesResponse, analyticsResponse] = await Promise.all([
+        api.get<ApiResponse<FraudRuleRow[]>>('/admin/fraud-rules'),
+        api.get<ApiResponse<AnalyticsResult>>('/admin/analytics'),
+      ]);
+      setRules(unwrap(rulesResponse.data));
+      setFraudStats(unwrap(analyticsResponse.data).fraud);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return (
+    <SectionCard
+      title="Fraud Detection Rules"
+      subtitle="Configure thresholds for the automated fraud detection system"
+    >
+      {error && <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      {isLoading ? (
+        <p className="py-6 text-center text-sm text-slate-400">Loading…</p>
+      ) : (
+        <div className="space-y-6">
+          {fraudStats && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-xs font-medium text-slate-500">Total Alerts</p>
+                <p className="mt-1 text-xl font-bold text-slate-900">{fraudStats.total}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-xs font-medium text-slate-500">Resolution Rate</p>
+                <p className="mt-1 text-xl font-bold text-slate-900">
+                  {Math.round(fraudStats.resolutionRate * 100)}%
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-xs font-medium text-slate-500">Most Triggered Rule</p>
+                <p className="mt-1 text-xl font-bold text-slate-900">
+                  {fraudStats.mostCommon ? humanizeEnum(fraudStats.mostCommon) : '—'}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            {FRAUD_RULE_GROUPS.map((group) => (
+              <FraudRuleCard key={group.key} group={group} rules={rules} onSaved={setRules} />
+            ))}
+          </div>
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
 export function Settings() {
   return (
     <div className="space-y-4">
@@ -399,6 +724,7 @@ export function Settings() {
         <EmailSection />
         <PasswordSection />
         <SystemActionsSection />
+        <FraudRulesSection />
       </div>
     </div>
   );

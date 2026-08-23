@@ -801,8 +801,10 @@ function normalizeForMatch(value: string): string {
 // Minimum fraction of a merchant name's words that must appear in the OCR text for the fuzzy
 // fallback below to accept it once the strict "every word must appear" match has failed for
 // every merchant — catches a merchant name partially obscured or reworded on a real receipt
-// without being so loose it starts matching unrelated merchants.
-const FUZZY_MATCH_THRESHOLD = 0.6;
+// without being so loose it starts matching unrelated merchants. Raised from 0.6 to 0.75 after
+// a real receipt for "Nabil's Corner Shop" got fuzzy-matched to "Le Burger Montréal" — 0.6 was
+// accepting weak, coincidental word overlaps between unrelated merchant names.
+const FUZZY_MATCH_THRESHOLD = 0.75;
 
 // Real OCR — reads whatever text Tesseract can find on the receipt image already written to
 // disk, via the process-lifetime worker from ocr-worker.ts (eng+fra, pre-warmed at server

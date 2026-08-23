@@ -17,6 +17,7 @@ import notificationsRoutes from './modules/notifications/notifications.routes';
 import kycRoutes from './modules/kyc/kyc.routes';
 import blockchainRoutes from './modules/blockchain/blockchain.routes';
 import adminRoutes from './modules/admin/admin.routes';
+import { ensureFraudRuleDefaults } from './modules/admin/fraud-rules.service';
 import agentRoutes from './modules/agent/agent.routes';
 import scholarshipRoutes from './modules/scholarship/scholarship.routes';
 import supportRoutes from './modules/support/support.routes';
@@ -110,6 +111,11 @@ async function start() {
 
     await redis.connect();
     app.log.info('Connected to Redis');
+
+    // Idempotent upsert — guarantees fraud.service.ts's checks always have a real DB row to
+    // read (falling back to its own hardcoded defaults otherwise), without depending on an
+    // admin having opened the Settings page first.
+    await ensureFraudRuleDefaults();
 
     await getOcrWorker();
     app.log.info('Tesseract OCR worker ready');

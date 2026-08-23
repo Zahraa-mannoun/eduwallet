@@ -53,7 +53,7 @@ export type AdminTransactionRow = Omit<TransactionWithParties, 'status'> & {
 // it goes straight from "doesn't exist" to either COMPLETED or PENDING_PARENT_APPROVAL.
 const IN_FLIGHT_WITHDRAWAL_STATUSES = ['PENDING_PARENT_APPROVAL', 'APPROVED', 'REJECTED'] as const;
 
-async function logAdminAction(
+export async function logAdminAction(
   adminId: string,
   action: string,
   targetId?: string,

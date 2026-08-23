@@ -361,6 +361,22 @@ model FraudAlert {
   @@map("fraud_alerts")
 }
 
+// Admin-configurable thresholds for fraud.service.ts's checks (see FRAUD_RULE_DEFAULTS there
+// for the canonical key list). value stores the same unit the original hardcoded constant
+// used (milliseconds for every *_MS key) — fraud.service.ts reads it back unconverted, and any
+// friendlier unit shown in the admin UI is a display-only conversion, never stored as-is.
+model FraudRule {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       Float
+  label       String
+  description String
+  unit        String
+  updatedAt   DateTime @updatedAt
+
+  @@map("fraud_rules")
+}
+
 model Notification {
   id        String   @id @default(uuid())
   userId    String

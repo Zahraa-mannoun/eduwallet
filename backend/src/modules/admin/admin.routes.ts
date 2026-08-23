@@ -10,6 +10,7 @@ import {
   getAnalyticsHandler,
   getAuditLogHandler,
   getFraudAlertsHandler,
+  getFraudRulesHandler,
   getLockedFundHistoryHandler,
   getPendingKYCHandler,
   getRelationshipsHandler,
@@ -22,6 +23,7 @@ import {
   resolveFraudAlertHandler,
   suspendUserHandler,
   unsuspendUserHandler,
+  updateFraudRuleHandler,
 } from './admin.controller';
 
 export default async function adminRoutes(fastify: FastifyInstance): Promise<void> {
@@ -38,6 +40,8 @@ export default async function adminRoutes(fastify: FastifyInstance): Promise<voi
   fastify.get('/transactions', getAllTransactionsHandler);
   fastify.get('/fraud-alerts', getFraudAlertsHandler);
   fastify.patch('/fraud-alerts/:id/resolve', resolveFraudAlertHandler);
+  fastify.get('/fraud-rules', getFraudRulesHandler);
+  fastify.patch('/fraud-rules/:key', updateFraudRuleHandler);
   fastify.get('/kyc/pending', getPendingKYCHandler);
   fastify.get('/relationships', getRelationshipsHandler);
   fastify.get('/rollover-history', getRolloverHistoryHandler);

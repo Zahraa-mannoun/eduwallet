@@ -69,21 +69,29 @@ function transactionStatusLabel(status: string): string {
   return TRANSACTION_STATUS_LABELS[status] ?? titleCaseEnum(status);
 }
 
-// ReceiptVerificationStatus labels — kept byte-identical to mobile's RECEIPT_STATUS_META
-// (mobile/src/utils/receiptStatus.ts), since titleCaseEnum() alone would print "Auto Verified"
-// and "Pending" instead of the shorter, parent-facing wording used everywhere else.
+// ReceiptVerificationStatus labels for the withdrawal history table.
 const RECEIPT_STATUS_LABELS: Record<string, string> = {
-  AUTO_VERIFIED: 'Verified',
-  MANUALLY_VERIFIED: 'Verified',
-  FLAGGED: 'Flagged for Review',
-  PENDING: 'Pending Review',
-  PROCESSING: 'Verifying...',
+  NOT_UPLOADED: 'Not Uploaded',
+  PROCESSING: 'Processing',
+  AUTO_VERIFIED: 'Auto Verified',
+  MANUALLY_VERIFIED: 'Manually Verified',
+  FLAGGED: 'Flagged',
   REJECTED: 'Rejected',
-  NOT_UPLOADED: 'No Receipt',
+  PENDING: 'Pending',
 };
 
 function receiptStatusLabel(status: string): string {
   return RECEIPT_STATUS_LABELS[status] ?? titleCaseEnum(status);
+}
+
+// General cash withdrawals never go through receipt verification (no merchant category to
+// check the receipt against), so the receipt status column would otherwise show a misleading
+// NOT_UPLOADED/"Not Uploaded" as if one were expected and missing.
+function withdrawalReceiptLabel(withdrawal: { category: string; receiptVerificationStatus: string }): string {
+  if (withdrawal.category === 'GENERAL') {
+    return 'No receipt required';
+  }
+  return receiptStatusLabel(withdrawal.receiptVerificationStatus);
 }
 
 // SavingsHistoryStatus labels — kept in lockstep with mobile's PersonalSavingsScreen.tsx
@@ -429,7 +437,7 @@ export function renderReportPdf(doc: PDFKit.PDFDocument, data: ReportData): void
         formatDate(w.createdAt),
         titleCaseEnum(w.category),
         formatMoney(w.amount),
-        receiptStatusLabel(w.receiptVerificationStatus),
+        withdrawalReceiptLabel(w),
       ]),
       y
     );

@@ -154,6 +154,9 @@ export type FraudAlert = {
   alertType: FraudAlertType;
   severity: FraudSeverity;
   resolved: boolean;
+  // Already returned by GET /admin/fraud-alerts (the backend's FraudAlert row includes it
+  // unconditionally) — was just missing from this type declaration until now.
+  resolutionNote: string | null;
   createdAt: string;
 };
 

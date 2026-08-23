@@ -30,6 +30,16 @@ export type FraudAlertRow = FraudAlert & {
   transaction: TransactionRow;
 };
 
+export type FraudRuleRow = {
+  id: string;
+  key: string;
+  value: number;
+  label: string;
+  description: string;
+  unit: string;
+  updatedAt: string;
+};
+
 export type AdminUser = User & {
   wallets: Wallet[];
   linkedStudentsCount?: number;
