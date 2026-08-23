@@ -535,11 +535,11 @@ export function renderReportPdf(doc: PDFKit.PDFDocument, data: ReportData): void
       'Flagged Transactions',
       [
         { label: 'Date', width: 70 },
-        { label: 'Type', width: 85 },
+        { label: 'Type', width: 80 },
         { label: 'Category', width: 70 },
-        { label: 'Amount', width: 55 },
-        { label: 'Alert Type', width: 85 },
-        { label: 'Resolved', width: 45 },
+        { label: 'Amount', width: 50 },
+        { label: 'Alert Type', width: 80 },
+        { label: 'Resolved', width: 60 },
       ],
       data.flagged.flatMap((tx) =>
         tx.fraudAlerts.map((alert) => [
