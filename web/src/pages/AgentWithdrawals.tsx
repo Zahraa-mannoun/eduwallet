@@ -25,23 +25,23 @@ import { formatDateTime, formatMoney } from '../lib/format';
 import { humanizeEnum } from '../lib/humanize';
 import { TableCard, TABLE_HEAD_ROW_CLASS, TABLE_TD_CLASS, TABLE_TH_CLASS, tableRowClass } from '../components/TableCard';
 import { WITHDRAWAL_STATUS_LABELS } from '../lib/transactionStatus';
-import {
-  RECEIPT_VERIFICATION_STATUSES,
-  WITHDRAWAL_STATUSES,
-} from '../types/admin';
+import { WITHDRAWAL_STATUSES } from '../types/admin';
 import type { ReceiptVerificationStatus, WithdrawalAdminRow, WithdrawalStatus } from '../types/admin';
 
 type ReceiptFilterValue = ReceiptVerificationStatus | 'NOT_UPLOADED';
 
-const RECEIPT_FILTER_VALUES: ReceiptFilterValue[] = ['NOT_UPLOADED', ...RECEIPT_VERIFICATION_STATUSES];
-
-// PENDING is what "no filter" already effectively shows (it's the pre-receipt default), so it's
-// hidden from the dropdown's options without touching RECEIPT_FILTER_VALUES or the filter logic
-// itself, which still matches against every status including PENDING. PROCESSING stays — an
-// admin does want to filter down to "still being OCR'd right now."
-const VISIBLE_RECEIPT_FILTER_VALUES: ReceiptFilterValue[] = RECEIPT_FILTER_VALUES.filter(
-  (status) => status !== 'PENDING'
-);
+// Explicit order (not ReceiptVerificationStatus's own enum-declaration order) so "Pending
+// Review" sits between "Flagged" and "Manually Verified" in the dropdown, rather than right
+// after "Processing" where PENDING falls in RECEIPT_VERIFICATION_STATUSES's declared order.
+const VISIBLE_RECEIPT_FILTER_VALUES: ReceiptFilterValue[] = [
+  'NOT_UPLOADED',
+  'PROCESSING',
+  'AUTO_VERIFIED',
+  'FLAGGED',
+  'PENDING',
+  'MANUALLY_VERIFIED',
+  'REJECTED',
+];
 
 type Decision = 'VERIFIED' | 'FLAGGED' | 'REJECTED';
 
@@ -75,6 +75,7 @@ function receiptStatusLabel(status: ReceiptFilterValue): string {
   if (status === 'NOT_UPLOADED') return 'Not Uploaded';
   if (status === 'AUTO_VERIFIED') return 'Auto Verified';
   if (status === 'MANUALLY_VERIFIED') return 'Manually Verified';
+  if (status === 'PENDING') return 'Pending Review';
   return status.charAt(0) + status.slice(1).toLowerCase();
 }
 

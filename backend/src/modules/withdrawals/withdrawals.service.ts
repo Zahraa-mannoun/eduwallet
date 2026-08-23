@@ -743,12 +743,16 @@ const RECEIPT_CATEGORY_KEYWORDS: Array<{ category: TransactionCategory; keywords
       'cafe',
       'pizza',
       'burger',
-      'grocery',
+      // Stem, not 'grocery' — a plain substring check means the singular keyword never matches
+      // plural OCR text ("groceries".includes('grocery') is false), so match on the shared
+      // "grocer" stem to catch grocer/grocery/groceries/grocers alike.
+      'grocer',
       'supermarket',
       'meal',
       'drink',
       'coffee',
       'food',
+      'water',
     ],
   },
   { category: 'BOOKS', keywords: ['bookstore', 'textbook', 'library', 'book', 'course', 'academic'] },
