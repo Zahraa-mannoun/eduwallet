@@ -112,6 +112,28 @@ function transferTypeLabel(tx: {
   return 'Transfer';
 }
 
+// Cash Withdrawal is checked before the generic fromWalletId-but-no-toWalletId case below, not
+// after as the bullet order might suggest — disburse() (withdrawals.service.ts) stamps a cash
+// withdrawal's Transaction row with toWalletId: null and receiverName: 'Cash Withdrawal', the
+// exact same fromWalletId/toWalletId shape a card payment has, so receiverName is the only
+// thing that tells the two apart.
+function transactionTypeLabel(tx: {
+  fromWalletId: string | null;
+  toWalletId: string | null;
+  receiverName: string | null;
+}): string {
+  if (!tx.fromWalletId) {
+    return 'Funding';
+  }
+  if (tx.receiverName === 'Cash Withdrawal') {
+    return 'Cash Withdrawal';
+  }
+  if (tx.toWalletId) {
+    return 'P2P Transfer';
+  }
+  return 'Card Payment';
+}
+
 // This report is scoped to one student and their parent — a sender who is any OTHER student
 // must not have their name printed in someone else's report. PARENT/INSTITUTION senders (and
 // the report's own student) are always safe to name; email (unique, unlike fullName) is what
@@ -512,15 +534,17 @@ export function renderReportPdf(doc: PDFKit.PDFDocument, data: ReportData): void
       doc,
       'Flagged Transactions',
       [
-        { label: 'Date', width: 90 },
-        { label: 'Type', width: 100 },
-        { label: 'Amount', width: 90 },
-        { label: 'Alert Type', width: 100 },
-        { label: 'Resolved', width: 70 },
+        { label: 'Date', width: 70 },
+        { label: 'Type', width: 85 },
+        { label: 'Category', width: 70 },
+        { label: 'Amount', width: 55 },
+        { label: 'Alert Type', width: 85 },
+        { label: 'Resolved', width: 45 },
       ],
       data.flagged.flatMap((tx) =>
         tx.fraudAlerts.map((alert) => [
           formatDate(tx.createdAt),
+          transactionTypeLabel(tx),
           titleCaseEnum(tx.category),
           formatMoney(tx.amount),
           titleCaseEnum(alert.alertType),
