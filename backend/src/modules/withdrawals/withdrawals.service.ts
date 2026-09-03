@@ -769,6 +769,27 @@ const RECEIPT_CATEGORY_KEYWORDS: Array<{ category: TransactionCategory; keywords
     category: 'LIFESTYLE',
     keywords: ['pharmacy', 'clothing', 'salon', 'cosmetics', 'shoes', 'fashion', 'beauty'],
   },
+  {
+    category: 'RENT',
+    keywords: [
+      'rent',
+      'loyer',
+      'apartment',
+      'appartement',
+      'tenant',
+      'locataire',
+      'logement',
+      'housing',
+      'residential',
+      'lease',
+      'bail',
+      'dwelling',
+      'monthly rent',
+      'loyer mensuel',
+      'rental',
+      'location',
+    ],
+  },
 ];
 
 function detectCategoryFromText(text: string): TransactionCategory | null {
