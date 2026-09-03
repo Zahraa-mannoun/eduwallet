@@ -374,6 +374,34 @@ export function ProcessWithdrawal() {
     }
   }, []);
 
+  // Background refresh for the open student panel — deliberately separate from performLookup
+  // above, which resets category/amount and briefly nulls student (to show its own loading
+  // state) on every call. Neither is acceptable for a silent poll: it would wipe out whatever
+  // category/amount the agent is mid-way through entering, and flash the panel closed, every
+  // 10 seconds. This only updates the balance-derived fields on the already-open student, so a
+  // card payment or P2P transfer the student makes elsewhere shows up here without disturbing
+  // anything the agent is doing.
+  const refreshStudentBalance = useCallback(async (email: string) => {
+    try {
+      const res = await api.get<ApiResponse<StudentLookup>>('/withdrawals/lookup-student', {
+        params: { query: email },
+      });
+      setStudent(unwrap(res.data));
+    } catch {
+      // Silent — a failed background poll shouldn't surface an error banner; the next poll (or
+      // the agent's own next lookup/dispense) will pick fresh data back up.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!student) return;
+    const studentEmail = student.user.email;
+    const interval = setInterval(() => {
+      void refreshStudentBalance(studentEmail);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [student, refreshStudentBalance]);
+
   const handleSearch = (event: FormEvent) => {
     event.preventDefault();
     void performLookup(query);
