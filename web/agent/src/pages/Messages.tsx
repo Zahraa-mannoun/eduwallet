@@ -161,7 +161,7 @@ export function Messages() {
                   rows={4}
                   value={message}
                   onChange={(event) => setMessage(event.target.value)}
-                  className="w-full rounded-xl border-2 border-slate-200 px-3.5 py-2.5 text-sm transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-100"
+                  className="w-full whitespace-pre-wrap break-words rounded-xl border-2 border-slate-200 px-3.5 py-2.5 text-sm transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-100"
                 />
               </div>
 
@@ -214,7 +214,7 @@ export function Messages() {
                             {item.status === 'UNREAD' ? 'Unread' : 'Read'}
                           </DotBadge>
                         </div>
-                        <p className="mt-1.5 truncate text-sm text-slate-500">{item.message}</p>
+                        <p className="mt-1.5 whitespace-normal break-words text-sm text-slate-500">{item.message}</p>
                         <div className="mt-2 flex items-center justify-between">
                           <p className="text-xs text-slate-400">{formatDateTime(item.createdAt)}</p>
                           {reply ? (
@@ -234,7 +234,7 @@ export function Messages() {
                             <p className="text-xs font-semibold uppercase tracking-wide text-primary">
                               Admin replied:
                             </p>
-                            <p className="mt-1 text-sm text-slate-700">{reply.message}</p>
+                            <p className="mt-1 whitespace-normal break-words text-sm text-slate-700">{reply.message}</p>
                             <p className="mt-1.5 text-xs text-slate-400">{formatDateTime(reply.createdAt)}</p>
                           </div>
                         </div>
@@ -265,7 +265,7 @@ export function Messages() {
                   />
                   <div className="min-w-0 flex-1">
                     <p className="font-bold text-slate-900">{notification.title}</p>
-                    <p className="mt-0.5 text-sm text-slate-500">{notification.message}</p>
+                    <p className="mt-0.5 whitespace-normal break-words text-sm text-slate-500">{notification.message}</p>
                   </div>
                   <p className="shrink-0 text-xs text-slate-400">{formatRelativeTime(notification.createdAt)}</p>
                 </button>
