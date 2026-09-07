@@ -14,6 +14,7 @@ import { revokeRefreshToken } from '../auth/auth.service';
 import { toSafeUser } from '../auth/auth.types';
 import type { SafeUser } from '../auth/auth.types';
 import { createNotification } from '../notifications/notifications.service';
+import { getFundingBreakdown } from '../university/university.service';
 import type {
   AddFundsInput,
   CreateAgentInput,
@@ -786,51 +787,28 @@ export async function getAnalytics(): Promise<AnalyticsResult> {
       }),
     ]);
 
+  // Reuses university.service.ts's own getFundingBreakdown() — the same received (institution,
+  // TUITION/BOOKS/SOFTWARE) + parentSent (parent, TUITION only) + fundingGap computation the
+  // institution portal's student list is built from — rather than a separate, institution-only
+  // sum that ignored parent funding entirely and undercounted every student a parent had
+  // (partly or fully) paid for.
   let fullCount = 0;
   let partialCount = 0;
-  if (universityStudents.length > 0) {
-    const studentUserIds = universityStudents
-      .map((s) => s.userId)
-      .filter((id): id is string => id !== null);
-    const wallets = await prisma.wallet.findMany({
-      where: { userId: { in: studentUserIds } },
-      select: { id: true, userId: true },
-    });
-    const walletIdsByUser = new Map<string, string[]>();
-    for (const wallet of wallets) {
-      const list = walletIdsByUser.get(wallet.userId) ?? [];
-      list.push(wallet.id);
-      walletIdsByUser.set(wallet.userId, list);
-    }
-    const allWalletIds = wallets.map((w) => w.id);
-    const receivedByWallet = await prisma.transaction.groupBy({
-      by: ['toWalletId'],
-      where: {
-        toWalletId: { in: allWalletIds },
-        status: { in: ['AUTO_APPROVED', 'APPROVED'] },
-        fromWallet: { user: { userType: 'INSTITUTION' } },
-      },
-      _sum: { amount: true },
-    });
-    const receivedByWalletId = new Map(
-      receivedByWallet.map((row) => [row.toWalletId, Number(row._sum.amount ?? 0)])
-    );
-
-    for (const student of universityStudents) {
-      if (!student.userId) continue;
-      const walletIds = walletIdsByUser.get(student.userId) ?? [];
-      const received = walletIds.reduce((sum, id) => sum + (receivedByWalletId.get(id) ?? 0), 0);
-      if (received <= 0) continue;
-      if (received >= Number(student.totalCreditCost)) {
-        fullCount++;
-      } else {
-        partialCount++;
-      }
+  const breakdowns = await Promise.all(
+    universityStudents
+      .filter((student): student is typeof student & { userId: string } => student.userId !== null)
+      .map((student) => getFundingBreakdown(student.userId, Number(student.totalCreditCost)))
+  );
+  for (const { fundingGap } of breakdowns) {
+    if (fundingGap === 0) {
+      fullCount++;
+    } else {
+      partialCount++;
     }
   }
 
   // --- Savings analytics ---
-  const [monthlyTrendRaw, savingsSum, studentSavingsCount, pendingWithdrawalRequests] =
+  const [monthlyTrendRaw, savingsSum, studentSavingsCount, pendingSavingsWithdrawalRequests] =
     await Promise.all([
       prisma.personalSavingsHistory.groupBy({
         by: ['month'],
@@ -839,8 +817,14 @@ export async function getAnalytics(): Promise<AnalyticsResult> {
       }),
       prisma.personalSavings.aggregate({ _sum: { balance: true } }),
       prisma.personalSavings.count(),
-      prisma.withdrawalRequest.count({
-        where: { status: { in: ['PENDING', 'PENDING_PARENT_APPROVAL'] } },
+      // Personal Savings withdrawals never go through the general WithdrawalRequest table
+      // (that's the agent-dispensed cash withdrawal flow for tuition/food/etc.) — a savings
+      // withdrawal is its own request/approve/dispense cycle entirely within
+      // PersonalSavingsHistory (see savings.service.ts's requestWithdrawal/approveWithdrawal/
+      // dispenseSavingsWithdrawal), so "pending" here means a WITHDRAWAL_REQUEST row still
+      // awaiting the parent's decision, not anything from WithdrawalRequest.
+      prisma.personalSavingsHistory.count({
+        where: { type: 'WITHDRAWAL_REQUEST', status: 'PENDING' },
       }),
     ]);
 
@@ -899,7 +883,7 @@ export async function getAnalytics(): Promise<AnalyticsResult> {
       totalBalance: Number(savingsSum._sum.balance ?? 0),
       averagePerStudent:
         studentSavingsCount > 0 ? Number(savingsSum._sum.balance ?? 0) / studentSavingsCount : 0,
-      pendingWithdrawals: pendingWithdrawalRequests,
+      pendingWithdrawals: pendingSavingsWithdrawalRequests,
     },
     fraud: {
       byType: fraudByType.map((row) => ({ type: row.alertType, count: row._count })),

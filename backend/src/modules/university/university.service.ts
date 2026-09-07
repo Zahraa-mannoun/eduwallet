@@ -80,9 +80,10 @@ async function getEducationTransfersFromRole(
 
 // The full received/parentSent/fundingGap breakdown for one student — shared by every place
 // that needs to know how much of totalCreditCost is still uncovered (the student list, the
-// Tab 1 "Notify & Proceed" notification, Tab 2's selected-students list), so they can never
-// drift out of sync with each other.
-async function getFundingBreakdown(
+// Tab 1 "Notify & Proceed" notification, Tab 2's selected-students list, and admin.service.ts's
+// Scholarship Analytics fully/partially-funded counts), so they can never drift out of sync
+// with each other.
+export async function getFundingBreakdown(
   userId: string,
   totalCreditCost: number
 ): Promise<{ received: number; parentSent: number; fundingGap: number }> {
