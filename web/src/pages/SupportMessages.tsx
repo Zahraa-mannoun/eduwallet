@@ -132,7 +132,7 @@ export function SupportMessages() {
                         : tableRowClass(index)
                     }
                   >
-                    <td className={TABLE_TD_CLASS}>
+                    <td className={`${TABLE_TD_CLASS} align-top`}>
                       <PersonCell
                         name={message.user.fullName}
                         email={message.user.email}
@@ -143,22 +143,22 @@ export function SupportMessages() {
                         }
                       />
                     </td>
-                    <td className={`${TABLE_TD_CLASS} max-w-sm`}>
+                    <td className={`${TABLE_TD_CLASS} max-w-sm align-top`}>
                       {message.subject && (
                         <p className="truncate font-medium text-slate-800">{message.subject}</p>
                       )}
-                      <p className="truncate text-sm italic text-slate-500">{message.message}</p>
+                      <p className="whitespace-normal break-words text-sm italic text-slate-500">{message.message}</p>
                     </td>
-                    <td className={TABLE_TD_CLASS}>
+                    <td className={`${TABLE_TD_CLASS} align-top`}>
                       <p className="text-slate-700">{formatDate(message.createdAt)}</p>
                       <p className="text-xs text-slate-400">{formatRelativeTime(message.createdAt)}</p>
                     </td>
-                    <td className={TABLE_TD_CLASS}>
+                    <td className={`${TABLE_TD_CLASS} align-top`}>
                       <DotBadge tone={message.status === 'UNREAD' ? 'yellow' : 'green'}>
                         {message.status === 'UNREAD' ? 'Unread' : 'Read'}
                       </DotBadge>
                     </td>
-                    <td className={TABLE_TD_CLASS}>
+                    <td className={`${TABLE_TD_CLASS} align-top`}>
                       <div className="flex flex-wrap gap-2">
                         {message.status === 'UNREAD' && (
                           <button
