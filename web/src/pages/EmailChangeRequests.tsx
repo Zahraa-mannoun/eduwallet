@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowRight, Check, FileText, Mail, X } from 'lucide-react';
+import { ArrowDown, Check, FileText, Mail, X } from 'lucide-react';
 import type { ApiResponse } from '@eduwallet/shared';
 import { api, getErrorMessage, unwrap } from '../lib/api';
 import { Badge } from '../components/Badge';
@@ -122,63 +122,15 @@ export function EmailChangeRequests() {
             )}
             {!isLoading &&
               rows.map((row, index) => (
-                <tr key={row.id} className={tableRowClass(index)}>
-                  <td className={TABLE_TD_CLASS}>
-                    <PersonCell
-                      name={row.user.fullName}
-                      email={row.user.email}
-                      extra={
-                        <Badge tone={roleTone[row.user.userType] ?? 'gray'}>
-                          {humanizeEnum(row.user.userType)}
-                        </Badge>
-                      }
-                    />
-                  </td>
-                  <td className={TABLE_TD_CLASS}>
-                    <div className="flex max-w-xs items-center gap-1.5 text-sm">
-                      <span className="text-slate-500">{row.currentEmail}</span>
-                      <ArrowRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                      <span className="font-medium text-slate-900">{row.requestedEmail}</span>
-                    </div>
-                  </td>
-                  <td className={`${TABLE_TD_CLASS} max-w-xs truncate text-slate-500`}>{row.reason}</td>
-                  <td className={TABLE_TD_CLASS}>
-                    <button
-                      type="button"
-                      onClick={() => void viewProof(row.id)}
-                      className="inline-flex items-center gap-1.5 rounded-full border-2 border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition-all duration-200 hover:scale-[1.03] hover:bg-slate-50"
-                    >
-                      <FileText className="h-3.5 w-3.5" />
-                      View Proof
-                    </button>
-                  </td>
-                  <td className={`${TABLE_TD_CLASS} text-slate-500`}>{formatDateTime(row.createdAt)}</td>
-                  <td className={TABLE_TD_CLASS}>
-                    <DotBadge tone={STATUS_TONE[row.status]}>{humanizeEnum(row.status)}</DotBadge>
-                  </td>
-                  {activeTab === 'pending' && (
-                    <td className={TABLE_TD_CLASS}>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setApproveTarget(row)}
-                          className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1 text-xs font-semibold text-white transition-all duration-200 hover:scale-[1.03] hover:bg-emerald-700"
-                        >
-                          <Check className="h-3.5 w-3.5" />
-                          Approve
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setRejectTarget(row)}
-                          className="inline-flex items-center gap-1.5 rounded-full border-2 border-red-200 px-3 py-1 text-xs font-semibold text-red-600 transition-all duration-200 hover:scale-[1.03] hover:bg-red-50"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                          Reject
-                        </button>
-                      </div>
-                    </td>
-                  )}
-                </tr>
+                <EmailChangeRow
+                  key={row.id}
+                  row={row}
+                  index={index}
+                  activeTab={activeTab}
+                  onViewProof={viewProof}
+                  onApprove={setApproveTarget}
+                  onReject={setRejectTarget}
+                />
               ))}
           </tbody>
         </table>
@@ -206,6 +158,104 @@ export function EmailChangeRequests() {
         />
       )}
     </div>
+  );
+}
+
+// Rough character count past which a reason is likely to actually spill past 4 clamped lines at
+// this column's width — line-clamp itself doesn't expose whether it clipped anything, so this
+// heuristic is what decides whether the "Show more" toggle appears at all (a short reason that
+// never clips shouldn't show a toggle that does nothing).
+const REASON_CLAMP_CHAR_THRESHOLD = 180;
+
+function EmailChangeRow({
+  row,
+  index,
+  activeTab,
+  onViewProof,
+  onApprove,
+  onReject,
+}: {
+  row: EmailChangeRequestRow;
+  index: number;
+  activeTab: Tab;
+  onViewProof: (requestId: string) => void;
+  onApprove: (row: EmailChangeRequestRow) => void;
+  onReject: (row: EmailChangeRequestRow) => void;
+}) {
+  const [reasonExpanded, setReasonExpanded] = useState(false);
+  const canClamp = row.reason.length > REASON_CLAMP_CHAR_THRESHOLD;
+
+  return (
+    <tr className={tableRowClass(index)}>
+      <td className={`${TABLE_TD_CLASS} align-top`}>
+        <PersonCell
+          name={row.user.fullName}
+          email={row.user.email}
+          extra={
+            <Badge tone={roleTone[row.user.userType] ?? 'gray'}>
+              {humanizeEnum(row.user.userType)}
+            </Badge>
+          }
+        />
+      </td>
+      <td className={`${TABLE_TD_CLASS} align-top`}>
+        <div className="flex flex-col items-start gap-0.5 text-sm">
+          <span className="text-slate-500">{row.currentEmail}</span>
+          <ArrowDown className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+          <span className="font-medium text-slate-900">{row.requestedEmail}</span>
+        </div>
+      </td>
+      <td className={`${TABLE_TD_CLASS} align-top text-slate-500`}>
+        <p className={`whitespace-normal break-words ${reasonExpanded ? '' : 'line-clamp-4'}`}>
+          {row.reason}
+        </p>
+        {canClamp && (
+          <button
+            type="button"
+            onClick={() => setReasonExpanded((expanded) => !expanded)}
+            className="mt-1 text-xs font-semibold text-primary hover:underline"
+          >
+            {reasonExpanded ? 'Show less' : 'Show more'}
+          </button>
+        )}
+      </td>
+      <td className={`${TABLE_TD_CLASS} align-top`}>
+        <button
+          type="button"
+          onClick={() => onViewProof(row.id)}
+          className="inline-flex items-center gap-1.5 rounded-full border-2 border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition-all duration-200 hover:scale-[1.03] hover:bg-slate-50"
+        >
+          <FileText className="h-3.5 w-3.5" />
+          View Proof
+        </button>
+      </td>
+      <td className={`${TABLE_TD_CLASS} align-top text-slate-500`}>{formatDateTime(row.createdAt)}</td>
+      <td className={`${TABLE_TD_CLASS} align-top`}>
+        <DotBadge tone={STATUS_TONE[row.status]}>{humanizeEnum(row.status)}</DotBadge>
+      </td>
+      {activeTab === 'pending' && (
+        <td className={`${TABLE_TD_CLASS} align-top`}>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => onApprove(row)}
+              className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1 text-xs font-semibold text-white transition-all duration-200 hover:scale-[1.03] hover:bg-emerald-700"
+            >
+              <Check className="h-3.5 w-3.5" />
+              Approve
+            </button>
+            <button
+              type="button"
+              onClick={() => onReject(row)}
+              className="inline-flex items-center gap-1.5 rounded-full border-2 border-red-200 px-3 py-1 text-xs font-semibold text-red-600 transition-all duration-200 hover:scale-[1.03] hover:bg-red-50"
+            >
+              <X className="h-3.5 w-3.5" />
+              Reject
+            </button>
+          </div>
+        </td>
+      )}
+    </tr>
   );
 }
 
