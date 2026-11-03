@@ -20,6 +20,7 @@ import { AppError } from '../../utils/AppError';
 import { updateSpent } from '../budget/budget.service';
 import { createNotification } from '../notifications/notifications.service';
 import { runAllChecks } from '../wallet/fraud.service';
+import { debitFreeBalance, insufficientFreeBalanceError } from '../wallet/wallet.service';
 import type { ProcessWithdrawalInput } from './withdrawals.schema';
 
 // backend/src/modules/withdrawals -> backend (three levels up), same resolution as
@@ -396,12 +397,16 @@ async function disburse(
     // LockedFund.amount is a sub-allocation of wallet.balance, not a separate pool — the
     // cash actually leaving the wallet must also decrement wallet.balance, same as every
     // other locked-category spend path (cards.service.ts, wallet.service.ts transfer()).
-    const walletDebit = await tx.wallet.updateMany({
-      where: { id: wallet.id, balance: { gte: amount } },
-      data: { balance: { decrement: amount } },
-    });
-    if (walletDebit.count === 0) {
-      throw new AppError(400, 'INSUFFICIENT_BALANCE', 'Student no longer has enough wallet balance');
+    if (category === 'GENERAL') {
+      await debitFreeBalance(tx, wallet.id, amount);
+    } else {
+      const walletDebit = await tx.wallet.updateMany({
+        where: { id: wallet.id, balance: { gte: amount } },
+        data: { balance: { decrement: amount } },
+      });
+      if (walletDebit.count === 0) {
+        throw new AppError(400, 'INSUFFICIENT_BALANCE', 'Student no longer has enough wallet balance');
+      }
     }
 
     const completedRequest = existingRequestId
@@ -529,11 +534,7 @@ export async function processWithdrawal(
     const freeBalance = Math.max(0, Number(wallet.balance) - totalLocked);
 
     if (input.amount > freeBalance) {
-      throw new AppError(
-        400,
-        'INSUFFICIENT_BALANCE',
-        'Withdrawal amount exceeds the student\'s free (unlocked) wallet balance'
-      );
+      throw insufficientFreeBalanceError();
     }
 
     const threshold = parentalControl ? Number(parentalControl.approvalThreshold) : 0;

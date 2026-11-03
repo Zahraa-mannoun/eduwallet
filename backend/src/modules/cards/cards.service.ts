@@ -5,7 +5,7 @@ import { AppError } from '../../utils/AppError';
 import { isUniqueConstraintError } from '../../utils/prismaErrors';
 import { updateSpent } from '../budget/budget.service';
 import { createNotification } from '../notifications/notifications.service';
-import { getWallet } from '../wallet/wallet.service';
+import { debitFreeBalance, getWallet } from '../wallet/wallet.service';
 import { runAllChecks } from '../wallet/fraud.service';
 import type { CreateCardInput, UseCardInput } from './cards.schema';
 
@@ -175,7 +175,7 @@ export async function useCard(input: UseCardInput): Promise<{ transaction: Trans
 
   const wallet = await prisma.wallet.findUnique({
     where: { id: card.walletId },
-    include: { user: { select: { cardAutoRenew: true } } },
+    include: { user: { select: { cardAutoRenew: true, userType: true } } },
   });
   if (!wallet) {
     throw new AppError(404, 'WALLET_NOT_FOUND', 'Card wallet not found');
@@ -226,12 +226,17 @@ export async function useCard(input: UseCardInput): Promise<{ transaction: Trans
       }
     }
 
-    const debited = await tx.wallet.updateMany({
-      where: { id: wallet.id, balance: { gte: input.amount } },
-      data: { balance: { decrement: input.amount } },
-    });
-    if (debited.count === 0) {
-      throw new AppError(400, 'INSUFFICIENT_BALANCE', 'Insufficient wallet balance');
+    // A no-lock card is the app's "General use" card, whatever category the merchant sends.
+    if (wallet.user.userType === 'STUDENT' && (!card.categoryLock || card.categoryLock === 'GENERAL')) {
+      await debitFreeBalance(tx, wallet.id, input.amount);
+    } else {
+      const debited = await tx.wallet.updateMany({
+        where: { id: wallet.id, balance: { gte: input.amount } },
+        data: { balance: { decrement: input.amount } },
+      });
+      if (debited.count === 0) {
+        throw new AppError(400, 'INSUFFICIENT_BALANCE', 'Insufficient wallet balance');
+      }
     }
 
     const createdTransaction = await tx.transaction.create({

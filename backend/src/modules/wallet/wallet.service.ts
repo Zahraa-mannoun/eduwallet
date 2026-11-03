@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import type { Currency, LockedFund, Transaction, TransactionCategory, UserType, Wallet } from '@prisma/client';
 import { prisma } from '../../config/database';
 import { AppError } from '../../utils/AppError';
@@ -118,6 +119,37 @@ export async function getWallet(userId: string): Promise<Wallet & { lockedFunds:
   }
 
   return wallet;
+}
+
+export function insufficientFreeBalanceError(): AppError {
+  return new AppError(
+    400,
+    'INSUFFICIENT_FREE_BALANCE',
+    "Not enough free balance. Locked category funds can't be used for General spending."
+  );
+}
+
+// GENERAL spending may only use wallet.balance minus the wallet's LockedFund total (Personal
+// Savings is a separate pot, already moved out of wallet.balance at rollover). The row lock is
+// taken first so the sum below is read after any concurrent transfer has committed — a locked
+// sum inside a single conditional UPDATE would keep its pre-wait snapshot under READ COMMITTED.
+export async function debitFreeBalance(
+  tx: Prisma.TransactionClient,
+  walletId: string,
+  amount: number | Prisma.Decimal
+): Promise<void> {
+  await tx.$queryRaw`SELECT id FROM wallets WHERE id = ${walletId} FOR UPDATE`;
+
+  const locked = await tx.lockedFund.aggregate({ where: { walletId }, _sum: { amount: true } });
+  const required = new Prisma.Decimal(amount).plus(locked._sum.amount ?? 0);
+
+  const debited = await tx.wallet.updateMany({
+    where: { id: walletId, balance: { gte: required } },
+    data: { balance: { decrement: amount } },
+  });
+  if (debited.count === 0) {
+    throw insufficientFreeBalanceError();
+  }
 }
 
 export async function topUp(
@@ -257,13 +289,17 @@ export async function transfer(
         }
       }
 
-      const debited = await tx.wallet.updateMany({
-        where: { id: fromWallet.id, balance: { gte: input.amount } },
-        data: { balance: { decrement: input.amount } },
-      });
+      if (!isLockedCategory && fromUser.userType === 'STUDENT') {
+        await debitFreeBalance(tx, fromWallet.id, input.amount);
+      } else {
+        const debited = await tx.wallet.updateMany({
+          where: { id: fromWallet.id, balance: { gte: input.amount } },
+          data: { balance: { decrement: input.amount } },
+        });
 
-      if (debited.count === 0) {
-        throw new AppError(400, 'INSUFFICIENT_BALANCE', 'Insufficient wallet balance');
+        if (debited.count === 0) {
+          throw new AppError(400, 'INSUFFICIENT_BALANCE', 'Insufficient wallet balance');
+        }
       }
 
       await tx.wallet.update({

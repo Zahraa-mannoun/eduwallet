@@ -12,7 +12,7 @@ import { isUniqueConstraintError } from '../../utils/prismaErrors';
 import { getCurrentMonth, updateSpent } from '../budget/budget.service';
 import { createNotification } from '../notifications/notifications.service';
 import { runAllChecks } from '../wallet/fraud.service';
-import { getSpentByCategory } from '../wallet/wallet.service';
+import { debitFreeBalance, getSpentByCategory } from '../wallet/wallet.service';
 import type { LinkStudentInput, UpdateSettingsInput } from './parental.schema';
 
 function formatCategoriesList(categories: TransactionCategory[]): string {
@@ -194,12 +194,16 @@ export async function approveTransaction(
   const toWalletId = transaction.toWalletId;
 
   const updatedTransaction = await prisma.$transaction(async (tx) => {
-    const debited = await tx.wallet.updateMany({
-      where: { id: fromWallet.id, balance: { gte: transaction.amount } },
-      data: { balance: { decrement: transaction.amount } },
-    });
-    if (debited.count === 0) {
-      throw new AppError(400, 'INSUFFICIENT_BALANCE', 'Student no longer has enough balance');
+    if (transaction.category === 'GENERAL') {
+      await debitFreeBalance(tx, fromWallet.id, transaction.amount);
+    } else {
+      const debited = await tx.wallet.updateMany({
+        where: { id: fromWallet.id, balance: { gte: transaction.amount } },
+        data: { balance: { decrement: transaction.amount } },
+      });
+      if (debited.count === 0) {
+        throw new AppError(400, 'INSUFFICIENT_BALANCE', 'Student no longer has enough balance');
+      }
     }
 
     await tx.wallet.update({
